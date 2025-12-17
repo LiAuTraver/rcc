@@ -1,7 +1,7 @@
-use std::str::FromStr;
 use crate::common::keyword::Keyword;
-use crate::common::token::{SourceLocation, Token};
 use crate::common::operator::Operator;
+use crate::common::token::{SourceLocation, Token};
+use std::str::FromStr;
 
 pub struct Lexer {
   source: String,
@@ -332,20 +332,29 @@ impl Lexer {
     default: Operator,
     patterns: &[(&str, Operator)],
   ) -> Option<Token> {
-    // try longest patterns first (already sorted in call site)
+    // note: called after consuming the first character already.
     for (pattern, op) in patterns {
-      if self.matches_ahead(pattern) {
-        self.advance_n(pattern.len() - 1);
+      debug_assert!(
+        self.peek(pattern.chars().count() - 1) != '\0',
+        "should not match past end of input 
+        (if this happens, simply continue to the next pattern;
+        but here I assert to catch logic errors)"
+      );
+      debug_assert!(
+        pattern.chars().count() >= 2,
+        "compound operator pattern should be >= 2 chars"
+      );
+      // pattern includes the first char (already consumed by next_token),
+      // so compare pattern[1..] against peek(0..).
+      if self.matches_ahead(pattern.chars().skip(1)) {
+        self.advance_n(pattern.chars().count() - 1);
         return Some(Token::operator(op.clone(), start_loc));
       }
     }
     Some(Token::operator(default, start_loc))
   }
 
-  fn matches_ahead(&self, pattern: &str) -> bool {
-    pattern
-      .chars()
-      .enumerate()
-      .all(|(i, ch)| self.peek(i) == (ch))
+  fn matches_ahead(&self, pattern: impl Iterator<Item = char>) -> bool {
+    pattern.enumerate().all(|(i, ch)| self.peek(i) == (ch))
   }
 }

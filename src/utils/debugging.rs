@@ -2,9 +2,9 @@
 macro_rules! breakpoint {
   () => {{
     use std::io::{Write, stderr, stdout};
-    std::intrinsics::breakpoint();
     _ = stdout().flush();
     _ = stderr().flush();
+    std::intrinsics::breakpoint();
   }};
   ($($arg:tt)*) => {{
     use std::io::{Write, stderr, stdout};

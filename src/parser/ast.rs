@@ -5,8 +5,8 @@ use ::std::{
 
 use ::strum_macros::EnumString;
 
-use crate::parser::statement::Statement;
 use crate::common::keyword::Keyword;
+use crate::parser::statement::Statement;
 
 pub struct Program {
   pub declarations: Vec<Declaration>,

@@ -122,46 +122,59 @@ impl Operator {
   pub fn binary(&self) -> bool {
     matches!(
       self,
-      Operator::Plus
-        | Operator::Minus
-        | Operator::Star
+      Operator::Star
         | Operator::Slash
         | Operator::Percent
-        | Operator::EqualEqual
-        | Operator::NotEqual
+        | Operator::Plus
+        | Operator::Minus
+        | Operator::LeftShift
+        | Operator::RightShift
         | Operator::Less
         | Operator::LessEqual
         | Operator::Greater
         | Operator::GreaterEqual
+        | Operator::EqualEqual
+        | Operator::NotEqual
+        | Operator::Ampersand
+        | Operator::Caret
+        | Operator::Pipe
         | Operator::And
         | Operator::Or
-        | Operator::LeftShift
-        | Operator::RightShift
-        | Operator::Ampersand
-        | Operator::Pipe
-        | Operator::Caret
     )
   }
   // left-.
   pub fn precedence(&self) -> u8 {
+    debug_assert!(self.binary(), "precedence called on non-binary operator");
     match self {
+      // multiplicative
       Operator::Star => 0x80,
       Operator::Slash => 0x80,
       Operator::Percent => 0x80,
-      Operator::Plus => 0x40,
-      Operator::Minus => 0x40,
-      Operator::LeftShift => 0x20,
-      Operator::RightShift => 0x20,
-      Operator::Less => 0x10,
-      Operator::LessEqual => 0x10,
-      Operator::Greater => 0x10,
-      Operator::GreaterEqual => 0x10,
-      Operator::EqualEqual => 0x08,
-      Operator::NotEqual => 0x08,
-      Operator::Ampersand => 0x08,
-      Operator::Caret => 0x04,
-      Operator::Pipe => 0x02,
-      _ => panic!("not a binary op or it is a rel op"),
+      // additive
+      Operator::Plus => 0x70,
+      Operator::Minus => 0x70,
+      // shift
+      Operator::LeftShift => 0x60,
+      Operator::RightShift => 0x60,
+      // relational
+      Operator::Less => 0x50,
+      Operator::LessEqual => 0x50,
+      Operator::Greater => 0x50,
+      Operator::GreaterEqual => 0x50,
+      // equality
+      Operator::EqualEqual => 0x40,
+      Operator::NotEqual => 0x40,
+      // bitwise AND
+      Operator::Ampersand => 0x38,
+      // bitwise XOR
+      Operator::Caret => 0x20,
+      // bitwise OR
+      Operator::Pipe => 0x10,
+      // logical AND
+      Operator::And => 0x08,
+      // logical OR
+      Operator::Or => 0x04,
+      _ => unreachable!(),
     }
   }
 }

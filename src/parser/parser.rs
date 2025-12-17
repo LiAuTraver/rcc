@@ -1,13 +1,13 @@
 use crate::breakpoint;
 
-use crate::common::token::{Literal, Token};
+use crate::common::keyword::Keyword;
 use crate::common::operator::Operator;
+use crate::common::token::{Literal, Token};
 use crate::parser::ast::{Block, Builtin, Declaration, Function, Program, Type, Variable};
 use crate::parser::expression::{Binary, Constant, Expression, Unary};
 use crate::parser::statement::{Return, Statement};
 #[cfg(test)]
 use pretty_assertions::assert_eq;
-use crate::common::keyword::Keyword;
 
 pub struct Parser {
   tokens: Vec<Token>,
@@ -157,10 +157,9 @@ impl Parser {
           }
           expr
         } else {
-          self.errors.push(format!(
-            "Unexpected operator {:?} in factor, assuming int",
-            op
-          ));
+          self
+            .errors
+            .push(format!("Unexpected operator {op} in factor, assuming int",));
           self.get();
           Expression::Constant(Constant::Int32(0))
         }
