@@ -1,0 +1,126 @@
+use ::std::fmt::{Debug, Display};
+
+use crate::common::operator::Operator;
+
+pub enum Expression {
+  Constant(Constant),
+  Unary(Unary),
+  Binary(Binary),
+}
+pub struct Unary {
+  operator: Operator,
+  // This pattern is ubiquitous in Rust AST libraries -- Box is literally everywhere in recursive data structures.
+  expression: Box<Expression>,
+}
+pub struct Binary {
+  operator: Operator,
+  left: Box<Expression>,
+  right: Box<Expression>,
+}
+pub enum Constant {
+  Int8(i8),
+  Int16(i16),
+  Int32(i32),
+  Int64(i64),
+  Uint8(u8),
+  Uint16(u16),
+  Uint32(u32),
+  Uint64(u64),
+  Float32(f32),
+  Float64(f64),
+  Bool(bool),
+  String(String),
+}
+impl Display for Expression {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Expression::Constant(c) => <Constant as Display>::fmt(c, f),
+      Expression::Unary(u) => <Unary as Display>::fmt(u, f),
+      Expression::Binary(b) => <Binary as Display>::fmt(b, f),
+    }
+  }
+}
+impl Debug for Expression {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    <Self as Display>::fmt(self, f)
+  }
+}
+impl Display for Constant {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Constant::Int8(i) => write!(f, "{}", i),
+      Constant::Int16(i) => write!(f, "{}", i),
+      Constant::Int32(i) => write!(f, "{}", i),
+      Constant::Int64(i) => write!(f, "{}", i),
+      Constant::Uint8(u) => write!(f, "{}", u),
+      Constant::Uint16(u) => write!(f, "{}", u),
+      Constant::Uint32(u) => write!(f, "{}", u),
+      Constant::Uint64(u) => write!(f, "{}", u),
+      Constant::Float32(fl) => write!(f, "{}", fl),
+      Constant::Float64(fl) => write!(f, "{}", fl),
+      Constant::Bool(b) => write!(f, "{}", b),
+      Constant::String(s) => write!(f, "\"{}\"", s),
+    }
+  }
+}
+impl Debug for Constant {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    <Self as Display>::fmt(self, f)
+  }
+}
+impl Display for Unary {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "({} {:?})", self.operator, self.expression)
+  }
+}
+impl Debug for Unary {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    <Self as Display>::fmt(self, f)
+  }
+}
+impl Display for Binary {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "({} {:?} {:?})", self.operator, self.left, self.right)
+  }
+}
+impl Debug for Binary {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    <Self as Display>::fmt(self, f)
+  }
+}
+impl Constant {
+  pub fn from_str(str: &String) -> Self {
+    let int32 = str.clone().parse::<i32>().unwrap();
+    Self::Int32(int32)
+  }
+}
+impl Unary {
+  pub fn from_operator(operator: Operator, expression: Expression) -> Option<Self> {
+    match operator.unary() {
+      true => Some(Self {
+        operator,
+        expression: Box::new(expression),
+      }),
+      false => None,
+    }
+  }
+  pub fn new(operator: Operator, expression: Expression) -> Self {
+    Self::from_operator(operator, expression).unwrap()
+  }
+}
+
+impl Binary {
+  pub fn from_operator(operator: Operator, left: Expression, right: Expression) -> Option<Self> {
+    match operator.binary() {
+      true => Some(Self {
+        operator,
+        left: Box::new(left),
+        right: Box::new(right),
+      }),
+      false => None,
+    }
+  }
+  pub fn new(operator: Operator, left: Expression, right: Expression) -> Self {
+    Self::from_operator(operator, left, right).unwrap()
+  }
+}

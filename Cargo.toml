@@ -1,0 +1,11 @@
+[package]
+name = "rcns"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+strum = "0.27"
+# keep it 0.25; would cause serialization issue w.r.t. `}` on later versions
+strum_macros = "0.25"
+log = "0.4.29"
+pretty_assertions = { version = "1.4.1", features = ["unstable"] }
