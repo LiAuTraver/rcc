@@ -31,13 +31,24 @@ pub enum Primitive {
   Float32, // float
   #[strum(serialize = "double")]
   #[strum(serialize = "long double")]
-  Float64, // double/long double
+  Float64,
+  #[strum(serialize = "complex")]
+  #[strum(serialize = "_Complex")]
+  #[strum(serialize = "complex float")]
+  #[strum(serialize = "_Complex float")]
+  ComplexFloat32,
+  #[strum(serialize = "complex double")]
+  #[strum(serialize = "_Complex double")]
+  ComplexFloat64,
+  #[strum(serialize = "complex long double")]
+  #[strum(serialize = "_Complex long double")]
+  ComplexFloat128,
   #[strum(serialize = "bool")]
   #[strum(serialize = "_Bool")]
   Bool, // _Bool, or just bool
   #[strum(serialize = "void")]
   Void, // void
-        // others: wchar_t, complex, etc. ignored for now
+        // others: wchar_t, _Atomic, etc. ignored for now
 }
 bitflags! {
   #[derive(Copy, Clone)]
@@ -55,22 +66,49 @@ pub enum Type {
   Primitive(Primitive),
   Array(Array),
   Pointer(Box<QualifiedType>),
-  Function(Function),
-  // ignore: struct, union, enum
+  FunctionPrototype(FunctionPrototype),
+  Enum(Enum),
+  Record(Record),
+  Union(Union),
+  Typedef(String),
 }
 #[derive(Debug, Clone, Display)]
 pub enum ArraySize {
   Constant(usize),
   Incomplete,
+  // Variable,
 }
 pub struct Array {
   pub element_type: Box<QualifiedType>,
   pub size: ArraySize,
 }
 
-pub struct Function {
+pub struct FunctionPrototype {
   pub return_type: Box<QualifiedType>,
   pub parameter_types: Vec<QualifiedType>,
+  pub is_variadic: bool,
+}
+pub struct Field {
+  pub name: String,
+  pub field_type: QualifiedType,
+}
+// ignore unnamed/anonymous structs/unions for now
+pub struct Record {
+  pub name: Option<String>,
+  pub fields: Vec<Field>,
+}
+
+// seems not so much difference between struct and union here
+type Union = Record;
+
+pub struct EnumConstant {
+  pub name: String,
+  pub value: Option<isize>,
+}
+
+pub struct Enum {
+  pub name: Option<String>,
+  pub constants: Vec<EnumConstant>,
 }
 
 impl Type {}
@@ -84,5 +122,76 @@ impl Primitive {
   }
   pub fn as_type(self) -> Type {
     Type::Primitive(self)
+  }
+}
+
+mod fmt {
+  use crate::parser::types::{
+    Array, ArraySize, FunctionPrototype, QualifiedType, Qualifiers, Type,
+  };
+  use ::std::fmt::{Debug, Display};
+
+  impl Display for Qualifiers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      let mut qualifiers = Vec::new();
+      if self.contains(Qualifiers::Const) {
+        qualifiers.push("const");
+      }
+      if self.contains(Qualifiers::Volatile) {
+        qualifiers.push("volatile");
+      }
+      if self.contains(Qualifiers::Restrict) {
+        qualifiers.push("restrict");
+      }
+      write!(f, "{}", qualifiers.join(" "))
+    }
+  }
+
+  impl Display for QualifiedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      if self.qualifiers.is_empty() {
+        write!(f, "{}", self.unqualified_type)
+      } else {
+        write!(f, "{} {}", self.qualifiers, self.unqualified_type)
+      }
+    }
+  }
+  impl Display for Array {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{}[", self.element_type)?;
+      match &self.size {
+        ArraySize::Constant(sz) => write!(f, "{}", sz)?,
+        ArraySize::Incomplete => write!(f, "")?,
+      }
+      write!(f, "]")
+    }
+  }
+
+  impl Display for FunctionPrototype {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{}(", self.return_type)?;
+      for (i, param) in self.parameter_types.iter().enumerate() {
+        if i > 0 {
+          write!(f, ", ")?;
+        }
+        write!(f, "{}", param)?;
+      }
+      write!(f, ")")
+    }
+  }
+
+  impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+        Type::Primitive(builtin) => write!(f, "{}", builtin),
+        _ => todo!(),
+      }
+    }
+  }
+
+  impl Debug for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
   }
 }

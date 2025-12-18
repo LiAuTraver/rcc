@@ -6,9 +6,12 @@ use crate::{
     token::{Literal, Token},
   },
   parser::{
-    ast::{Block, Declaration, FunctionDef, Program},
+    declaration::{
+      Block, DeclSpecs, Declaration, Declarator, Function, FunctionDecl, Initializer, Program,
+      VarDef,
+    },
     expression::{Binary, Constant, Expression, Unary, Variable},
-    statement::{Return, Statement, VarDef},
+    statement::{Return, Statement},
     types::{Primitive, Type},
   },
 };
@@ -62,25 +65,36 @@ impl Parser {
       "unnamed".to_string()
     };
 
-    match self.peek(0) {
+    let declspec = DeclSpecs::new();
+    let declarator = Declarator::new(name);
+
+    let initializer = match self.peek(0) {
       Literal::Operator(Operator::Semicolon) => {
         self.get(); // skip ';'
-        VarDef::new(name, None)
+        None
       }
       Literal::Operator(Operator::Assign) => {
         self.get(); // skip '='
         let initializer = self.next_expression(0);
         assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
         self.get(); // skip ';'
-        VarDef::new(name, Some(initializer))
+        Some(initializer)
       }
       _ => {
         self
           .errors
           .push("Expect ';' or '=' after variable name".to_string());
-        VarDef::new(name, None)
+        None
       }
-    }
+    };
+    VarDef::new(
+      declspec,
+      declarator,
+      match initializer {
+        Some(init_expr) => Some(Initializer::Expression(Box::new(init_expr))),
+        None => None,
+      },
+    )
   }
   fn next_declaration(&mut self) -> Declaration {
     match self.peek(0) {
@@ -110,7 +124,18 @@ impl Parser {
         while (!self.is_at_end()) && (*self.peek(0) != Literal::Operator(Operator::Semicolon)) {
           self.get();
         }
-        Declaration::Variable(VarDef::new("".to_string(), None))
+        let declspec = DeclSpecs::new();
+        let declarator = Declarator::new("".to_string());
+        Declaration::Variable(VarDef::new(declspec, declarator, None))
+      }
+      Literal::Operator(Operator::Hash) => {
+        // skip preprocessor directive
+        let line = self.tokens[self.cursor].location.line;
+        while (!self.is_at_end()) && (self.tokens[self.cursor].location.line == line) {
+          self.get();
+        }
+
+        self.next_declaration()
       }
       _ => {
         breakpoint!();
@@ -118,7 +143,7 @@ impl Parser {
       }
     }
   }
-  fn next_function(&mut self) -> FunctionDef {
+  fn next_function(&mut self) -> Function {
     let return_type_idx = self.get();
     let name_idx = self.get();
     self.get(); // skip '('
@@ -141,7 +166,11 @@ impl Parser {
     let name = self.tokens[name_idx].to_owned_string();
     let return_type = Primitive::new(self.tokens[return_type_idx].to_owned_string()).as_type();
 
-    FunctionDef::new(name, parameters, body, return_type)
+    let declspec = DeclSpecs::new();
+
+    let functiondecl = FunctionDecl::new(declspec, name, Vec::new());
+
+    Function::new(functiondecl, body)
   }
   fn next_block(&mut self) -> Block {
     self.get(); // skip '{'
@@ -156,9 +185,9 @@ impl Parser {
     block
   }
   fn next_statement(&mut self) -> Statement {
-    while *self.peek(0) == Literal::Operator(Operator::Semicolon) {
-      self.get(); // skip extra ';'
-    }
+    // while *self.peek(0) == Literal::Operator(Operator::Semicolon) {
+    //   self.get(); // skip extra ';'
+    // }
     match *self.peek(0) {
       Literal::Keyword(Keyword::Return) => {
         self.get(); // return
@@ -173,10 +202,10 @@ impl Parser {
         self.get(); // ;
         statement
       }
-      // Literal::Operator(Operator::Semicolon) => {
-      //   self.get(); // skip ';'
-      //   Statement::Empty
-      // }
+      Literal::Operator(Operator::Semicolon) => {
+        self.get(); // skip ';'
+        Statement::Empty()
+      }
       // if it's primitive type, it's a declaration
       Literal::Keyword(ref keyword) if keyword.to_type().is_some() => {
         Statement::Declaration(self.next_vardef())
@@ -246,7 +275,11 @@ impl Parser {
     current
   }
   fn peek(&self, offset: usize) -> &Literal {
-    assert_eq!(self.is_at_end(), false);
+    // assert_eq!(self.is_at_end(), false);
+    if self.is_at_end() {
+      breakpoint!();
+      panic!();
+    }
     &self.tokens[self.cursor + offset].literal
   }
   fn get(&mut self) -> usize {

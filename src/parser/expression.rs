@@ -1,10 +1,21 @@
-use crate::common::operator::Operator;
+use crate::{
+  common::operator::Operator,
+  parser::{declaration::Initializer, types::QualifiedType},
+};
 pub enum Expression {
   Constant(Constant),
   Unary(Unary),
   Binary(Binary),
   Assignment(Assignment),
   Variable(Variable),
+  Call(Call),
+  MemberAccess(MemberAccess),
+  Ternary(Ternary),
+  SizeOf(SizeOf),
+  Identifier(Identifier),
+  Cast(Cast),                       // (int)x
+  ArraySubscript(ArraySubscript),   // arr[i]
+  CompoundLiteral(CompoundLiteral), // (struct Point){.x=1, .y=2}
 }
 pub enum Constant {
   Int8(i8),
@@ -21,21 +32,59 @@ pub enum Constant {
   String(String),
 }
 pub struct Unary {
-  pub(crate) operator: Operator,
+  pub operator: Operator,
   // This pattern is ubiquitous in Rust AST libraries -- Box is literally everywhere in recursive data structures.
-  pub(crate) expression: Box<Expression>,
+  pub expression: Box<Expression>,
 }
 pub struct Binary {
-  pub(crate) operator: Operator,
-  pub(crate) left: Box<Expression>,
-  pub(crate) right: Box<Expression>,
+  pub operator: Operator,
+  pub left: Box<Expression>,
+  pub right: Box<Expression>,
 }
 pub struct Variable {
-  pub(crate) name: String,
+  pub name: String,
 }
 pub struct Assignment {
-  pub(crate) left: Box<Expression>,
-  pub(crate) right: Box<Expression>,
+  pub left: Box<Expression>,
+  pub right: Box<Expression>,
+}
+
+pub struct Call {
+  pub callee: Box<Expression>,
+  pub arguments: Vec<Expression>,
+}
+pub struct MemberAccess {
+  pub object: Box<Expression>,
+  pub member: String,
+}
+
+pub struct Ternary {
+  pub condition: Box<Expression>,
+  pub if_branch: Box<Expression>,
+  pub else_branch: Box<Expression>,
+}
+
+pub enum SizeOf {
+  // Type(String), // ignore for now
+  Expression(Box<Expression>),
+}
+
+pub struct Identifier {
+  pub name: String,
+}
+pub struct Cast {
+  pub target_type: QualifiedType,
+  pub expression: Box<Expression>,
+}
+
+pub struct ArraySubscript {
+  pub array: Box<Expression>,
+  pub index: Box<Expression>,
+}
+
+pub struct CompoundLiteral {
+  pub target_type: QualifiedType,
+  pub initializer: Initializer,
 }
 
 impl Constant {
@@ -44,10 +93,10 @@ impl Constant {
     Self::Int32(int32)
   }
 }
-impl Variable{
-    pub fn new(name: String) -> Self {
-        Self { name }
-    }
+impl Variable {
+  pub fn new(name: String) -> Self {
+    Self { name }
+  }
 }
 impl Unary {
   pub fn from_operator(operator: Operator, expression: Expression) -> Option<Self> {
@@ -77,5 +126,89 @@ impl Binary {
   }
   pub fn new(operator: Operator, left: Expression, right: Expression) -> Self {
     Self::from_operator(operator, left, right).unwrap()
+  }
+}
+
+mod fmt {
+  use crate::parser::expression::{Assignment, Binary, Constant, Expression, Unary, Variable};
+  use ::std::fmt::{Debug, Display};
+  impl Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{}", self.name)
+    }
+  }
+
+  impl Display for Assignment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "({} = {})", self.left, self.right)
+    }
+  }
+
+  impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+        Expression::Constant(c) => <Constant as Display>::fmt(c, f),
+        Expression::Unary(u) => <Unary as Display>::fmt(u, f),
+        Expression::Binary(b) => <Binary as Display>::fmt(b, f),
+        Expression::Assignment(a) => <Assignment as Display>::fmt(a, f),
+        Expression::Variable(v) => <Variable as Display>::fmt(v, f),
+        _ => todo!(),
+      }
+    }
+  }
+
+  impl Debug for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+
+  impl Display for Constant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+        Constant::Int8(i) => write!(f, "{}", i),
+        Constant::Int16(i) => write!(f, "{}", i),
+        Constant::Int32(i) => write!(f, "{}", i),
+        Constant::Int64(i) => write!(f, "{}", i),
+        Constant::Uint8(u) => write!(f, "{}", u),
+        Constant::Uint16(u) => write!(f, "{}", u),
+        Constant::Uint32(u) => write!(f, "{}", u),
+        Constant::Uint64(u) => write!(f, "{}", u),
+        Constant::Float32(fl) => write!(f, "{}", fl),
+        Constant::Float64(fl) => write!(f, "{}", fl),
+        Constant::Bool(b) => write!(f, "{}", b),
+        Constant::String(s) => write!(f, "\"{}\"", s),
+      }
+    }
+  }
+
+  impl Debug for Constant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+
+  impl Display for Unary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "({} {})", self.operator, self.expression)
+    }
+  }
+
+  impl Debug for Unary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+
+  impl Display for Binary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "({} {} {})", self.operator, self.left, self.right)
+    }
+  }
+
+  impl Debug for Binary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
   }
 }
