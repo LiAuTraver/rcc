@@ -85,3 +85,60 @@ impl Token {
     }
   }
 }
+impl Literal {
+  pub fn is_qualifier(&self) -> bool {
+    match self {
+      Literal::Keyword(kw) => kw.is_qualifier(),
+      _ => false,
+    }
+  }
+  pub fn is_storage_class(&self) -> bool {
+    match self {
+      Literal::Keyword(kw) => kw.is_storage_class(),
+      _ => false,
+    }
+  }
+  pub fn is_function_specifier(&self) -> bool {
+    match self {
+      Literal::Keyword(kw) => kw.is_function_specifier(),
+      _ => false,
+    }
+  }
+}
+
+impl Keyword {
+  pub fn is_qualifier(&self) -> bool {
+    matches!(
+      self,
+      Keyword::Const | Keyword::Volatile | Keyword::Restrict | Keyword::Atomic
+    )
+  }
+  pub fn is_storage_class(&self) -> bool {
+    matches!(
+      self,
+      Keyword::Auto | Keyword::Register | Keyword::Static | Keyword::Extern | Keyword::Typedef
+    )
+  }
+  pub fn is_function_specifier(&self) -> bool {
+    matches!(self, Keyword::Inline | Keyword::_Noreturn)
+  }
+  /// this isn't exhaustive, need to check typedefs in parser
+  pub fn is_type_specifier(&self) -> bool {
+    matches!(
+      self,
+      Keyword::Void
+        | Keyword::Char
+        | Keyword::Short
+        | Keyword::Int
+        | Keyword::Long
+        | Keyword::Float
+        | Keyword::Double
+        | Keyword::Signed
+        | Keyword::Unsigned
+        | Keyword::Bool
+        | Keyword::Struct
+        | Keyword::Union
+        | Keyword::Enum
+    )
+  }
+}

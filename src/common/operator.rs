@@ -94,7 +94,11 @@ pub enum Operator {
   RightShiftAssign,
   #[strum(serialize = "->")]
   Arrow,
+  #[strum(serialize = "::")]
+  DoubleColon, // in C this is only for [[prefix::attribute]]
 
+  #[strum(serialize = "...")]
+  Ellipsis,
   // preprocessor
   #[strum(serialize = "#")]
   Hash,

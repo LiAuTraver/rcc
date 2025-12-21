@@ -64,8 +64,24 @@ pub enum Keyword {
   Unsigned,
   #[strum(serialize = "void")]
   Void,
+  #[strum(serialize = "_Bool")]
+  #[strum(serialize = "bool")]
+  Bool,
   #[strum(serialize = "volatile")]
   Volatile,
+  #[strum(serialize = "restrict")]
+  Restrict,
+  #[strum(serialize = "_Atomic")]
+  #[strum(serialize = "atomic")]
+  Atomic,
+  #[strum(serialize = "thread_local")]
+  ThreadLocal,
+  // #[strum(serialize = "constexpr")]
+  // Constexpr,
+  #[strum(serialize = "inline")]
+  Inline,
+  #[strum(serialize = "_Noreturn")]
+  _Noreturn,
   #[strum(serialize = "while")]
   While,
 }

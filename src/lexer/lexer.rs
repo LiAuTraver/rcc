@@ -124,7 +124,7 @@ impl Lexer {
         if self.peek(0).is_ascii_hexdigit() {
           Some(self.lex_number(start, start_loc, true))
         } else {
-          Some(Token::operator(Operator::Dot, start_loc))
+          self.lex_compound_op(start_loc, Operator::Dot, &[("...", Operator::Ellipsis)])
         }
       }
 
@@ -198,6 +198,7 @@ impl Lexer {
         &[("||", Operator::Or), ("|=", Operator::PipeAssign)],
       ),
       '^' => self.lex_compound_op(start_loc, Operator::Caret, &[("^=", Operator::CaretAssign)]),
+      ':' => self.lex_compound_op(start_loc, Operator::Colon, &[("::", Operator::DoubleColon)]),
 
       '#' => self.lex_compound_op(start_loc, Operator::Hash, &[("##", Operator::HashHash)]),
 
@@ -212,7 +213,6 @@ impl Lexer {
       ']' => Some(Token::operator(Operator::RightBracket, start_loc)),
       '~' => Some(Token::operator(Operator::Tilde, start_loc)),
       '?' => Some(Token::operator(Operator::Question, start_loc)),
-      ':' => Some(Token::operator(Operator::Colon, start_loc)),
 
       _ => {
         self.errors.push(format!(

@@ -3,7 +3,7 @@ use crate::{
   parser::declaration::Initializer,
 };
 pub enum Expression {
-  Empty, // no-op and also for error recovery
+  Empty, // no-op for error recovery; for empty expr should use Option<Expression> instead
   Constant(Constant),
   Unary(Unary),
   Binary(Binary),

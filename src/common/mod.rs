@@ -1,3 +1,4 @@
+pub mod environment;
 pub mod keyword;
 pub mod operator;
 pub mod token;
