@@ -13,11 +13,9 @@ pub enum Statement {
   For(For),
   DoWhile(DoWhile),
   Switch(Switch),
-
-  Case(Case),
+  Goto(Goto),
   Label(Label),
 
-  Default(Default),
   Break(SingleLabel),
   Continue(SingleLabel),
 }
@@ -63,22 +61,58 @@ pub struct For {
 }
 
 pub struct Switch {
-  pub expression: Expression,
-  pub body: Box<Statement>, // Usually a Block
+  pub condition: Expression,
+  pub cases: Vec<Case>,
+  pub default: Option<Default>,
 }
 
 pub struct Case {
   pub value: Expression, // Must be constant integer expression
-  pub body: Box<Statement>,
+  pub body: Vec<Statement>,
 }
 
 pub struct Default {
-  pub body: Box<Statement>,
+  pub body: Vec<Statement>,
 }
 
 pub struct Label {
   pub name: String,
   pub statement: Box<Statement>,
+}
+pub struct Goto {
+  pub label: String,
+}
+impl Goto {
+  pub fn new(label: String) -> Self {
+    Self { label }
+  }
+}
+impl Default {
+  pub fn new(body: Vec<Statement>) -> Self {
+    Self { body }
+  }
+}
+impl Switch {
+  pub fn new(condition: Expression, cases: Vec<Case>, default: Option<Default>) -> Self {
+    Self {
+      condition,
+      cases,
+      default,
+    }
+  }
+}
+impl Label {
+  pub fn new(name: String, statement: Statement) -> Self {
+    Self {
+      name,
+      statement: Box::new(statement),
+    }
+  }
+}
+impl Case {
+  pub fn new(value: Expression, body: Vec<Statement>) -> Self {
+    Self { value, body }
+  }
 }
 impl SingleLabel {
   pub fn new(label: String) -> Self {
@@ -165,7 +199,10 @@ mod fmt {
   use crate::parser::{
     declaration::Declaration,
     expression::Expression,
-    statement::{Compound, DoWhile, For, If, Return, SingleLabel, Statement, While},
+    statement::{
+      Case, Compound, Default, DoWhile, For, Goto, If, Label, Return, SingleLabel, Statement,
+      Switch, While,
+    },
   };
   use std::fmt::{Debug, Display};
 
@@ -183,7 +220,9 @@ mod fmt {
         Statement::While(while_stmt) => <While as Display>::fmt(while_stmt, f),
         Statement::DoWhile(dowhile_stmt) => <DoWhile as Display>::fmt(dowhile_stmt, f),
         Statement::For(for_stmt) => <For as Display>::fmt(for_stmt, f),
-        _ => write!(f, "<unimplemented statement fmt>"),
+        Statement::Switch(switch_stmt) => <Switch as Display>::fmt(switch_stmt, f),
+        Statement::Label(label_stmt) => <Label as Display>::fmt(label_stmt, f),
+        Statement::Goto(goto_stmt) => <Goto as Display>::fmt(goto_stmt, f),
       }
     }
   }
@@ -293,6 +332,82 @@ mod fmt {
     }
   }
   impl Debug for SingleLabel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Default {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(
+        f,
+        "default: {}",
+        self
+          .body
+          .iter()
+          .map(|s| format!("{}", s))
+          .collect::<Vec<_>>()
+          .join("\n")
+      )
+    }
+  }
+  impl Debug for Default {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Label {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{}: {}", self.name, self.statement)
+    }
+  }
+  impl Debug for Label {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Case {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(
+        f,
+        "case {}: {}",
+        self.value,
+        self
+          .body
+          .iter()
+          .map(|s| format!("{}", s))
+          .collect::<Vec<_>>()
+          .join("\n")
+      )
+    }
+  }
+  impl Debug for Case {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Switch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "switch ({}) {{\n", self.condition)?;
+      for case in &self.cases {
+        write!(f, "  {}\n", case)?;
+      }
+      if let Some(default) = &self.default {
+        write!(f, "  {}\n", default)?;
+      }
+      write!(f, "}}")
+    }
+  }
+  impl Debug for Switch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Goto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "goto {};", self.label)
+    }
+  }
+  impl Debug for Goto {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       <Self as Display>::fmt(self, f)
     }

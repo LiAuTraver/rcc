@@ -4,7 +4,6 @@ use crate::common::types::Primitive;
 use crate::parser::expression::Expression;
 use crate::parser::statement::Compound;
 use ::strum_macros::{Display, EnumString};
-use std::marker::ConstParamTy;
 
 pub struct Program {
   pub declarations: Vec<Declaration>,
@@ -106,7 +105,7 @@ pub enum Modifier {
 /// abstract declarator: no variable name/identifier
 ///
 /// used in parsing
-#[derive(ConstParamTy, PartialEq, Eq)]
+#[derive(::std::marker::ConstParamTy, PartialEq, Eq)]
 pub enum DeclaratorType {
   Abstract,
   Named,
@@ -141,42 +140,44 @@ pub struct Struct {
   pub members: Vec<Member>,
 }
 /// type-specifier
-#[derive(EnumString, Display)]
 pub enum Specifier {
-  #[strum(serialize = "void")]
   Void,
-  #[strum(serialize = "char")]
   Char,
-  #[strum(serialize = "short")]
   Short,
-  #[strum(serialize = "int")]
   Int,
-  #[strum(serialize = "long")]
   Long,
-  #[strum(serialize = "float")]
   Float,
-  #[strum(serialize = "double")]
   Double,
-  #[strum(serialize = "signed")]
   Signed,
-  #[strum(serialize = "unsigned")]
   Unsigned,
-  #[strum(serialize = "_Bool")]
-  #[strum(serialize = "bool")]
   Bool,
-  #[strum(serialize = "_Complex")]
-  #[strum(serialize = "complex")]
   Complex,
-  // vvv below should be wrong, but now don't care
-  #[strum(disabled)]
-  Struct(Struct),
-  #[strum(disabled)]
-  Union(Struct),
-  #[strum(disabled)]
-  Enum(EnumSpecifier),
-  #[strum(disabled)]
   Typedef(String),
+  // vvv below should be wrong, but now don't care
+  Struct(Struct),
+  Union(Struct),
+  Enum(EnumSpecifier),
 }
+
+// impl TryFrom<&str> for Specifier {
+//   type Error = ();
+//   fn try_from(s: &str) -> Result<Self, Self::Error> {
+//     match s {
+//       "void" => Ok(Specifier::Void),
+//       "char" => Ok(Specifier::Char),
+//       "short" => Ok(Specifier::Short),
+//       "int" => Ok(Specifier::Int),
+//       "long" => Ok(Specifier::Long),
+//       "float" => Ok(Specifier::Float),
+//       "double" => Ok(Specifier::Double),
+//       "signed" => Ok(Specifier::Signed),
+//       "unsigned" => Ok(Specifier::Unsigned),
+//       "bool" | "_Bool" => Ok(Specifier::Bool),
+//       "complex" | "_Complex" => Ok(Specifier::Complex),
+//       _ => Err(()),
+//     }
+//   }
+// }
 
 impl TryFrom<&Keyword> for Specifier {
   type Error = ();
@@ -364,7 +365,11 @@ impl VarDef {
   }
 }
 mod fmt {
-  use super::{DeclSpecs, Declaration, Function, FunctionSignature, Modifier, Program, VarDef};
+
+  use super::{
+    DeclSpecs, Declaration, EnumSpecifier, Function, FunctionSignature, Modifier, Program,
+    Specifier, Struct, VarDef,
+  };
   use ::std::fmt::{Debug, Display};
 
   impl Display for Declaration {
@@ -503,14 +508,44 @@ mod fmt {
   }
   impl Display for VarDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(
-        f,
-        "<variable {}>",
-        match &self.declarator.name {
-          Some(name) => name,
-          None => "<anonymous>",
-        },
-      )
+      if self.is_typedef() {
+        write!(
+          f,
+          "typedef {} {};",
+          self
+            .declspecs
+            .specifiers
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join(" "),
+          match &self.declarator.name {
+            Some(name) => name,
+            None => "<anonymous>",
+          },
+        )
+      } else {
+        write!(
+          f,
+          "{} {}{}",
+          self
+            .declspecs
+            .specifiers
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join(" "),
+          match &self.declarator.name {
+            Some(name) => name,
+            None => "<anonymous>",
+          },
+          match &self.initializer {
+            Some(_) => format!(" = <initializer>"),
+            None => "".to_string(),
+          }
+        )?;
+        write!(f, ";")
+      }
     }
   }
   impl Debug for VarDef {
@@ -524,6 +559,66 @@ mod fmt {
     }
   }
   impl Debug for DeclSpecs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Specifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+        Specifier::Void => write!(f, "void"),
+        Specifier::Char => write!(f, "char"),
+        Specifier::Short => write!(f, "short"),
+        Specifier::Int => write!(f, "int"),
+        Specifier::Long => write!(f, "long"),
+        Specifier::Float => write!(f, "float"),
+        Specifier::Double => write!(f, "double"),
+        Specifier::Signed => write!(f, "signed"),
+        Specifier::Unsigned => write!(f, "unsigned"),
+        Specifier::Bool => write!(f, "bool"),
+        Specifier::Complex => write!(f, "complex"),
+        Specifier::Typedef(name) => write!(f, "{}", name),
+        Specifier::Struct(s) => write!(f, "struct {}", s),
+        Specifier::Union(s) => write!(f, "union {}", s),
+        Specifier::Enum(e) => write!(f, "enum {}", e),
+      }
+    }
+  }
+  impl Debug for Specifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for Struct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(
+        f,
+        "{}",
+        match &self.name {
+          Some(name) => name,
+          None => "(unnamed)",
+        }
+      )
+    }
+  }
+  impl Debug for Struct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      <Self as Display>::fmt(self, f)
+    }
+  }
+  impl Display for EnumSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(
+        f,
+        "{}",
+        match &self.name {
+          Some(name) => name,
+          None => "(unnamed)",
+        }
+      )
+    }
+  }
+  impl Debug for EnumSpecifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       <Self as Display>::fmt(self, f)
     }

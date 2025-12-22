@@ -1,6 +1,5 @@
-use std::marker::ConstParamTy;
 use strum_macros::{Display, EnumString};
-#[derive(Debug, Clone, Display, EnumString, PartialEq, Eq, ConstParamTy)]
+#[derive(Debug, Clone, Display, EnumString, PartialEq, Eq, ::std::marker::ConstParamTy)]
 pub enum Operator {
   // one-character operators
   #[strum(serialize = "+")]
@@ -180,7 +179,7 @@ impl Operator {
       Operator::And => 0x10,
       // logical OR
       Operator::Or => 0x08,
-      // assignment - it's a trick since it's most right associative
+      // assignment - it's a trick since it's mostly right associative
       Operator::Assign => 0x04,
       _ => unreachable!(),
     }

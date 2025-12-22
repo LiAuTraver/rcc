@@ -13,8 +13,8 @@ use crate::{
     },
     expression::{Binary, Call, Constant, Expression, Ternary, Unary, Variable},
     statement::{
-      Break, Compound, Continue, DoWhile, For, If, Return, Statement, While,
-      new_loop_dummy_identifier,
+      Break, Case, Compound, Continue, Default, DoWhile, For, Goto, If, Label, Return, Statement,
+      Switch, While, new_loop_dummy_identifier,
     },
   },
 };
@@ -108,6 +108,11 @@ impl Parser {
     if *self.peek(0) != Literal::Operator(OP) {
       self.add_error(format!("Expect '{}' ", OP));
     } else {
+      self.must_get_op::<OP>();
+    }
+  }
+  fn silent_get_if<const OP: Operator>(&mut self) {
+    if *self.peek(0) == Literal::Operator(OP) {
       self.must_get_op::<OP>();
     }
   }
@@ -312,10 +317,59 @@ impl Parser {
       FunctionSignature::new(parameters, false)
     }
   }
+  /// common function to parse `(` expr `)`.
+  fn parse_paren_expression(&mut self) -> Expression {
+    if self.peek(0) != &Literal::Operator(Operator::LeftParen) {
+      self.add_error(format!("Expcet '(' after {}", self.tokens[self.cursor - 1]));
+      // assume the left paren is missing, continue parsing
+    } else {
+      self.must_get_op::<{ Operator::LeftParen }>();
+    }
+    let expr = self.next_expression(0);
+    if self.peek(0) != &Literal::Operator(Operator::RightParen) {
+      self.add_error("Expect ')'".to_string());
+      self.get(); // get it otherwise infinite loop
+    } else {
+      self.must_get_op::<{ Operator::RightParen }>();
+    }
+    expr
+  }
+  fn parse_case_and_default_body(&mut self) -> Vec<Statement> {
+    let mut body = Vec::new();
+    while self.peek(0) != &Literal::Keyword(Keyword::Case)
+      && self.peek(0) != &Literal::Keyword(Keyword::Default)
+        && self.peek(0) != &Literal::Operator(Operator::RightBrace)
+    {
+      body.push(self.next_statement());
+    }
+    body
+  }
+  fn parse_case(&mut self) -> Case {
+    self.must_get_key::<{ Keyword::Case }>();
+    let expression = if self.peek(0) == &Literal::Operator(Operator::Colon) {
+      self.add_error("Expect constant expression after 'case'".to_string());
+      self.must_get_op::<{ Operator::Colon }>();
+      Expression::Empty
+    } else {
+      let expr = self.next_expression(0);
+      self.recoverable_get::<{ Operator::Colon }>();
+      expr
+    };
+    // if it's a compound statement, we need to extract all statements until the next case/default or right brace
+    // else, multiple statements until next case/default
+    let body = self.parse_case_and_default_body();
+    Case::new(expression, body)
+  }
+  fn parse_default(&mut self) -> Default {
+    self.must_get_key::<{ Keyword::Default }>();
+    self.recoverable_get::<{ Operator::Colon }>();
+    let body = self.parse_case_and_default_body();
+    Default::new(body)
+  }
 }
 /// grammars
 impl Parser {
-  fn next_vardef(&mut self, declspec: DeclSpecs, declarator: Declarator) -> VarDef {
+  fn next_vardef(&mut self, declspecs: DeclSpecs, declarator: Declarator) -> VarDef {
     let initializer = match self.peek(0) {
       Literal::Operator(Operator::Semicolon) => {
         self.must_get_op::<{ Operator::Semicolon }>();
@@ -335,7 +389,7 @@ impl Parser {
       }
     };
     VarDef::new(
-      declspec,
+      declspecs,
       declarator,
       initializer.map(|init_expr| Initializer::Expression(Box::new(init_expr))),
     )
@@ -433,52 +487,28 @@ impl Parser {
   }
   fn next_if(&mut self) -> If {
     self.must_get_key::<{ Keyword::If }>();
-    if *self.peek(0) != Literal::Operator(Operator::LeftParen) {
-      self.add_error("Expect '(' after 'if'".to_string());
-      panic!() // workaound
+    let condition = self.parse_paren_expression();
+    let if_branch = self.next_statement();
+    self.ios_c_strict_check_for_decl(&if_branch);
+    let else_branch = if self.peek(0) == &Literal::Keyword(Keyword::Else) {
+      self.must_get_key::<{ Keyword::Else }>();
+      let body = self.next_statement();
+      self.ios_c_strict_check_for_decl(&body);
+      Some(body)
     } else {
-      self.must_get_op::<{ Operator::LeftParen }>();
-      let condition = self.next_expression(0);
-      if *self.peek(0) != Literal::Operator(Operator::RightParen) {
-        self.add_error("Expect ')' after if condition".to_string());
-        panic!() // workaround
-      } else {
-        self.must_get_op::<{ Operator::RightParen }>();
-        let if_branch = self.next_statement();
-        self.ios_c_strict_check_for_decl(&if_branch);
-        let else_branch = if *self.peek(0) == Literal::Keyword(Keyword::Else) {
-          self.must_get_key::<{ Keyword::Else }>();
-          let body = self.next_statement();
-          self.ios_c_strict_check_for_decl(&body);
-          Some(body)
-        } else {
-          None
-        };
-        If::new(condition, if_branch, else_branch)
-      }
-    }
+      None
+    };
+    If::new(condition, if_branch, else_branch)
   }
   fn next_while(&mut self) -> While {
     self.must_get_key::<{ Keyword::While }>();
-    if *self.peek(0) != Literal::Operator(Operator::LeftParen) {
-      self.add_error("Expect '(' after 'while'".to_string());
-      panic!() // workaound
-    } else {
-      self.must_get_op::<{ Operator::LeftParen }>();
-      let condition = self.next_expression(0);
-      if *self.peek(0) != Literal::Operator(Operator::RightParen) {
-        self.add_error("Expect ')' after while condition".to_string());
-        panic!() // workaround
-      } else {
-        self.must_get_op::<{ Operator::RightParen }>();
-        self.loop_labels.push(new_loop_dummy_identifier("while"));
-        let body = self.next_statement();
-        self.ios_c_strict_check_for_decl(&body);
-        let while_stmt = While::new(condition, body, self.loop_labels.last().unwrap().clone());
-        self.loop_labels.pop();
-        while_stmt
-      }
-    }
+    let condition = self.parse_paren_expression();
+    self.loop_labels.push(new_loop_dummy_identifier("while"));
+    let body = self.next_statement();
+    self.ios_c_strict_check_for_decl(&body);
+    let while_stmt = While::new(condition, body, self.loop_labels.last().unwrap().clone());
+    self.loop_labels.pop();
+    while_stmt
   }
   fn next_dowhile(&mut self) -> DoWhile {
     self.must_get_key::<{ Keyword::Do }>();
@@ -486,24 +516,12 @@ impl Parser {
     let body = self.next_statement();
     self.ios_c_strict_check_for_decl(&body);
     self.must_get_key::<{ Keyword::While }>();
-    if *self.peek(0) != Literal::Operator(Operator::LeftParen) {
-      self.add_error("Expect '(' after 'while'".to_string());
-      panic!() // workaound
-    } else {
-      self.must_get_op::<{ Operator::LeftParen }>();
-      let condition = self.next_expression(0);
-      if *self.peek(0) != Literal::Operator(Operator::RightParen) {
-        self.add_error("Expect ')' after while condition".to_string());
-        panic!() // workaround
-      } else {
-        self.must_get_op::<{ Operator::RightParen }>();
-        assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
-        self.must_get_op::<{ Operator::Semicolon }>();
-        let dowhile_stmt = DoWhile::new(body, condition, self.loop_labels.last().unwrap().clone());
-        self.loop_labels.pop();
-        dowhile_stmt
-      }
-    }
+    let condition = self.parse_paren_expression();
+    assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
+    self.must_get_op::<{ Operator::Semicolon }>();
+    let dowhile_stmt = DoWhile::new(body, condition, self.loop_labels.last().unwrap().clone());
+    self.loop_labels.pop();
+    dowhile_stmt
   }
   fn next_for(&mut self) -> For {
     self.must_get_key::<{ Keyword::For }>();
@@ -537,30 +555,21 @@ impl Parser {
           }
         },
       };
-      // condition
-      let condition = match self.peek(0) {
-        Literal::Operator(Operator::Semicolon) => {
-          self.must_get_op::<{ Operator::Semicolon }>();
-          None
+      fn parse_optional_expression<const OP: Operator>(parser: &mut Parser) -> Option<Expression> {
+        match parser.peek(0) {
+          Literal::Operator(op) if op == &OP => {
+            parser.must_get_op::<OP>();
+            None
+          }
+          _ => {
+            let expr = parser.next_expression(0);
+            parser.must_get_op::<OP>();
+            Some(expr)
+          }
         }
-        _ => {
-          let cond_expr = self.next_expression(0);
-          self.must_get_op::<{ Operator::Semicolon }>();
-          Some(cond_expr)
-        }
-      };
-      // increment
-      let increment = match self.peek(0) {
-        Literal::Operator(Operator::RightParen) => {
-          self.must_get_op::<{ Operator::RightParen }>();
-          None
-        }
-        _ => {
-          let incr_expr = self.next_expression(0);
-          self.must_get_op::<{ Operator::RightParen }>();
-          Some(incr_expr)
-        }
-      };
+      }
+      let condition = parse_optional_expression::<{ Operator::Semicolon }>(self);
+      let increment = parse_optional_expression::<{ Operator::RightParen }>(self);
       self.loop_labels.push(new_loop_dummy_identifier("for"));
       let body = self.next_statement();
       self.ios_c_strict_check_for_decl(&body);
@@ -575,26 +584,104 @@ impl Parser {
       for_stmt
     }
   }
+  fn next_switch(&mut self) -> Switch {
+    self.must_get_key::<{ Keyword::Switch }>();
+    let condition = self.parse_paren_expression();
+    self.loop_labels.push(new_loop_dummy_identifier("switch"));
+    self.recoverable_get::<{ Operator::LeftBrace }>();
+    let mut cases = Vec::new();
+    let mut default: Option<Default> = None;
+    while *self.peek(0) != Literal::Operator(Operator::RightBrace) {
+      match self.peek(0) {
+        Literal::Keyword(Keyword::Case) => {
+          let case = self.parse_case();
+          if default.is_some() {
+            self.add_error("Case label after default label in switch; case ignored".to_string());
+          } else {
+            cases.push(case);
+          }
+        }
+        Literal::Keyword(Keyword::Default) => {
+          if default.is_some() {
+            self.add_error("Multiple default labels in one switch; ignoring latter".to_string());
+          } else {
+            default = Some(self.parse_default());
+          }
+        }
+        _ => {
+          self.add_error("Expect 'case' or 'default' in switch body".to_string());
+          self.get(); // consume the invalid token
+        }
+      }
+    }
+
+    self.must_get_op::<{ Operator::RightBrace }>();
+    self.loop_labels.pop();
+    Switch::new(condition, cases, default)
+  }
   fn next_statement(&mut self) -> Statement {
     match *self.peek(0) {
-      Literal::Keyword(Keyword::Return) => Statement::Return(self.next_return()),
-      Literal::Operator(Operator::LeftBrace) => Statement::Compound(self.next_block()),
-      Literal::Operator(Operator::Semicolon) => {
-        self.must_get_op::<{ Operator::Semicolon }>();
-        self.add_warning("Redundant ';'".to_string());
-        Statement::Empty()
-      }
       Literal::Keyword(Keyword::If) => Statement::If(self.next_if()),
+      Literal::Keyword(Keyword::For) => Statement::For(self.next_for()),
+      Literal::Keyword(Keyword::Return) => Statement::Return(self.next_return()),
       Literal::Keyword(Keyword::While) => Statement::While(self.next_while()),
       Literal::Keyword(Keyword::Do) => Statement::DoWhile(self.next_dowhile()),
-      Literal::Keyword(Keyword::For) => Statement::For(self.next_for()),
       Literal::Keyword(Keyword::Break) => Statement::Break(self.next_break()),
       Literal::Keyword(Keyword::Continue) => Statement::Continue(self.next_continue()),
+      Literal::Keyword(Keyword::Switch) => Statement::Switch(self.next_switch()),
+      Literal::Operator(Operator::LeftBrace) => Statement::Compound(self.next_block()),
+      Literal::Operator(Operator::Semicolon) => self.next_emptystmt(),
+      Literal::Keyword(Keyword::Goto) => self.next_gotostmt(),
       Literal::Keyword(_) => Statement::Declaration(self.next_declaration()),
-      _ => Statement::Expression(self.next_stmtexpr()),
+      Literal::Identifier(ref ident) if self.typedefs.contains(&ident) => {
+        Statement::Declaration(self.next_declaration())
+      }
+      Literal::Identifier(ref ident) if self.peek(1) == &Literal::Operator(Operator::Colon) => {
+        self.next_labelstmt(ident.to_string())
+      }
+
+      _ => Statement::Expression(self.next_exprstmt()),
     }
   }
-  fn next_stmtexpr(&mut self) -> Expression {
+
+  fn next_labelstmt(&mut self, ident: String) -> Statement {
+    // 1. label at end of compound statement is not allowed until C23
+    // 2. label can only jump to statements within the same function, not to mention cross file.
+    if self.typedefs.is_top_level() {
+      self.add_error("Label statement is not allowed in top level.".to_string());
+      Statement::Empty()
+    } else {
+      self.get(); // consume ident
+      self.must_get_op::<{ Operator::Colon }>();
+      let statement = self.next_statement();
+      self.ios_c_strict_check_for_decl(&statement);
+      // todo: label validity check, here or in semantic analysis?
+      Statement::Label(Label::new(ident, statement))
+    }
+  }
+
+  fn next_gotostmt(&mut self) -> Statement {
+    self.must_get_key::<{ Keyword::Goto }>();
+    if let Literal::Identifier(ident) = self.peek(0) {
+      let name = ident.to_string();
+      self.get(); // consume ident
+      self.recoverable_get::<{ Operator::Semicolon }>();
+      Statement::Goto(Goto::new(name))
+    } else {
+      self.add_error("Expect label identifier after 'goto'".to_string());
+      // assume the label is missing, continue parsing
+      self.silent_get_if::<{ Operator::Semicolon }>();
+      Statement::Empty()
+    }
+  }
+
+  fn next_emptystmt(&mut self) -> Statement {
+    self.must_get_op::<{ Operator::Semicolon }>();
+    self.add_warning("Redundant ';'".to_string());
+    Statement::Empty()
+  }
+
+  fn next_exprstmt(&mut self) -> Expression {
     let expr = self.next_expression(0);
     self.recoverable_get::<{ Operator::Semicolon }>();
     expr
