@@ -84,7 +84,7 @@ pub enum Keyword {
   #[strum(serialize = "_Atomic")]
   Atomic,
   #[strum(serialize = "_Noreturn")]
-  _Noreturn,
+  Noreturn,
   #[strum(serialize = "alignas")] // C23
   #[strum(serialize = "_Alignas")]
   Alignas,

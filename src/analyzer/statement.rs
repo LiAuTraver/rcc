@@ -1,8 +1,9 @@
 use crate::{
-  parser::{declaration::Declaration, expression::Expression},
+  analyzer::{declaration::Declaration, expression::Expression},
   type_alias_stmt,
 };
-#[derive(Debug)]
+// no additional info like that one we do in Expression?
+// alright, just repeat the same structure again -- stop abstracting here
 pub enum Statement {
   Empty(),
   Return(Return),
@@ -22,11 +23,6 @@ pub enum Statement {
 
 type_alias_stmt!(Statement, Declaration, Expression);
 
-impl Statement {
-  pub(super) fn new_loop_dummy_identifier(str: &'static str) -> String {
-    RawStmt::new_loop_dummy_identifier(str)
-  }
-}
 mod fmt {
   use ::std::fmt::Display;
 

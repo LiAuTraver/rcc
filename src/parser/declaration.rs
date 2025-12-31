@@ -1,79 +1,24 @@
-use crate::common::keyword::Keyword;
-use crate::common::token::Literal;
-use crate::common::types::Qualifiers;
-use crate::parser::expression::Expression;
-use crate::parser::statement::Compound;
-use ::strum_macros::Display;
+use crate::{
+  common::{
+    keyword::Keyword, rawdecl::FunctionSpecifier, storage::Storage, token::Literal,
+    types::Qualifiers,
+  },
+  parser::{expression::Expression, statement::Compound},
+};
 
+#[derive(Debug)]
 pub struct Program {
   pub declarations: Vec<Declaration>,
 }
 /// declaration:
-///        declaration-specifiers init-declarator-listopt ;
-///        attribute-specifier-sequence declaration-specifiers init-declarator-list ; (don't care)
-///        static_assert-declaration (don't care)
-///        attribute-declaration (don't care)
+///       - declaration-specifiers init-declarator-list_opt ;
+///       - attribute-specifier-sequence declaration-specifiers init-declarator-list ; (don't care)
+///       - static_assert-declaration (don't care)
+///       - attribute-declaration (don't care)
+#[derive(Debug)]
 pub enum Declaration {
   Function(Function),
   Variable(VarDef),
-}
-/// storage-class-specifier
-#[derive(Display, PartialEq, Eq)]
-pub enum Storage {
-  /// variables that declared in block scope without any storage-class specifier
-  /// are considered to have automatic storage duration.
-  #[strum(serialize = "auto")]
-  Automatic,
-  #[strum(serialize = "register")]
-  Register,
-  /// - Function declarations with no storage-class specifier are always handled
-  /// as though they include an extern specifier
-  /// - if variable declarations appear at file scope, they have external linkage
-  /// - use extern to declare an identifier that’s already visible.
-  /// ```c
-  /// static int a;
-  /// extern int a; // this is valid and a has internal linkage
-  /// extern int b;
-  /// static int b = 0; // this is also valid... (internal linkage)
-  /// ```
-  #[strum(serialize = "extern")]
-  Extern,
-  /// - At file scope, the static specifier indicates that a function or variable
-  /// has internal linkage.
-  /// - At block scope(i.e., for variables), the static specifier controls storage duration, not linkage.
-  #[strum(serialize = "static")]
-  Static,
-  /// according to standard, `typedef` is categorized as a storage-class specifier for **syntactic convenience only**.
-  #[strum(serialize = "typedef")]
-  Typedef,
-  /// the variable is allocated when the thread is created
-  #[strum(serialize = "thread_local")]
-  ThreadLocal, // I won't care about this now
-  /// C23, `#define VAR value` is the same `constexpr TYPE VAR = value;` with fewer name collisions
-  #[strum(serialize = "constexpr")]
-  Constexpr, // ditto
-}
-impl From<&Keyword> for Storage {
-  fn from(kw: &Keyword) -> Self {
-    match kw {
-      Keyword::Auto => Storage::Automatic,
-      Keyword::Register => Storage::Register,
-      Keyword::Extern => Storage::Extern,
-      Keyword::Static => Storage::Static,
-      Keyword::Typedef => Storage::Typedef,
-      Keyword::ThreadLocal => Storage::ThreadLocal,
-      Keyword::Constexpr => Storage::Constexpr,
-      _ => panic!("cannot convert {:?} to Storage", kw),
-    }
-  }
-}
-impl From<&Literal> for Storage {
-  fn from(literal: &Literal) -> Self {
-    match literal {
-      Literal::Keyword(kw) => Storage::from(kw),
-      _ => panic!("cannot convert {:?} to Storage", literal),
-    }
-  }
 }
 
 impl From<&Literal> for Qualifiers {
@@ -102,6 +47,7 @@ pub enum DeclaratorType {
 }
 /// declarator:
 ///     pointer_opt direct-declarator
+#[derive(Debug)]
 pub struct Declarator {
   pub name: Option<String>,
   pub modifiers: Vec<Modifier>, // pointer, array, function
@@ -119,11 +65,13 @@ pub struct Declarator {
 /// won't care about attribute-specifier-sequence for now
 ///
 /// this is flatten structure, so the order of `Vec<Modifier>` in `Declarator` matters
+#[derive(Debug)]
 pub enum Modifier {
   Pointer(Qualifiers),
   Array(ArrayModifier),
   Function(FunctionSignature),
 }
+#[derive(Debug)]
 pub struct Member {
   pub specifiers: Vec<TypeSpecifier>,
   pub qualifiers: Qualifiers,
@@ -131,15 +79,18 @@ pub struct Member {
   pub declarator: Option<Declarator>,
   pub bit_width: Option<Expression>,
 }
+#[derive(Debug)]
 pub struct Parameter {
   pub specifications: DeclSpecs,
   pub declarator: Declarator,
 }
+#[derive(Debug)]
 pub struct Struct {
   pub name: Option<String>,
   pub members: Vec<Member>,
 }
 /// type-specifier
+#[derive(Debug)]
 pub enum TypeSpecifier {
   Void,
   Char,
@@ -159,17 +110,33 @@ pub enum TypeSpecifier {
   Enum(EnumSpecifier),
 }
 
-pub enum FunctionSpecifier {
-  Inline,
-  Noreturn,
+impl TypeSpecifier {
+  pub fn sort_key(&self) -> u8 {
+    match self {
+      TypeSpecifier::Void => 0,
+      TypeSpecifier::Unsigned => 1,
+      TypeSpecifier::Signed => 2,
+      TypeSpecifier::Char => 3,
+      TypeSpecifier::Short => 4,
+      TypeSpecifier::Long => 5,
+      TypeSpecifier::Int => 6,
+      TypeSpecifier::Float => 7,
+      TypeSpecifier::Double => 8,
+      TypeSpecifier::Bool => 9,
+      TypeSpecifier::Complex => 10,
+      TypeSpecifier::Typedef(_) => 11,
+      TypeSpecifier::Struct(_) => 12,
+      TypeSpecifier::Union(_) => 13,
+      TypeSpecifier::Enum(_) => 14,
+    }
+  }
 }
-
 impl TryFrom<&Keyword> for FunctionSpecifier {
   type Error = ();
   fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
     match kw {
       Keyword::Inline => Ok(FunctionSpecifier::Inline),
-      Keyword::_Noreturn => Ok(FunctionSpecifier::Noreturn),
+      Keyword::Noreturn => Ok(FunctionSpecifier::Noreturn),
       _ => Err(()),
     }
   }
@@ -213,23 +180,27 @@ impl TryFrom<&Literal> for TypeSpecifier {
   }
 }
 /// declaration-specifiers:
-///    declaration-specifier attribute-specifier-sequenceopt (don't care)
-///    declaration-specifier declaration-specifiers
+///    - declaration-specifier attribute-specifier-sequence_opt (don't care)
+///    - declaration-specifier declaration-specifiers
+///
 /// declaration-specifier:
-///    storage-class-specifier
-///    type-specifier-qualifier
-///    function-specifier
+///    - storage-class-specifier
+///    - type-specifier-qualifier
+///    - function-specifier
+#[derive(Debug)]
 pub struct DeclSpecs {
-  pub function_specifiers: Vec<FunctionSpecifier>,
+  pub function_specifiers: FunctionSpecifier,
   pub storage_class: Option<Storage>,
   pub qualifiers: Qualifiers,
   pub type_specifiers: Vec<TypeSpecifier>,
 }
+#[derive(Debug)]
 pub struct Function {
   pub declspecs: DeclSpecs,
   pub declarator: Declarator,
   pub body: Option<Compound>,
 }
+#[derive(Debug)]
 pub struct VarDef {
   pub declspecs: DeclSpecs,
   pub declarator: Declarator,
@@ -240,11 +211,13 @@ pub struct VarDef {
 ///     - direct-declarator \[ static type-qualifier-list_opt assignment-expression \]
 ///     - direct-declarator \[ type-qualifier-list static assignment-expression \]
 ///     - direct-declarator \[ type-qualifier-list_opt * \]
+#[derive(Debug)]
 pub struct ArrayModifier {
   pub qualifiers: Qualifiers,
   pub is_static: bool,
   pub bound: ArrayBound,
 }
+#[derive(Debug)]
 pub enum ArrayBound {
   Constant(usize),
   Variable(Expression),
@@ -252,26 +225,32 @@ pub enum ArrayBound {
 }
 /// function-declarator:
 ///     - direct-declarator ( parameter-type-list_opt )
+#[derive(Debug)]
 pub struct FunctionSignature {
   pub parameters: Vec<Parameter>,
   pub is_variadic: bool,
 }
+#[derive(Debug)]
 pub enum Initializer {
   Expression(Box<Expression>),
   List(Vec<InitializerListEntry>),
 }
+#[derive(Debug)]
 pub struct InitializerListEntry {
   pub designators: Vec<Designator>,
   pub value: Box<Initializer>,
 }
+#[derive(Debug)]
 pub enum Designator {
   Member(String),
   Index(Expression),
 }
+#[derive(Debug)]
 pub struct EnumSpecifier {
   pub name: Option<String>,
   pub enumerators: Vec<Enumerator>,
 }
+#[derive(Debug)]
 pub struct Enumerator {
   pub name: String,
   pub value: Option<Expression>,
@@ -337,7 +316,7 @@ impl Declarator {
 impl ::core::default::Default for DeclSpecs {
   fn default() -> Self {
     Self {
-      function_specifiers: Vec::new(),
+      function_specifiers: FunctionSpecifier::empty(),
       storage_class: None,
       qualifiers: Qualifiers::empty(),
       type_specifiers: Vec::new(),
@@ -376,7 +355,7 @@ mod fmt {
     DeclSpecs, Declaration, EnumSpecifier, Function, FunctionSignature, Modifier, Program, Struct,
     TypeSpecifier, VarDef,
   };
-  use ::std::fmt::{Debug, Display};
+  use ::std::fmt::Display;
 
   impl Display for Declaration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -386,11 +365,6 @@ mod fmt {
       }
     }
   }
-  impl Debug for Declaration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
-    }
-  }
 
   impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -398,11 +372,6 @@ mod fmt {
         .declarations
         .iter()
         .try_for_each(|decl| write!(f, "{}\n", decl))
-    }
-  }
-  impl Debug for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
     }
   }
   impl Display for Function {
@@ -439,11 +408,6 @@ mod fmt {
       )
     }
   }
-  impl Debug for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
-    }
-  }
 
   impl Display for Modifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -473,11 +437,6 @@ mod fmt {
       }
     }
   }
-  impl Debug for Modifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
-    }
-  }
 
   impl Display for FunctionSignature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -505,11 +464,6 @@ mod fmt {
         write!(f, "...")?;
       }
       write!(f, ")")
-    }
-  }
-  impl Debug for FunctionSignature {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
     }
   }
   impl Display for VarDef {
@@ -546,7 +500,7 @@ mod fmt {
             None => "<anonymous>",
           },
           match &self.initializer {
-            Some(_) => format!(" = <initializer>"),
+            Some(_) => " = <initializer>".to_string(),
             None => "".to_string(),
           }
         )?;
@@ -554,19 +508,9 @@ mod fmt {
       }
     }
   }
-  impl Debug for VarDef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
-    }
-  }
   impl Display for DeclSpecs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "<declaration specs>")
-    }
-  }
-  impl Debug for DeclSpecs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
     }
   }
   impl Display for TypeSpecifier {
@@ -590,11 +534,6 @@ mod fmt {
       }
     }
   }
-  impl Debug for TypeSpecifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
-    }
-  }
   impl Display for Struct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
@@ -607,11 +546,6 @@ mod fmt {
       )
     }
   }
-  impl Debug for Struct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
-    }
-  }
   impl Display for EnumSpecifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
@@ -622,11 +556,6 @@ mod fmt {
           None => "(unnamed)",
         }
       )
-    }
-  }
-  impl Debug for EnumSpecifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
     }
   }
 }

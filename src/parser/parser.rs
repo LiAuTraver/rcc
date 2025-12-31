@@ -4,25 +4,26 @@ use crate::{
     environment::UnitScope,
     keyword::Keyword,
     operator::Operator,
+    rawdecl::FunctionSpecifier,
+    storage::Storage,
     token::{Literal, Token},
     types::Qualifiers,
   },
   parser::{
+    Parser,
     declaration::{
-      DeclSpecs, Declaration, Declarator, DeclaratorType, Function, FunctionSignature,
-      FunctionSpecifier, Initializer, Modifier, Parameter, Program, Storage, TypeSpecifier, VarDef,
+      DeclSpecs, Declaration, Declarator, DeclaratorType, Function, FunctionSignature, Initializer,
+      Modifier, Parameter, Program, TypeSpecifier, VarDef,
     },
     expression::{Binary, Call, Constant, Expression, Ternary, Unary, Variable},
     statement::{
       Break, Case, Compound, Continue, Default, DoWhile, For, Goto, If, Label, Return, Statement,
-      Switch, While, new_loop_dummy_identifier,
+      Switch, While,
     },
   },
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
-
-use crate::parser::Parser;
 
 /// utility functions
 impl Parser {
@@ -231,7 +232,7 @@ impl Parser {
         declspecs.type_specifiers.push(specifier);
         self.get();
       } else if let Some(kw) = self.parse_function_specifier() {
-        declspecs.function_specifiers.push(kw);
+        declspecs.function_specifiers |= kw;
         self.get();
       } else {
         break;
@@ -424,7 +425,7 @@ impl Parser {
       Literal::Operator(Operator::Semicolon) | Literal::Operator(Operator::Hash)
     ) {
       if *self.peek(0) == Literal::Operator(Operator::Semicolon) {
-        self.add_warning("Redundant ';'".to_string());
+        // self.add_warning("Redundant ';'".to_string());
         self.must_get_op::<{ Operator::Semicolon }>();
       } else {
         // skip preprocessor directive
@@ -491,7 +492,7 @@ impl Parser {
   fn next_block(&mut self) -> Compound {
     self.must_get_op::<{ Operator::LeftBrace }>();
     self.typedefs.push_scope();
-    let mut block = Compound::new();
+    let mut block = Compound::default();
 
     while *self.peek(0) != Literal::Operator(Operator::RightBrace) {
       block.statements.push(self.next_statement());
@@ -530,7 +531,9 @@ impl Parser {
   fn next_while(&mut self) -> While {
     self.must_get_key::<{ Keyword::While }>();
     let condition = self.parse_paren_expression();
-    self.loop_labels.push(new_loop_dummy_identifier("while"));
+    self
+      .loop_labels
+      .push(Statement::new_loop_dummy_identifier("while"));
     let body = self.next_statement();
     self.ios_c_strict_check_for_decl(&body);
     let while_stmt = While::new(condition, body, self.loop_labels.last().unwrap().clone());
@@ -539,7 +542,9 @@ impl Parser {
   }
   fn next_dowhile(&mut self) -> DoWhile {
     self.must_get_key::<{ Keyword::Do }>();
-    self.loop_labels.push(new_loop_dummy_identifier("do_while"));
+    self
+      .loop_labels
+      .push(Statement::new_loop_dummy_identifier("do_while"));
     let body = self.next_statement();
     self.ios_c_strict_check_for_decl(&body);
     self.must_get_key::<{ Keyword::While }>();
@@ -597,7 +602,9 @@ impl Parser {
       }
       let condition = parse_optional_expression::<{ Operator::Semicolon }>(self);
       let increment = parse_optional_expression::<{ Operator::RightParen }>(self);
-      self.loop_labels.push(new_loop_dummy_identifier("for"));
+      self
+        .loop_labels
+        .push(Statement::new_loop_dummy_identifier("for"));
       let body = self.next_statement();
       self.ios_c_strict_check_for_decl(&body);
       let for_stmt = For::new(
@@ -614,7 +621,9 @@ impl Parser {
   fn next_switch(&mut self) -> Switch {
     self.must_get_key::<{ Keyword::Switch }>();
     let condition = self.parse_paren_expression();
-    self.loop_labels.push(new_loop_dummy_identifier("switch"));
+    self
+      .loop_labels
+      .push(Statement::new_loop_dummy_identifier("switch"));
     self.recoverable_get::<{ Operator::LeftBrace }>();
     let mut cases = Vec::new();
     let mut default: Option<Default> = None;
@@ -716,7 +725,7 @@ impl Parser {
 
   fn next_emptystmt(&mut self) -> Statement {
     self.must_get_op::<{ Operator::Semicolon }>();
-    self.add_warning("Redundant ';'".to_string());
+    // self.add_warning("Redundant ';'".to_string());
     Statement::Empty()
   }
 

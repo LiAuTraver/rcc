@@ -5,7 +5,7 @@ use std::str::FromStr;
 use strum_macros::EnumString;
 
 // C's built-in types, I only consider x86_64 here for simplicity
-#[derive(Debug, Display, EnumString)]
+#[derive(Debug, Display, EnumString, Clone, PartialEq)]
 pub enum Primitive {
   // assume 64bit
   #[strum(serialize = "char")]
@@ -13,8 +13,8 @@ pub enum Primitive {
   Int8, // signed char/plain char
   #[strum(serialize = "short")]
   Int16, // short
-  #[strum(serialize = "int")]
   #[strum(serialize = "long")]
+  #[strum(serialize = "int")]
   Int32, // int/long
   #[strum(serialize = "long long")]
   Int64, // long long
@@ -22,15 +22,15 @@ pub enum Primitive {
   Uint8, // unsigned char
   #[strum(serialize = "unsigned short")]
   Uint16, // unsigned short
-  #[strum(serialize = "unsigned int")]
   #[strum(serialize = "unsigned long")]
+  #[strum(serialize = "unsigned int")]
   Uint32, // unsigned int/unsigned long
   #[strum(serialize = "unsigned long long")]
   Uint64, // unsigned long long
   #[strum(serialize = "float")]
   Float32, // float
-  #[strum(serialize = "double")]
   #[strum(serialize = "long double")]
+  #[strum(serialize = "double")]
   Float64,
   #[strum(serialize = "void")]
   Void,
@@ -39,14 +39,14 @@ pub enum Primitive {
   #[strum(serialize = "_Complex float")]
   ComplexFloat32,
   #[strum(serialize = "_Complex double")]
-  ComplexFloat64,
   #[strum(serialize = "_Complex long double")]
-  ComplexFloat128,
+  ComplexFloat64,
   #[strum(serialize = "bool")]
   #[strum(serialize = "_Bool")]
-  Bool, // _Bool, or just bool
-        // others: wchar_t, etc.
+  Bool,
+  // wchar_t is a built-in in C++, but not C; in C it's a typedef of unsigned short on x86_64 Windows
 }
+
 bitflags! {
 /// type-specifier-qualifier:
 /// -    type-specifier
@@ -54,7 +54,7 @@ bitflags! {
 /// -    alignment-specifier (don't care)
 ///
 /// specifier would be merged into `Type` directly, so here only have qualifiers
-  #[derive(Copy, Clone, PartialEq)]
+  #[derive(Debug, Copy, Clone, PartialEq)]
   pub struct Qualifiers: u8 {
     const Const = 0x01;
     const Volatile = 0x02;
@@ -62,10 +62,20 @@ bitflags! {
     const Atomic = 0x08; // ignore for now
   }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct QualifiedType {
   pub qualifiers: Qualifiers,
   pub unqualified_type: Type,
 }
+impl QualifiedType {
+  pub fn new(qualifiers: Qualifiers, unqualified_type: Type) -> Self {
+    Self {
+      qualifiers,
+      unqualified_type,
+    }
+  }
+}
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
   Primitive(Primitive),
   Array(Array),
@@ -76,27 +86,30 @@ pub enum Type {
   Union(Union),
   Typedef(String),
 }
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone, Display, PartialEq)]
 pub enum ArraySize {
   Constant(usize),
   Incomplete,
   // Variable, // ignore for now
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct Array {
   pub element_type: Box<QualifiedType>,
   pub size: ArraySize,
 }
-
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionProto {
   pub return_type: Box<QualifiedType>,
   pub parameter_types: Vec<QualifiedType>,
   pub is_variadic: bool,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct Field {
   pub name: String,
   pub field_type: QualifiedType,
 }
 // ignore unnamed/anonymous structs/unions for now
+#[derive(Debug, Clone, PartialEq)]
 pub struct Record {
   pub name: Option<String>,
   pub fields: Vec<Field>,
@@ -104,18 +117,16 @@ pub struct Record {
 
 // seems not so much difference between struct and union here
 type Union = Record;
-
+#[derive(Debug, Clone, PartialEq)]
 pub struct EnumConstant {
   pub name: String,
   pub value: Option<isize>,
 }
-
+#[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
   pub name: Option<String>,
   pub constants: Vec<EnumConstant>,
 }
-
-impl Type {}
 
 impl Primitive {
   pub fn new(str: String) -> Self {
@@ -127,11 +138,21 @@ impl Primitive {
   pub fn to_type(self) -> Type {
     Type::Primitive(self)
   }
+  pub fn size(&self) -> usize {
+    match self {
+      Primitive::Int8 | Primitive::Uint8 => 1,
+      Primitive::Int16 | Primitive::Uint16 => 2,
+      Primitive::Int32 | Primitive::Uint32 | Primitive::Float32 => 4,
+      Primitive::Int64 | Primitive::Uint64 | Primitive::Float64 => 8,
+      Primitive::Void => 0,
+      _ => unimplemented!(),
+    }
+  }
 }
 
 mod fmt {
   use super::{Array, ArraySize, FunctionProto, QualifiedType, Qualifiers, Type};
-  use ::std::fmt::{Debug, Display};
+  use ::std::fmt::Display;
 
   impl Display for Qualifiers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -188,12 +209,6 @@ mod fmt {
         Type::Primitive(builtin) => write!(f, "{}", builtin),
         _ => todo!(),
       }
-    }
-  }
-
-  impl Debug for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      <Self as Display>::fmt(self, f)
     }
   }
 }

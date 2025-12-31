@@ -46,7 +46,7 @@ fn main() {
   }
   let mut parser = Parser::new(tokens);
   let program = parser.parse();
-  println!("{}", program);
+  println!("{:}", program);
 
   let parse_warnings = parser.warnings();
   if !parse_warnings.is_empty() {

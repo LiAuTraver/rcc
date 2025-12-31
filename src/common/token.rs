@@ -1,7 +1,7 @@
 use crate::common::keyword::Keyword;
 use crate::common::operator::Operator;
+use ::std::fmt::Debug;
 use ::std::{path::PathBuf, rc::Rc};
-use std::fmt::{Debug, Display};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Literal {
@@ -12,40 +12,16 @@ pub enum Literal {
   Operator(Operator),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SourceLocation {
   pub file: Rc<PathBuf>,
   pub line: u32,
   pub column: u32,
 }
-
+#[derive(Debug)]
 pub struct Token {
   pub literal: Literal,
   pub location: SourceLocation,
-}
-impl Debug for Token {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    <Self as Display>::fmt(self, f)
-  }
-}
-
-impl Display for Token {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match &self.literal {
-      Literal::Number(n) => write!(f, "Number({})", n),
-      Literal::Identifier(id) => write!(f, "Identifier({})", id),
-      Literal::String(s) => write!(f, "String({})", s),
-      Literal::Keyword(kw) => write!(f, "Keyword({})", kw),
-      Literal::Operator(op) => write!(f, "Operator({})", op),
-    }
-    .and_then(|_| {
-      write!(
-        f,
-        " at line {}, column {}",
-        self.location.line, self.location.column
-      )
-    })
-  }
 }
 
 impl Token {
@@ -122,7 +98,7 @@ impl Keyword {
     )
   }
   pub fn is_function_specifier(&self) -> bool {
-    matches!(self, Keyword::Inline | Keyword::_Noreturn)
+    matches!(self, Keyword::Inline | Keyword::Noreturn)
   }
   /// this isn't exhaustive, need to check typedefs in parser
   pub fn is_type_specifier(&self) -> bool {
@@ -142,5 +118,28 @@ impl Keyword {
         | Keyword::Union
         | Keyword::Enum
     )
+  }
+}
+mod fmt {
+  use super::{Literal, Token};
+  use ::std::fmt::Display;
+
+  impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match &self.literal {
+        Literal::Number(n) => write!(f, "Number({})", n),
+        Literal::Identifier(id) => write!(f, "Identifier({})", id),
+        Literal::String(s) => write!(f, "String({})", s),
+        Literal::Keyword(kw) => write!(f, "Keyword({})", kw),
+        Literal::Operator(op) => write!(f, "Operator({})", op),
+      }
+      .and_then(|_| {
+        write!(
+          f,
+          " at line {}, column {}",
+          self.location.line, self.location.column
+        )
+      })
+    }
   }
 }

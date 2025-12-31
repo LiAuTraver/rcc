@@ -12,6 +12,6 @@ pub struct Parser {
   errors: Vec<String>,
   warnings: Vec<String>,
   loop_labels: Vec<String>,
-  // contest-sensitive part :(. needed to parse `T * x`.
+  // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
 }
