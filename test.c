@@ -18,7 +18,8 @@ int main(void) { //
   int f(int, int);
   // typedef int INT;
   // INT x = 5;
-  // static int y = 1;
+  int x = 0;
+  static int y = 1;
   // switch (x) {
   // case 0:
   // case 1:

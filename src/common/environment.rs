@@ -6,7 +6,8 @@ use ::std::{
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 
-use crate::common::{storage::Storage, types::QualifiedType};
+use crate::common::storage::Storage;
+use crate::common::types::QualifiedType;
 
 /// as someone who came from C++, I'd more prefer to call it shared_ptr rather than Rc/RefCell or whatever. :p
 #[allow(non_camel_case_types)]

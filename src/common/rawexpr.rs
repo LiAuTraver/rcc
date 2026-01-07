@@ -1,10 +1,9 @@
 use crate::common::{operator::Operator, types::QualifiedType};
 
-/// likely a sophisticated version of the Two-Level Types  
+/// likely a sophisticated version of the Two-Level Types
 /// [this article](https://blog.ezyang.com/2013/05/the-ast-typing-problem/),
 /// I probably used the Parametric Polymorphism to "tie the knot" of recursion.
 #[derive(Debug)]
-#[allow(unused)]
 pub enum RawExpr<ExprTy, VarTy, TypeTy> {
   Empty, // no-op for error recovery; for empty expr should use Option<ExprTy> instead
   Constant(Constant),

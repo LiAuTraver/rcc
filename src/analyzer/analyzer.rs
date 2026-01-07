@@ -8,11 +8,12 @@ use crate::{
   common::{
     environment::{Environment, Symbol, VarDeclKind},
     error::Error,
+    operator::Operator,
     rawdecl::FunctionSpecifier,
     storage::Storage,
     types::{
       Array, ArraySize, Compatibility, FunctionProto, Pointer, Primitive, QualifiedType,
-      Qualifiers, Type,
+      Qualifiers, Type, TypeInfo,
     },
   },
   parser::{declaration as pd, expression as pe, statement as ps},
@@ -25,6 +26,14 @@ type TypeRes = Result<Type, Error>;
 type ExprRes = Result<ae::Expression, Error>;
 type DeclRes<T> = Result<T, Error>;
 type StmtRes<T> = Result<T, Error>;
+
+/// i haven't built up the error handling system yet, and all tests are expected to pass, so use this macro to catch bugs while debugging
+macro_rules! err_or_debugbreak {
+  () => {{
+    breakpoint!();
+    Err(())
+  }};
+}
 
 impl Analyzer {
   pub fn new(program: pd::Program) -> Self {
@@ -53,7 +62,7 @@ impl Analyzer {
     self.environment.exit();
     match self.errors.is_empty() {
       true => Ok(ad::TranslationUnit::new(declarations)),
-      false => Err(()),
+      false => err_or_debugbreak!(),
     }
   }
   pub fn errors(&self) -> &[String] {
@@ -101,7 +110,28 @@ impl Analyzer {
         VarDeclKind::Declaration
       },
     ));
-    let body = body.map(|b| self.analyze_compound(b)).transpose()?;
+
+    let body = body
+      .map(|b| {
+        self.analyze_compound_with(b, |analyzer| {
+          // Declare parameters in the function scope
+          for parameter in &parameters {
+            if let Some(param_symbol) = &parameter.symbol {
+              analyzer
+                .environment
+                .symbols
+                .declare(param_symbol.borrow().name.clone(), param_symbol.clone());
+            }
+          }
+        })
+      })
+      .transpose()?;
+
+    self
+      .environment
+      .symbols
+      .declare(symbol.borrow().name.clone(), symbol.clone());
+
     Ok(ad::Function::new(
       symbol,
       parameters,
@@ -117,7 +147,7 @@ impl Analyzer {
     } = vardef;
     let (function_specifier, storage, qualified_type) = Self::parse_declspecs(declspecs)?;
     if !function_specifier.is_empty() {
-      return Err(()); // var cannot have inline and noreturn
+      return err_or_debugbreak!(); // var cannot have inline and noreturn
     }
     let pd::Declarator { modifiers, name } = declarator;
     let name = name.ok_or(())?;
@@ -160,11 +190,11 @@ impl Analyzer {
         &prev_symbol_ref.borrow().qualified_type,
         &vardef.symbol.borrow().qualified_type,
       ) {
-        return Err(()); // error: conflicting types for redeclaration/definition
+        return err_or_debugbreak!(); // error: conflicting types for redeclaration/definition
       }
       type VDK = VarDeclKind;
       match (&prev_declkind, &new_declkind) {
-        (VDK::Definition, VDK::Definition) => Err(()), // error: redefinition
+        (VDK::Definition, VDK::Definition) => err_or_debugbreak!(), // error: redefinition
         (VDK::Definition, VDK::Declaration) | (VDK::Definition, VDK::Tentative) => {
           // valid and nothing to do
           Ok(vardef)
@@ -229,7 +259,7 @@ impl Analyzer {
       }
       (Some(storage), Some(initializer)) => {
         if storage == Storage::Extern {
-          return Err(()); // warning, extern vardef should not have initializer
+          return err_or_debugbreak!(); // warning, extern vardef should not have initializer
         }
         let symbol = Symbol::def(qualified_type, storage, name);
         ad::VarDef::new(symbol, Some(initializer))
@@ -244,7 +274,7 @@ impl Analyzer {
     initializer: Option<ad::Initializer>,
   ) -> DeclRes<ad::VarDef> {
     if storage == Storage::Extern && initializer.is_some() {
-      return Err(()); // error: local extern vardef cannot have initializer
+      return err_or_debugbreak!(); // error: local extern vardef cannot have initializer
     }
     let symbol = Symbol::decl(qualified_type, storage, name);
     Ok(ad::VarDef::new(symbol, initializer))
@@ -315,7 +345,7 @@ impl Analyzer {
         None => QualifiedType::new(Qualifiers::empty(), Type::Primitive(Primitive::Int)), // default to int
       })
       .collect::<Vec<QualifiedType>>();
-    let functionproto = FunctionProto::new(return_type, parameter_types, is_variadic);
+    let functionproto = FunctionProto::new(Box::new(return_type), parameter_types, is_variadic);
 
     Ok((
       QualifiedType::new(Qualifiers::empty(), Type::FunctionProto(functionproto)),
@@ -331,7 +361,7 @@ impl Analyzer {
       } = parameter;
       let (_, storage, qualified_type) = Self::parse_declspecs(declspecs)?;
       if storage.is_some() {
-        return Err(()); // error: parameter cannot have storage class
+        return err_or_debugbreak!(); // error: parameter cannot have storage class
       }
       let pd::Declarator { modifiers, name } = declarator;
       let qualified_type = Self::apply_modifiers_for_varty(qualified_type, modifiers);
@@ -368,9 +398,11 @@ impl Analyzer {
     // 6.7.3.1
     let m = match type_specifiers.as_slice() {
       [Ts::Void] => Type::Primitive(Primitive::Void),
+
       [Ts::Char] => Type::Primitive(Primitive::Char),
-      [Ts::Signed, Ts::Char] => Type::Primitive(Primitive::Char),
+      [Ts::Signed, Ts::Char] => Type::Primitive(Primitive::SChar),
       [Ts::Unsigned, Ts::Char] => Type::Primitive(Primitive::UChar),
+
       [Ts::Short]
       | [Ts::Short, Ts::Int]
       | [Ts::Signed, Ts::Short]
@@ -378,15 +410,18 @@ impl Analyzer {
       [Ts::Unsigned, Ts::Short] | [Ts::Unsigned, Ts::Short, Ts::Int] => {
         Type::Primitive(Primitive::UShort)
       }
+
       [Ts::Int] | [Ts::Signed] | [Ts::Signed, Ts::Int] => Type::Primitive(Primitive::Int),
       [Ts::Unsigned] | [Ts::Unsigned, Ts::Int] => Type::Primitive(Primitive::UInt),
+
       [Ts::Long]
       | [Ts::Long, Ts::Int]
       | [Ts::Signed, Ts::Long]
-      | [Ts::Signed, Ts::Long, Ts::Int] => Type::Primitive(Primitive::LongLong),
+      | [Ts::Signed, Ts::Long, Ts::Int] => Type::Primitive(Primitive::Long),
       [Ts::Unsigned, Ts::Long] | [Ts::Unsigned, Ts::Long, Ts::Int] => {
-        Type::Primitive(Primitive::ULongLong)
+        Type::Primitive(Primitive::ULong)
       }
+
       [Ts::Long, Ts::Long]
       | [Ts::Long, Ts::Long, Ts::Int]
       | [Ts::Signed, Ts::Long, Ts::Long]
@@ -394,13 +429,14 @@ impl Analyzer {
       [Ts::Unsigned, Ts::Long, Ts::Long] | [Ts::Unsigned, Ts::Long, Ts::Long, Ts::Int] => {
         Type::Primitive(Primitive::ULongLong)
       }
+
       [Ts::Float] => Type::Primitive(Primitive::Float),
-      // treat long double as double for now
-      [Ts::Double] | [Ts::Long, Ts::Double] => Type::Primitive(Primitive::Double),
+      [Ts::Double] => Type::Primitive(Primitive::Double),
+      [Ts::Long, Ts::Double] => Type::Primitive(Primitive::LongDouble),
+
       [Ts::Float, Ts::Complex] => Type::Primitive(Primitive::Float),
-      [Ts::Double, Ts::Complex] | [Ts::Long, Ts::Double, Ts::Complex] => {
-        Type::Primitive(Primitive::Double)
-      }
+      [Ts::Double, Ts::Complex] => Type::Primitive(Primitive::Double),
+      [Ts::Long, Ts::Double, Ts::Complex] => Type::Primitive(Primitive::LongDouble),
       [Ts::Bool] => Type::Primitive(Primitive::Bool),
 
       // skip _BitInt, _Decimal32, _Decimal64, _Decimal128 here
@@ -459,18 +495,39 @@ impl Analyzer {
   fn analyze_call(&mut self, call: pe::Call) -> ExprRes {
     let pe::Call { arguments, callee } = call;
     let analyzed_callee = self.analyze_expression(*callee)?;
+
+    let function_proto = match analyzed_callee.unqualified_type() {
+      Type::FunctionProto(proto) => proto,
+      Type::Pointer(ptr) => match &ptr.pointee.unqualified_type {
+        Type::FunctionProto(proto) => proto,
+        _ => return err_or_debugbreak!(), // error: callee is not a function pointer
+      },
+      _ => return err_or_debugbreak!(), // error: callee is not a function
+    };
+
     let mut analyzed_arguments = Vec::new();
     for argument in arguments {
       let analyzed_argument = self.analyze_expression(argument)?;
       analyzed_arguments.push(analyzed_argument);
     }
-    // find the
-    todo!()
+
+    if !function_proto.is_variadic
+      && analyzed_arguments.len() != function_proto.parameter_types.len()
+    {
+      return err_or_debugbreak!(); // error: argument count mismatch
+    }
+    let expr_type = function_proto.return_type.as_ref().clone();
+    // todo: type promotion, currently just match the exact/compatible types
+    Ok(ae::Expression::new(
+      ae::RawExpr::Call(ae::Call::new(analyzed_callee, analyzed_arguments)),
+      expr_type,
+      ValueCategory::RValue,
+    ))
   }
   fn analyze_variable(&mut self, variable: pe::Variable) -> ExprRes {
     let symbol = self.environment.find(&variable.name).ok_or(())?;
     if symbol.borrow().is_typedef() {
-      Err(())
+      err_or_debugbreak!()
     } else {
       Ok(ae::Expression::new(
         ae::RawExpr::Variable(ae::Variable::new(symbol.clone())),
@@ -539,7 +596,13 @@ impl Analyzer {
     let left = self.analyze_expression(*pe_left)?;
     let right = self.analyze_expression(*pe_right)?;
     // ditto, todo
-    let qualified_type = left.qualified_type().clone();
+    // if the operator is logical, the result type is bool, otherwise it's the promoted type of the operands
+    let qualified_type = match operator {
+      Operator::And | Operator::Or => {
+        QualifiedType::new(Qualifiers::empty(), Type::Primitive(Primitive::Bool))
+      }
+      _ => left.qualified_type().clone(), // todo: proper type promotion
+    };
     Ok(ae::Expression::new(
       ae::RawExpr::Binary(ae::Binary::new(operator, left, right)),
       qualified_type,
@@ -560,7 +623,7 @@ impl Analyzer {
       .qualified_type()
       .compatible_with(&else_expr.qualified_type())
     {
-      Err(())
+      err_or_debugbreak!()
     } else {
       let qualified_type =
         QualifiedType::composite_unchecked(then_expr.qualified_type(), else_expr.qualified_type());
@@ -579,21 +642,11 @@ impl Analyzer {
     let left = self.analyze_expression(*pe_left)?;
     let right = self.analyze_expression(*pe_right)?;
     if !left.is_modifiable_lvalue() {
-      Err(()) // expression is not assignable
+      err_or_debugbreak!() // expression is not assignable
     } else {
       // check type compatibility, todo
       todo!()
     }
-  }
-}
-impl Analyzer {
-  fn analyze_compound(&mut self, compound: ps::Compound) -> StmtRes<astmt::Compound> {
-    let mut statements = Vec::new();
-    for statement in compound.statements {
-      let analyzed_stmt = self.analyze_statement(statement)?;
-      statements.push(analyzed_stmt);
-    }
-    Ok(astmt::Compound::new(statements))
   }
 }
 impl Analyzer {
@@ -628,8 +681,37 @@ impl Analyzer {
       ps::Statement::Continue(single_label) => todo!("ditto"),
     }
   }
+  fn analyze_compound(&mut self, compound: ps::Compound) -> StmtRes<astmt::Compound> {
+    self.analyze_compound_with(compound, |_| {})
+  }
+  fn analyze_compound_with<Fn>(
+    &mut self,
+    compound: ps::Compound,
+    callback: Fn,
+  ) -> StmtRes<astmt::Compound>
+  where
+    Fn: FnOnce(&mut Self),
+  {
+    self.environment.enter();
+
+    callback(self);
+
+    // if any fail, we still exit the scope
+    let result = (|| {
+      let mut statements = Vec::new();
+      for statement in compound.statements {
+        let analyzed_stmt = self.analyze_statement(statement)?;
+        statements.push(analyzed_stmt);
+      }
+      Ok(astmt::Compound::new(statements))
+    })();
+
+    self.environment.exit();
+
+    result
+  }
   fn analyze_expressionstmt(&mut self, expr_stmt: pe::Expression) -> StmtRes<astmt::Statement> {
-    // todo: unused expression resyult warning
+    // todo: unused expression result warning
     Ok(astmt::Statement::Expression(
       self.analyze_expression(expr_stmt)?,
     ))
@@ -711,6 +793,16 @@ impl Analyzer {
       label,
     ))
   }
+  fn analyze_switch(&mut self, switch: ps::Switch) -> StmtRes<astmt::Switch> {
+    let ps::Switch {
+      cases,
+      condition,
+      default,
+    } = switch;
+    let analyzed_condition = self.analyze_expression(condition)?;
+
+    todo!()
+  }
 }
 impl ::core::default::Default for Analyzer {
   fn default() -> Self {
@@ -736,6 +828,8 @@ mod test {
       right: Box::new(pe::Expression::Constant(pe::Constant::Int(1))),
     });
     let analyzed_expr = analyzer.analyze_expression(expr);
-    println!("{:#?}", analyzed_expr.unwrap());
+
+    assert!(analyzed_expr.is_ok());
+    println!("{}", analyzed_expr.unwrap());
   }
 }

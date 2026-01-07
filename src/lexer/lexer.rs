@@ -76,6 +76,7 @@ impl Lexer {
   fn loc(&self) -> SourceLocation {
     SourceLocation {
       file: Rc::clone(&self.filepath),
+      line_string: String::new().into(), // placeholder, do it later
       line: self.line,
       column: self.column,
     }

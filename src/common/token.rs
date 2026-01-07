@@ -15,6 +15,7 @@ pub enum Literal {
 #[derive(Debug, Default)]
 pub struct SourceLocation {
   pub file: Rc<PathBuf>,
+  pub line_string: Rc<String>,
   pub line: u32,
   pub column: u32,
 }

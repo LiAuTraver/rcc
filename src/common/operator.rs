@@ -107,7 +107,6 @@ pub enum Operator {
   #[strum(disabled)]
   EOF,
 }
-
 impl Operator {
   /// default precedence level when parsing expressions
   pub const DEFAULT: u8 = 0x00;
@@ -115,6 +114,8 @@ impl Operator {
   pub const EXCOMMA: u8 = 0x04;
   /// use this to stop before `:`, excluding the `,` in ternary operator
   pub const TERNARY: u8 = 0x06;
+}
+impl Operator {
   pub fn unary(&self) -> bool {
     matches!(
       self,

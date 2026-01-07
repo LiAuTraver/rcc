@@ -1,12 +1,9 @@
 use ::std::cell::Ref;
 
+use crate::common::types::{QualifiedType, Type};
 use crate::{
   analyzer::{expression::Expression, statement::Compound},
-  common::{
-    environment::SymbolRef,
-    rawdecl::FunctionSpecifier,
-    types::{QualifiedType, Type},
-  },
+  common::{environment::SymbolRef, rawdecl::FunctionSpecifier},
 };
 
 #[derive(Debug)]
@@ -103,7 +100,9 @@ impl Parameter {
 }
 
 mod fmt {
+
   use super::{Declaration, Function, Initializer, Parameter, TranslationUnit, VarDef};
+  use crate::common::types::Type;
   use ::std::fmt::Display;
 
   impl Display for TranslationUnit {
@@ -127,20 +126,34 @@ mod fmt {
   impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       let sym = self.symbol.borrow();
-      write!(f, "{} {}(", sym.qualified_type, sym.name)?;
-      for (i, param) in self.parameters.iter().enumerate() {
-        if i > 0 {
-          write!(f, ", ")?;
+
+      // For functions, sym.qualified_type is Type::FunctionProto
+      // We want: return_type name(params)
+      match &sym.qualified_type.unqualified_type {
+        Type::FunctionProto(proto) => {
+          write!(f, "{} {}(", proto.return_type, sym.name)?;
+          for (i, param) in self.parameters.iter().enumerate() {
+            if i > 0 {
+              write!(f, ", ")?;
+            }
+            write!(f, "{}", param)?;
+          }
+          write!(f, ")")?;
         }
-        write!(f, "{}", param)?;
+        _ => {
+          // Fallback for non-function types (shouldn't happen)
+          write!(f, "{} {}", sym.qualified_type, sym.name)?;
+        }
       }
-      write!(f, ")")?;
-      match &self.body {
-        Some(_) => write!(f, " {{ ... }}"),
-        None => write!(f, ";"),
+
+      if let Some(body) = &self.body {
+        write!(f, " {}", body)
+      } else {
+        write!(f, ";")
       }
     }
   }
+
   impl Display for Parameter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       // Show only the type for brevity; names are optional.
@@ -157,7 +170,12 @@ mod fmt {
 
   impl Display for VarDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      todo!()
+      let sym = self.symbol.borrow();
+      write!(f, "{} {}", sym.qualified_type, sym.name)?;
+      if let Some(initializer) = &self.initializer {
+        write!(f, " = {}", initializer)?;
+      }
+      write!(f, ";")
     }
   }
 
