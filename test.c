@@ -35,5 +35,6 @@ int main(void) { //
 int f(int i, int j) {
   // label:;
   int k = i + j;
+  float a = 1.0;
   return k;
 }

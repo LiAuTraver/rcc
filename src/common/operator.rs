@@ -125,6 +125,7 @@ impl Operator {
         | Operator::Not
         | Operator::Tilde
         | Operator::Ampersand
+        // vvv not sure
         | Operator::PlusPlus
         | Operator::MinusMinus
     )
@@ -151,7 +152,8 @@ impl Operator {
         | Operator::And
         | Operator::Or
         // special cases
-        | Operator::Assign // Comma
+        | Operator::Assign
+        | Operator::Comma
     )
   }
   // left-.

@@ -481,12 +481,12 @@ impl Analyzer {
       pe::Expression::Assignment(assignment) => self.analyze_assignment(assignment),
       pe::Expression::Variable(variable) => self.analyze_variable(variable),
       pe::Expression::Call(call) => self.analyze_call(call),
-      pe::Expression::MemberAccess(member_access) => todo!(),
+      pe::Expression::MemberAccess(_) => todo!(),
       pe::Expression::Ternary(ternary) => self.analyze_ternary(ternary),
       pe::Expression::SizeOf(sizeof) => self.analyze_sizeof(sizeof),
-      pe::Expression::Cast(cast) => todo!(),
-      pe::Expression::ArraySubscript(array_subscript) => todo!(),
-      pe::Expression::CompoundLiteral(compound_literal) => todo!(),
+      pe::Expression::Cast(cast) => self.analyze_cast(cast),
+      pe::Expression::ArraySubscript(_) => todo!(),
+      pe::Expression::CompoundLiteral(_) => todo!(),
     }
   }
   fn analyze_sizeof(&mut self, sizeof: pe::SizeOf) -> ExprRes {
@@ -548,6 +548,9 @@ impl Analyzer {
       expr_type,
       ValueCategory::RValue,
     ))
+  }
+  fn analyze_cast(&mut self, cast: pe::Cast) -> ExprRes {
+    todo!()
   }
   fn analyze_variable(&mut self, variable: pe::Variable) -> ExprRes {
     let symbol = self.environment.find(&variable.name).ok_or(())?;
@@ -697,13 +700,13 @@ impl Analyzer {
         Ok(astmt::Statement::DoWhile(self.analyze_do_while(do_while)?))
       }
       ps::Statement::For(for_stmt) => Ok(astmt::Statement::For(self.analyze_for(for_stmt)?)),
-      ps::Statement::Label(label) => {
+      ps::Statement::Label(_) => {
         todo!("requires adding field into analyzer struct to indicarte which function we're in")
       }
-      ps::Statement::Switch(switch) => todo!(),
-      ps::Statement::Goto(goto) => todo!(),
-      ps::Statement::Break(single_label) => todo!("ditto, but requires the compound stack"),
-      ps::Statement::Continue(single_label) => todo!("ditto"),
+      ps::Statement::Switch(switch) => Ok(astmt::Statement::Switch(self.analyze_switch(switch)?)),
+      ps::Statement::Goto(_) => todo!(),
+      ps::Statement::Break(_) => todo!("ditto, but requires the compound stack"),
+      ps::Statement::Continue(_) => todo!("ditto"),
     }
   }
   fn analyze_compound(&mut self, compound: ps::Compound) -> StmtRes<astmt::Compound> {
@@ -819,12 +822,12 @@ impl Analyzer {
     ))
   }
   fn analyze_switch(&mut self, switch: ps::Switch) -> StmtRes<astmt::Switch> {
-    let ps::Switch {
-      cases,
-      condition,
-      default,
-    } = switch;
-    let analyzed_condition = self.analyze_expression(condition)?;
+    // let ps::Switch {
+    //   cases,
+    //   condition,
+    //   default,
+    // } = switch;
+    // let analyzed_condition = self.analyze_expression(condition)?;
 
     todo!()
   }
@@ -848,13 +851,13 @@ mod test {
     // 1 + 1
     let mut analyzer = Analyzer::default();
     let expr = pe::Expression::Binary(pe::Binary {
-      left: Box::new(pe::Expression::Constant(pe::Constant::Int(1))),
+      left: Box::new(pe::Expression::Constant(pe::Constant::Short(1))),
       operator: crate::common::operator::Operator::Plus,
       right: Box::new(pe::Expression::Constant(pe::Constant::Int(1))),
     });
     let analyzed_expr = analyzer.analyze_expression(expr);
 
     assert!(analyzed_expr.is_ok());
-    println!("{}", analyzed_expr.unwrap());
+    println!("{:?}", analyzed_expr.unwrap());
   }
 }

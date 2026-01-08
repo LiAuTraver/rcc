@@ -1,8 +1,6 @@
 use strum_macros::{Display, EnumString, IntoStaticStr};
 
 pub mod compatible;
-pub mod conditional;
-pub mod conversion;
 pub mod fmt;
 pub mod promotion;
 pub mod type_info;
@@ -34,25 +32,25 @@ pub enum Primitive {
   #[strum(serialize = "signed char")]
   SChar, // signed char
   #[strum(serialize = "short")]
-  Short, // short
+  Short,
   #[strum(serialize = "int")]
-  Int, // int
+  Int,
   #[strum(serialize = "long")]
-  Long, // long
+  Long,
   #[strum(serialize = "long long")]
-  LongLong, // long long
+  LongLong,
   #[strum(serialize = "unsigned char")]
-  UChar, // unsigned char
+  UChar,
   #[strum(serialize = "unsigned short")]
-  UShort, // unsigned short
+  UShort,
   #[strum(serialize = "unsigned int")]
-  UInt, // unsigned int
+  UInt,
   #[strum(serialize = "unsigned long")]
-  ULong, // unsigned long
+  ULong,
   #[strum(serialize = "unsigned long long")]
-  ULongLong, // unsigned long long
+  ULongLong,
   #[strum(serialize = "float")]
-  Float, // float
+  Float,
   #[strum(serialize = "double")]
   Double,
   #[strum(serialize = "long double")]
@@ -192,4 +190,10 @@ pub trait Compatibility {
 pub trait TypeInfo {
   fn size(&self) -> usize;
   fn is_scalar(&self) -> bool;
+}
+pub trait Promotion {
+  #[must_use]
+  fn promote(self) -> (Self, bool)
+  where
+    Self: Sized;
 }

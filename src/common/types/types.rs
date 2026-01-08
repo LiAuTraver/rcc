@@ -16,6 +16,12 @@ impl QualifiedType {
       unqualified_type,
     }
   }
+  pub fn new_unqualified(unqualified_type: Type) -> Self {
+    Self {
+      qualifiers: Qualifiers::empty(),
+      unqualified_type,
+    }
+  }
 }
 impl Pointer {
   pub fn new(pointee: Box<QualifiedType>) -> Self {

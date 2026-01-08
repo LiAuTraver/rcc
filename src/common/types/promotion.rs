@@ -2,7 +2,7 @@
 
 use crate::{
   breakpoint,
-  common::types::{Primitive, Type},
+  common::types::{Primitive, Promotion, QualifiedType, Type},
 };
 
 impl Primitive {
@@ -19,6 +19,9 @@ impl Primitive {
         | Primitive::Long
         | Primitive::LongLong
     )
+  }
+  pub fn is_arithmetic(&self) -> bool {
+    self.is_integer() || self.is_floating_point()
   }
   pub fn is_signed(&self) -> bool {
     self.is_signed_integer() || self.is_floating_point()
@@ -79,35 +82,25 @@ impl Primitive {
     matches!(self, Primitive::Nullptr)
   }
   #[must_use]
-  pub fn integer_promotion(self) -> Primitive {
+  pub fn integer_promotion(self) -> (Primitive, bool) {
     if !self.is_integer() {
       breakpoint!();
       panic!("Type {:?} is not an integer type", self);
     } else if self.integer_rank() < Primitive::Int.integer_rank() {
-      Primitive::Int
+      (Primitive::Int, true)
     } else {
-      self
+      (self, false)
     }
   }
   #[must_use]
-  pub fn floating_promotion(self) -> Primitive {
+  pub fn floating_promotion(self) -> (Primitive, bool) {
     if !self.is_floating_point() {
       breakpoint!();
       panic!("Type {:?} is not a floating point type", self);
     } else if self.floating_rank() < Primitive::Double.floating_rank() {
-      Primitive::Double
+      (Primitive::Double, true)
     } else {
-      self
-    }
-  }
-  #[must_use]
-  pub fn promote(self) -> Primitive {
-    if self.is_integer() {
-      self.integer_promotion()
-    } else if self.is_floating_point() {
-      self.floating_promotion()
-    } else {
-      self
+      (self, false)
     }
   }
   #[must_use]
@@ -140,11 +133,40 @@ impl Type {
       _ => false,
     }
   }
-  #[must_use]
-  pub fn promote(self) -> Type {
-    match self {
-      Type::Primitive(p) => Type::Primitive(p.promote()),
-      _ => self,
+}
+impl Promotion for Primitive {
+  fn promote(self) -> (Self, bool) {
+    if self.is_integer() {
+      self.integer_promotion()
+      // floating point promotion only happens in variadic functions and old functionnoproto.
+      // }
+      // else if self.is_floating_point() {
+      //   self.floating_promotion()
+    } else {
+      (self, false)
     }
+  }
+}
+impl Promotion for Type {
+  fn promote(self) -> (Self, bool) {
+    match self {
+      Self::Primitive(p) => {
+        let (promoted, changed) = p.promote();
+        (Self::Primitive(promoted), changed)
+      }
+      _ => (self, false),
+    }
+  }
+}
+impl Promotion for QualifiedType {
+  fn promote(self) -> (Self, bool) {
+    let (promoted, changed) = self.unqualified_type.promote();
+    (
+      Self {
+        qualifiers: self.qualifiers,
+        unqualified_type: promoted,
+      },
+      changed,
+    )
   }
 }
