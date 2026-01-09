@@ -17,7 +17,7 @@ macro_rules! type_alias_expr {
       MemberAccess(MemberAccess),
       Ternary(Ternary),
       SizeOf(SizeOf),
-      Cast(Cast),                     // (int)x
+      CStyleCast(CStyleCast),                     // (int)x
       ArraySubscript(ArraySubscript), // arr[i]
       CompoundLiteral(CompoundLiteral), // (struct Point){.x=1, .y=2}
       $(
@@ -33,7 +33,7 @@ macro_rules! type_alias_expr {
     pub type MemberAccess = crate::common::rawexpr::MemberAccess<$exprty>;
     pub type Ternary = crate::common::rawexpr::Ternary<$exprty>;
     pub type SizeOf = crate::common::rawexpr::SizeOf<$exprty, $typety>;
-    pub type Cast = crate::common::rawexpr::Cast<$exprty>;
+    pub type CStyleCast = crate::common::rawexpr::CStyleCast<$exprty>;
     pub type ArraySubscript = crate::common::rawexpr::ArraySubscript<$exprty>;
     pub type CompoundLiteral = crate::common::rawexpr::CompoundLiteral;
 
@@ -115,7 +115,7 @@ pub enum SizeOf<ExprTy, TypeTy> {
 }
 
 #[derive(Debug)]
-pub struct Cast<ExprTy> {
+pub struct CStyleCast<ExprTy> {
   pub target_type: QualifiedType,
   pub expression: Box<ExprTy>,
 }

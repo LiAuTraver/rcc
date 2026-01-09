@@ -397,7 +397,10 @@ impl Analyzer {
     type Ts = pd::TypeSpecifier;
     // 6.7.3.1
     let m = match type_specifiers.as_slice() {
+      [Ts::Nullptr] => Type::Primitive(Primitive::Nullptr),
       [Ts::Void] => Type::Primitive(Primitive::Void),
+
+      [Ts::Bool] => Type::Primitive(Primitive::Bool),
 
       [Ts::Char] => Type::Primitive(Primitive::Char),
       [Ts::Signed, Ts::Char] => Type::Primitive(Primitive::SChar),
@@ -434,10 +437,9 @@ impl Analyzer {
       [Ts::Double] => Type::Primitive(Primitive::Double),
       [Ts::Long, Ts::Double] => Type::Primitive(Primitive::LongDouble),
 
-      [Ts::Float, Ts::Complex] => Type::Primitive(Primitive::Float),
-      [Ts::Double, Ts::Complex] => Type::Primitive(Primitive::Double),
-      [Ts::Long, Ts::Double, Ts::Complex] => Type::Primitive(Primitive::LongDouble),
-      [Ts::Bool] => Type::Primitive(Primitive::Bool),
+      [Ts::Float, Ts::Complex] => Type::Primitive(Primitive::ComplexFloat),
+      [Ts::Double, Ts::Complex] => Type::Primitive(Primitive::ComplexDouble),
+      [Ts::Long, Ts::Double, Ts::Complex] => Type::Primitive(Primitive::ComplexLongDouble),
 
       // treat complex integers as error
       [Ts::Char, Ts::Complex]
@@ -484,7 +486,7 @@ impl Analyzer {
       pe::Expression::MemberAccess(_) => todo!(),
       pe::Expression::Ternary(ternary) => self.analyze_ternary(ternary),
       pe::Expression::SizeOf(sizeof) => self.analyze_sizeof(sizeof),
-      pe::Expression::Cast(cast) => self.analyze_cast(cast),
+      pe::Expression::CStyleCast(cast) => self.analyze_cast(cast),
       pe::Expression::ArraySubscript(_) => todo!(),
       pe::Expression::CompoundLiteral(_) => todo!(),
     }
@@ -549,7 +551,7 @@ impl Analyzer {
       ValueCategory::RValue,
     ))
   }
-  fn analyze_cast(&mut self, cast: pe::Cast) -> ExprRes {
+  fn analyze_cast(&mut self, cast: pe::CStyleCast) -> ExprRes {
     todo!()
   }
   fn analyze_variable(&mut self, variable: pe::Variable) -> ExprRes {

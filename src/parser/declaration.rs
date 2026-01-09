@@ -92,6 +92,7 @@ pub struct Struct {
 /// type-specifier
 #[derive(Debug)]
 pub enum TypeSpecifier {
+  Nullptr,
   Void,
   Char,
   Short,
@@ -125,9 +126,10 @@ impl TypeSpecifier {
       TypeSpecifier::Bool => 9,
       TypeSpecifier::Complex => 10,
       TypeSpecifier::Typedef(_) => 11,
-      TypeSpecifier::Struct(_) => 12,
-      TypeSpecifier::Union(_) => 13,
-      TypeSpecifier::Enum(_) => 14,
+      TypeSpecifier::Nullptr => 12,
+      TypeSpecifier::Struct(_) => 13,
+      TypeSpecifier::Union(_) => 14,
+      TypeSpecifier::Enum(_) => 15,
     }
   }
 }
@@ -516,6 +518,7 @@ mod fmt {
   impl Display for TypeSpecifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       match self {
+        TypeSpecifier::Nullptr => write!(f, "nullptr"),
         TypeSpecifier::Void => write!(f, "void"),
         TypeSpecifier::Char => write!(f, "char"),
         TypeSpecifier::Short => write!(f, "short"),

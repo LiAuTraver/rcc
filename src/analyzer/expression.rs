@@ -3,8 +3,7 @@ use ::strum_macros::Display;
 use crate::{
   common::{
     environment::SymbolRef,
-    error::Error,
-    types::{Primitive, Promotion, QualifiedType, Qualifiers, Type, TypeInfo},
+    types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeInfo},
   },
   type_alias_expr,
 };
@@ -21,9 +20,9 @@ pub enum ValueCategory {
 }
 #[derive(Debug)]
 pub struct Expression {
-  raw_expr: RawExpr,
-  expr_type: QualifiedType,
-  value_category: ValueCategory,
+  pub(super) raw_expr: RawExpr,
+  pub(super) expr_type: QualifiedType,
+  pub(super) value_category: ValueCategory,
 }
 impl Expression {
   pub fn new(raw_expr: RawExpr, expr_type: QualifiedType, value_category: ValueCategory) -> Self {
@@ -31,6 +30,13 @@ impl Expression {
       raw_expr,
       expr_type,
       value_category,
+    }
+  }
+  pub fn new_rvalue(raw_expr: RawExpr, expr_type: QualifiedType) -> Self {
+    Self {
+      raw_expr,
+      expr_type,
+      value_category: ValueCategory::RValue,
     }
   }
   pub fn unqualified_type(&self) -> &Type {
@@ -51,16 +57,14 @@ impl Expression {
 }
 impl Primitive {
   #[must_use]
-  pub fn common_type(lhs: Primitive, rhs: Primitive) -> Primitive {
+  pub fn common_type(lhs: Self, rhs: Self) -> Self {
     // If both operands have the same type, then no further conversion is needed.
     // first: _Decimal types ignored
     // also, complex types ignored
     if lhs == rhs {
       return lhs;
     }
-    if matches!(lhs, Primitive::Void | Primitive::Nullptr)
-      || matches!(rhs, Primitive::Void | Primitive::Nullptr)
-    {
+    if matches!(lhs, Self::Void | Self::Nullptr) || matches!(rhs, Self::Void | Self::Nullptr) {
       panic!("Invalid types for common type: {:?}, {:?}", lhs, rhs);
     }
     // otherwise, if either operand is of some floating type, the other operand is converted to it.
@@ -68,11 +72,12 @@ impl Primitive {
     match (lhs.is_floating_point(), rhs.is_floating_point()) {
       (true, false) => lhs,
       (false, true) => rhs,
-      (true, true) => Primitive::common_floating_rank(lhs, rhs),
-      (false, false) => Primitive::common_integer_rank(lhs, rhs),
+      (true, true) => Self::common_floating_rank(lhs, rhs),
+      (false, false) => Self::common_integer_rank(lhs, rhs),
     }
   }
-  fn common_floating_rank(lhs: Primitive, rhs: Primitive) -> Primitive {
+  #[must_use]
+  fn common_floating_rank(lhs: Self, rhs: Self) -> Self {
     assert!(lhs.is_floating_point() && rhs.is_floating_point());
     if lhs.floating_rank() > rhs.floating_rank() {
       lhs
@@ -80,7 +85,8 @@ impl Primitive {
       rhs
     }
   }
-  fn common_integer_rank(lhs: Primitive, rhs: Primitive) -> Primitive {
+  #[must_use]
+  fn common_integer_rank(lhs: Self, rhs: Self) -> Self {
     assert!(lhs.is_integer() && rhs.is_integer());
 
     let (lhs, _) = lhs.integer_promotion();
@@ -140,134 +146,6 @@ impl Expression {
   }
 }
 
-impl Expression {
-  /// 6.3.1.8 Usual arithmetic conversions, applied implicitly where arithmetic conversions are required:
-  /// `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `<<`, `>>`
-  ///
-  /// unary/binary.
-  #[must_use]
-  pub fn usual_arithmetic_conversion(self) -> Result<Self, Error> {
-    let binary = match self.raw_expr {
-      RawExpr::Binary(b) if !b.operator.is_right_associative() => b,
-      RawExpr::Binary(b) => unreachable!("assignment operator should not reach here: {:?}", b),
-      RawExpr::Unary(u) => {
-        return Ok(u.expression.promote());
-      }
-      _ => {
-        todo!()
-      }
-    };
-    let Binary {
-      left,
-      operator,
-      right,
-    } = binary;
-    let lhs = left.promote();
-    let rhs = right.promote();
-    // only conside primitive types here
-    let common_type = match (
-      &lhs.expr_type.unqualified_type,
-      &rhs.expr_type.unqualified_type,
-    ) {
-      (Type::Primitive(l), Type::Primitive(r)) => Primitive::common_type(l.clone(), r.clone()),
-      _ => {
-        panic!(
-          "usual arithmetic conversion only supports primitive types: {:?}, {:?}",
-          lhs.expr_type.unqualified_type, rhs.expr_type.unqualified_type
-        );
-      }
-    };
-    let left = Self::cast_if_needed_unqual(lhs, Type::Primitive(common_type.clone()));
-    let right = Self::cast_if_needed_unqual(rhs, Type::Primitive(common_type.clone()));
-    Ok(Self::new(
-      RawExpr::Binary(Binary::new(operator, left, right)),
-      QualifiedType::new_unqualified(Type::Primitive(common_type)),
-      ValueCategory::RValue,
-    ))
-  }
-  fn cast_if_needed_unqual(expr: Expression, target_type: Type) -> Expression {
-    if expr.unqualified_type() == &target_type {
-      expr // no cast needed
-    } else {
-      Expression::new(
-        RawExpr::ImplicitCast(ImplicitCast::new(expr)),
-        QualifiedType::new_unqualified(target_type),
-        ValueCategory::RValue,
-      )
-    }
-  }
-  pub fn promote(self) -> Self {
-    let (promoted_type, changed) = self.expr_type.clone().promote();
-    if changed {
-      Self::new(
-        RawExpr::ImplicitCast(ImplicitCast::new(self)),
-        promoted_type,
-        ValueCategory::RValue,
-      )
-    } else {
-      self
-    }
-  }
-  /// 6.3.1.2.1: When any scalar value is converted to bool, the result is false if:
-  ///   - the value is a zero (for arithmetic types)
-  ///   - null (for pointer types),
-  ///   - the scalar has type nullptr_t
-  ///
-  /// otherwise, the result is true.
-  ///
-  /// NO promotion is performed.
-  ///
-  /// unary.
-  #[must_use]
-  pub fn conditional_conversion(self) -> Self {
-    let decayed = self.decay();
-    match decayed.expr_type.unqualified_type {
-      Type::Primitive(Primitive::Bool) => decayed,
-      Type::Primitive(_) => Self::new(
-        RawExpr::ImplicitCast(ImplicitCast::new(decayed)),
-        QualifiedType::new_unqualified(Type::Primitive(Primitive::Bool)),
-        ValueCategory::RValue,
-      ),
-      // compare with nullptr
-      Type::Pointer(_) => Self::new(
-        RawExpr::ImplicitCast(ImplicitCast::new(decayed)),
-        QualifiedType::new_unqualified(Type::Primitive(Primitive::Bool)),
-        ValueCategory::RValue,
-      ),
-
-      Type::Array(array) => {
-        panic!(
-          "should be decayed before conditional conversion: {:?}",
-          array
-        )
-      }
-      Type::FunctionProto(function_proto) => panic!(
-        "should be decayed before conditional conversion: {:?}",
-        function_proto
-      ),
-      Type::Enum(_) | Type::Record(_) | Type::Union(_) => {
-        todo!("conditional conversion for complex types")
-      }
-    }
-  }
-  /// If an expression of any other type is evaluated as a void expression, its value or designator is discarded.
-  /// (A void expression is evaluated for its side effects.)
-  ///
-  /// unary.
-  #[must_use]
-  pub fn void_conversion(self) -> Self {
-    let target_type = QualifiedType::new_unqualified(Type::Primitive(Primitive::Void));
-    Self::new(
-      RawExpr::ImplicitCast(ImplicitCast::new(self)),
-      target_type,
-      ValueCategory::RValue,
-    )
-  }
-  #[must_use]
-  pub fn decay(self) -> Self {
-    todo!()
-  }
-}
 impl ::core::default::Default for Expression {
   fn default() -> Self {
     Self {
@@ -289,12 +167,11 @@ impl Variable {
 #[derive(Debug)]
 pub struct ImplicitCast {
   pub expr: Box<Expression>,
+  pub cast_type: CastType,
 }
 impl ImplicitCast {
-  pub fn new(expr: Expression) -> Self {
-    Self {
-      expr: Box::new(expr),
-    }
+  pub fn new(expr: Box<Expression>, cast_type: CastType) -> Self {
+    Self { expr, cast_type }
   }
 }
 mod fmt {
@@ -325,9 +202,8 @@ mod fmt {
 mod test {
 
   #[test]
-  fn add_int_float() {
+  fn int_float() {
     use super::*;
-    use crate::common::operator::Operator;
 
     let int_expr = Expression::new(
       RawExpr::Constant(Constant::Int(42)),
@@ -339,12 +215,9 @@ mod test {
       QualifiedType::new_unqualified(Type::from(Primitive::Float)),
       ValueCategory::RValue,
     );
-    let expr = Expression::new(
-      RawExpr::Binary(Binary::new(Operator::Plus, int_expr, float_expr)),
-      QualifiedType::new_unqualified(Type::from(Primitive::Float)),
-      ValueCategory::RValue,
-    );
-    let promoted_expr = expr.usual_arithmetic_conversion();
+    let promoted_expr = Expression::usual_arithmetic_conversion(int_expr, float_expr)
+      .unwrap()
+      .2;
     // type shall be
     println!("Promoted expression: {:#?}", promoted_expr);
   }

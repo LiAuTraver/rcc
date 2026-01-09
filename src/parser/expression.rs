@@ -15,7 +15,7 @@ pub enum Expression {
   MemberAccess(MemberAccess),
   Ternary(Ternary),
   SizeOf(SizeOf),
-  Cast(Cast),                       // (int)x
+  CStyleCast(CStyleCast),           // (int)x
   ArraySubscript(ArraySubscript),   // arr[i]
   CompoundLiteral(CompoundLiteral), // (struct Point){.x=1, .y=2}
 }

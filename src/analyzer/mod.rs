@@ -4,6 +4,8 @@ pub mod analyzer;
 pub mod declaration;
 pub mod expression;
 pub mod statement;
+pub mod conversion;
+
 #[derive(Debug)]
 pub struct Analyzer {
   program: Program,

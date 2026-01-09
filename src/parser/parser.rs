@@ -26,7 +26,18 @@ use crate::{
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
-
+impl ::core::default::Default for Parser {
+  fn default() -> Self {
+    Self {
+      tokens: vec![],
+      cursor: 0,
+      errors: vec![],
+      warnings: vec![],
+      loop_labels: vec![],
+      typedefs: UnitScope::new(),
+    }
+  }
+}
 /// utility functions
 impl Parser {
   pub fn new(tokens: Vec<Token>) -> Self {
@@ -36,11 +47,7 @@ impl Parser {
     );
     Self {
       tokens,
-      cursor: 0,
-      errors: Vec::new(),
-      warnings: Vec::new(),
-      loop_labels: Vec::new(),
-      typedefs: UnitScope::new(),
+      ..Parser::default()
     }
   }
   pub fn parse(&mut self) -> Program {
@@ -59,12 +66,6 @@ impl Parser {
   }
   fn peek(&self, offset: usize) -> &Literal {
     if self.is_at_end() {
-      // breakpoint!(
-      //   "check your code! cursor: {}, current token: {:} ",
-      //   self.cursor,
-      //   self.tokens[self.cursor - 1]
-      // );
-      // panic!();
       &self.tokens[self.cursor].literal
     } else {
       &self.tokens[self.cursor + offset].literal

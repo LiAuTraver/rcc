@@ -2,7 +2,7 @@
 
 use crate::{
   breakpoint,
-  common::types::{Primitive, Promotion, QualifiedType, Type},
+  common::types::{CastType, Primitive, Promotion, QualifiedType, Type},
 };
 
 impl Primitive {
@@ -82,25 +82,25 @@ impl Primitive {
     matches!(self, Primitive::Nullptr)
   }
   #[must_use]
-  pub fn integer_promotion(self) -> (Primitive, bool) {
+  pub fn integer_promotion(self) -> (Primitive, CastType) {
     if !self.is_integer() {
       breakpoint!();
       panic!("Type {:?} is not an integer type", self);
     } else if self.integer_rank() < Primitive::Int.integer_rank() {
-      (Primitive::Int, true)
+      (Primitive::Int, CastType::IntegralCast)
     } else {
-      (self, false)
+      (self, CastType::Noop)
     }
   }
   #[must_use]
-  pub fn floating_promotion(self) -> (Primitive, bool) {
+  pub fn floating_promotion(self) -> (Primitive, CastType) {
     if !self.is_floating_point() {
       breakpoint!();
       panic!("Type {:?} is not a floating point type", self);
     } else if self.floating_rank() < Primitive::Double.floating_rank() {
-      (Primitive::Double, true)
+      (Primitive::Double, CastType::FloatingCast)
     } else {
-      (self, false)
+      (self, CastType::Noop)
     }
   }
   #[must_use]
@@ -135,7 +135,7 @@ impl Type {
   }
 }
 impl Promotion for Primitive {
-  fn promote(self) -> (Self, bool) {
+  fn promote(self) -> (Self, CastType) {
     if self.is_integer() {
       self.integer_promotion()
       // floating point promotion only happens in variadic functions and old functionnoproto.
@@ -143,30 +143,30 @@ impl Promotion for Primitive {
       // else if self.is_floating_point() {
       //   self.floating_promotion()
     } else {
-      (self, false)
+      (self, CastType::Noop)
     }
   }
 }
 impl Promotion for Type {
-  fn promote(self) -> (Self, bool) {
+  fn promote(self) -> (Self, CastType) {
     match self {
       Self::Primitive(p) => {
-        let (promoted, changed) = p.promote();
-        (Self::Primitive(promoted), changed)
+        let (promoted, cast_type) = p.promote();
+        (Self::Primitive(promoted), cast_type)
       }
-      _ => (self, false),
+      _ => (self, CastType::Noop),
     }
   }
 }
 impl Promotion for QualifiedType {
-  fn promote(self) -> (Self, bool) {
-    let (promoted, changed) = self.unqualified_type.promote();
+  fn promote(self) -> (Self, CastType) {
+    let (promoted, cast_type) = self.unqualified_type.promote();
     (
       Self {
         qualifiers: self.qualifiers,
         unqualified_type: promoted,
       },
-      changed,
+      cast_type,
     )
   }
 }
