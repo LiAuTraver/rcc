@@ -1,4 +1,7 @@
-use crate::common::{operator::Operator, types::QualifiedType};
+use crate::common::{
+  operator::Operator,
+  types::{QualifiedType, Type},
+};
 
 #[macro_export(local_inner_macros)]
 macro_rules! type_alias_expr {
@@ -87,8 +90,12 @@ pub struct Binary<ExprTy> {
   pub left: Box<ExprTy>,
   pub right: Box<ExprTy>,
 }
+/// assignment-expression:
+///    - conditional-expression
+///    - unary-expression assignment-operator assignment-expression
 #[derive(Debug)]
 pub struct Assignment<ExprTy> {
+  pub operator: Operator,
   pub left: Box<ExprTy>,
   pub right: Box<ExprTy>,
 }
@@ -169,6 +176,21 @@ impl<ExprTy> Ternary<ExprTy> {
     }
   }
 }
+impl<ExprTy> Assignment<ExprTy> {
+  pub fn from_operator(operator: Operator, left: ExprTy, right: ExprTy) -> Option<Self> {
+    match operator.assignment() {
+      true => Some(Self {
+        operator,
+        left: Box::new(left),
+        right: Box::new(right),
+      }),
+      false => None,
+    }
+  }
+  pub fn new(operator: Operator, left: ExprTy, right: ExprTy) -> Self {
+    Self::from_operator(operator, left, right).unwrap()
+  }
+}
 
 impl<ExprTy> Call<ExprTy> {
   pub fn new(callee: ExprTy, arguments: Vec<ExprTy>) -> Self {
@@ -184,7 +206,7 @@ mod fmt {
 
   impl<ExprTy: Display> Display for Assignment<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "({} {} =)", self.left, self.right)
+      write!(f, "({} {} {})", self.left, self.right, self.operator)
     }
   }
 
@@ -393,5 +415,36 @@ impl Constant {
         }
       }
     }
+  }
+  pub fn unqualified_type(&self) -> Type {
+    use crate::common::types::{Array, ArraySize, Primitive, Qualifiers};
+
+    match self {
+      Self::Char(_) => Type::Primitive(Primitive::Char),
+      Self::Short(_) => Type::Primitive(Primitive::Short),
+      Self::Int(_) => Type::Primitive(Primitive::Int),
+      Self::LongLong(_) => Type::Primitive(Primitive::LongLong),
+      Self::UChar(_) => Type::Primitive(Primitive::UChar),
+      Self::UShort(_) => Type::Primitive(Primitive::UShort),
+      Self::UInt(_) => Type::Primitive(Primitive::UInt),
+      Self::ULongLong(_) => Type::Primitive(Primitive::ULongLong),
+      Self::Float(_) => Type::Primitive(Primitive::Float),
+      Self::Double(_) => Type::Primitive(Primitive::Double),
+      Self::Bool(_) => Type::Primitive(Primitive::Bool),
+      // in C, char[N] is the type of string literal - although it's stored in read-only memory
+      // in C++ it's const char[N]
+      // ^^^ verified by clangd's AST
+      Self::String(str) => Type::Array(Array::new(
+        Box::new(QualifiedType::new(
+          Qualifiers::empty(),
+          Type::Primitive(Primitive::Char),
+        )),
+        // this is wrong for multi-byte characters, but let's ignore that for now
+        ArraySize::Constant(str.len() + 1 /* null terminator */),
+      )),
+    }
+  }
+  pub fn is_char_array(&self) -> bool {
+    matches!(self, Self::String(_))
   }
 }

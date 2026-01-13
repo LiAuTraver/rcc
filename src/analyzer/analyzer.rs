@@ -1,9 +1,5 @@
 use crate::{
-  analyzer::{
-    Analyzer, declaration as ad,
-    expression::{self as ae, ValueCategory},
-    statement as astmt,
-  },
+  analyzer::{Analyzer, declaration as ad, expression as ae, statement as astmt},
   breakpoint,
   common::{
     environment::{Environment, Symbol, VarDeclKind},
@@ -111,6 +107,14 @@ impl Analyzer {
       },
     ));
 
+    if self.current_function.is_some() {
+      return err_or_debugbreak!(); // error: nested function definition is not allowed, this should be handled in parser
+    }
+
+    if body.is_some() {
+      self.current_function = Some(symbol.clone());
+    }
+
     let body = body
       .map(|b| {
         self.analyze_compound_with(b, |analyzer| {
@@ -131,6 +135,8 @@ impl Analyzer {
       .environment
       .symbols
       .declare(symbol.borrow().name.clone(), symbol.clone());
+
+    self.current_function = None;
 
     Ok(ad::Function::new(
       symbol,
@@ -496,10 +502,9 @@ impl Analyzer {
       pe::SizeOf::Expression(expression) => {
         let analyzed_expr = self.analyze_expression(*expression)?;
         let size = analyzed_expr.qualified_type().unqualified_type.size();
-        Ok(ae::Expression::new(
+        Ok(ae::Expression::new_rvalue(
           ae::RawExpr::Constant(ae::Constant::ULongLong(size as u64)),
           QualifiedType::new(Qualifiers::empty(), Type::Primitive(Primitive::ULongLong)),
-          ValueCategory::RValue,
         ))
       }
       pe::SizeOf::Type(unprocessed_type) => {
@@ -511,10 +516,9 @@ impl Analyzer {
           let (_, _, base_type) = Self::parse_declspecs(declspecs)?;
           Self::apply_modifiers_for_varty(base_type, declarator.modifiers)
         };
-        Ok(ae::Expression::new(
+        Ok(ae::Expression::new_rvalue(
           ae::RawExpr::Constant(ae::Constant::ULongLong(qualified_type.size() as u64)),
           QualifiedType::new(Qualifiers::empty(), Type::Primitive(Primitive::ULongLong)),
-          ValueCategory::RValue,
         ))
       }
     }
@@ -545,10 +549,9 @@ impl Analyzer {
     }
     let expr_type = function_proto.return_type.as_ref().clone();
     // todo: type promotion, currently just match the exact/compatible types
-    Ok(ae::Expression::new(
+    Ok(ae::Expression::new_rvalue(
       ae::RawExpr::Call(ae::Call::new(analyzed_callee, analyzed_arguments)),
       expr_type,
-      ValueCategory::RValue,
     ))
   }
   fn analyze_cast(&mut self, cast: pe::CStyleCast) -> ExprRes {
@@ -559,42 +562,18 @@ impl Analyzer {
     if symbol.borrow().is_typedef() {
       err_or_debugbreak!()
     } else {
-      Ok(ae::Expression::new(
+      Ok(ae::Expression::new_lvalue(
         ae::RawExpr::Variable(ae::Variable::new(symbol.clone())),
         symbol.borrow().qualified_type.clone(),
-        ValueCategory::LValue,
       ))
     }
   }
   fn analyze_constant(&mut self, constant: pe::Constant) -> ExprRes {
-    let unqualified_type = match &constant {
-      ae::Constant::Char(_) => Type::Primitive(Primitive::Char),
-      ae::Constant::Short(_) => Type::Primitive(Primitive::Short),
-      ae::Constant::Int(_) => Type::Primitive(Primitive::Int),
-      ae::Constant::LongLong(_) => Type::Primitive(Primitive::LongLong),
-      ae::Constant::UChar(_) => Type::Primitive(Primitive::UChar),
-      ae::Constant::UShort(_) => Type::Primitive(Primitive::UShort),
-      ae::Constant::UInt(_) => Type::Primitive(Primitive::UInt),
-      ae::Constant::ULongLong(_) => Type::Primitive(Primitive::ULongLong),
-      ae::Constant::Float(_) => Type::Primitive(Primitive::Float),
-      ae::Constant::Double(_) => Type::Primitive(Primitive::Double),
-      ae::Constant::Bool(_) => Type::Primitive(Primitive::Bool),
-      // in C, char[N] is the type of string literal - although it's stored in read-only memory
-      // in C++ it's const char[N]
-      // ^^^ verified by clangd's AST
-      ae::Constant::String(str) => Type::Array(Array::new(
-        Box::new(QualifiedType::new(
-          Qualifiers::empty(),
-          Type::Primitive(Primitive::Char),
-        )),
-        // this is wrong for multi-byte characters, but let's ignore that for now
-        ArraySize::Constant(str.len() + 1 /* null terminator */),
-      )),
-    };
-    let value_category = if matches!(constant, ae::Constant::String(_)) {
-      ValueCategory::LValue
+    let unqualified_type = constant.unqualified_type();
+    let value_category = if constant.is_char_array() {
+      ae::ValueCategory::LValue
     } else {
-      ValueCategory::RValue
+      ae::ValueCategory::RValue
     };
     Ok(ae::Expression::new(
       ae::RawExpr::Constant(constant),
@@ -610,11 +589,9 @@ impl Analyzer {
     let expression = self.analyze_expression(*pe_expr)?;
     // TODO: type promotion of the unary and the expr_type
     let qualified_type = expression.qualified_type().clone();
-    let value_category = ValueCategory::RValue;
-    Ok(ae::Expression::new(
+    Ok(ae::Expression::new_rvalue(
       ae::RawExpr::Unary(ae::Unary::new(operator, expression)),
       qualified_type,
-      value_category,
     ))
   }
   fn analyze_binary(&mut self, binary: pe::Binary) -> ExprRes {
@@ -633,10 +610,9 @@ impl Analyzer {
       }
       _ => left.qualified_type().clone(), // todo: proper type promotion
     };
-    Ok(ae::Expression::new(
+    Ok(ae::Expression::new_rvalue(
       ae::RawExpr::Binary(ae::Binary::new(operator, left, right)),
       qualified_type,
-      ValueCategory::RValue,
     ))
   }
   fn analyze_ternary(&mut self, ternary: pe::Ternary) -> ExprRes {
@@ -657,26 +633,33 @@ impl Analyzer {
     } else {
       let qualified_type =
         QualifiedType::composite_unchecked(then_expr.qualified_type(), else_expr.qualified_type());
-      Ok(ae::Expression::new(
+      Ok(ae::Expression::new_rvalue(
         ae::RawExpr::Ternary(ae::Ternary::new(condition, then_expr, else_expr)),
         qualified_type,
-        ValueCategory::RValue,
       ))
     }
   }
   fn analyze_assignment(&mut self, assignment: pe::Assignment) -> ExprRes {
     let pe::Assignment {
+      operator: pe_operator,
       left: pe_left,
       right: pe_right,
     } = assignment;
     let left = self.analyze_expression(*pe_left)?;
     let right = self.analyze_expression(*pe_right)?;
     if !left.is_modifiable_lvalue() {
-      err_or_debugbreak!() // expression is not assignable
-    } else {
-      // check type compatibility, todo
-      todo!()
+      return err_or_debugbreak!(); // expression is not assignable
     }
+    assert!(
+      matches!(pe_operator, Operator::Assign),
+      "only simple assignment is supported for now"
+    );
+    let assigned_expr = ae::Expression::assignment_conversion(right, &left.qualified_type())?;
+    let expr_type = left.qualified_type().clone();
+    Ok(ae::Expression::new_rvalue(
+      ae::RawExpr::Assignment(ae::Assignment::new(pe_operator, left, assigned_expr)),
+      expr_type,
+    ))
   }
 }
 impl Analyzer {
@@ -690,10 +673,9 @@ impl Analyzer {
       ps::Statement::Return(return_stmt) => {
         Ok(astmt::Statement::Return(self.analyze_return(return_stmt)?))
       }
-      ps::Statement::Declaration(declaration) => {
-        let analyzed_decl = self.analyze_declarations(declaration)?;
-        Ok(astmt::Statement::Declaration(analyzed_decl))
-      }
+      ps::Statement::Declaration(declaration) => Ok(astmt::Statement::Declaration(
+        self.analyze_declarations(declaration)?,
+      )),
       ps::Statement::If(if_stmt) => Ok(astmt::Statement::If(self.analyze_if(if_stmt)?)),
       ps::Statement::While(while_stmt) => {
         Ok(astmt::Statement::While(self.analyze_while(while_stmt)?))
@@ -752,7 +734,39 @@ impl Analyzer {
       Some(expr) => Some(self.analyze_expression(expr)?),
       None => None,
     };
-    Ok(astmt::Return::new(analyzed_expr))
+    assert!(
+      self.current_function.is_some(),
+      "return statement outside function should be handled in parser"
+    );
+    let return_type = match &self
+      .current_function
+      .as_ref()
+      .unwrap()
+      .borrow()
+      .qualified_type
+      .unqualified_type
+    {
+      Type::FunctionProto(proto) => proto.return_type.as_ref().clone(),
+      _ => {
+        breakpoint!();
+        panic!("current function's type is not function proto")
+      }
+    };
+    match (&analyzed_expr, &return_type.unqualified_type) {
+      (None, Type::Primitive(Primitive::Void)) => {
+        return Ok(astmt::Return::new(None));
+      }
+      (None, _) => {
+        return err_or_debugbreak!(); // error: non-void function must return a value
+      }
+      (Some(_), Type::Primitive(Primitive::Void)) => {
+        return err_or_debugbreak!(); // error: returning a value from a void function
+      }
+      (Some(_), _) => {
+        let a = ae::Expression::assignment_conversion(analyzed_expr.unwrap(), &return_type)?;
+        Ok(astmt::Return::new(Some(a)))
+      }
+    }
   }
   fn analyze_if(&mut self, if_stmt: ps::If) -> StmtRes<astmt::If> {
     let ps::If {
@@ -839,6 +853,7 @@ impl ::core::default::Default for Analyzer {
     Self {
       program: pd::Program::new(),
       environment: Environment::new(),
+      current_function: None,
       errors: Vec::new(),
       warnings: Vec::new(),
     }

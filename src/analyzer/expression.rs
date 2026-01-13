@@ -39,6 +39,13 @@ impl Expression {
       value_category: ValueCategory::RValue,
     }
   }
+  pub fn new_lvalue(raw_expr: RawExpr, expr_type: QualifiedType) -> Self {
+    Self {
+      raw_expr,
+      expr_type,
+      value_category: ValueCategory::LValue,
+    }
+  }
   pub fn unqualified_type(&self) -> &Type {
     &self.expr_type.unqualified_type
   }

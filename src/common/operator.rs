@@ -93,9 +93,16 @@ pub enum Operator {
   RightShiftAssign,
   #[strum(serialize = "->")]
   Arrow,
-  #[strum(serialize = "::")]
-  DoubleColon, // in C this is only for [[prefix::attribute]] in C23 and later
 
+  // only for [[prefix::attribute]] in C23 and later
+  #[strum(serialize = "::")]
+  DoubleColon,
+  #[strum(serialize = "[[")]
+  DoubleLeftBracket,
+  #[strum(serialize = "]]")]
+  DoubleRightBracket,
+
+  // currently ignored operators
   #[strum(serialize = "...")]
   Ellipsis,
   // preprocessor
@@ -152,9 +159,8 @@ impl Operator {
         | Operator::And
         | Operator::Or
         // special cases
-        | Operator::Assign
         | Operator::Comma
-    )
+    ) || self.assignment()
   }
   // left-.
   pub fn precedence(&self) -> u8 {
@@ -190,13 +196,13 @@ impl Operator {
       Operator::Or => 0x08,
       // Question mark: 0x06,
       // assignment - it's a trick since it's mostly right associative
-      Operator::Assign => 0x04,
+      _ if self.assignment() => 0x04,
       // comma operator
       Operator::Comma => 0x02,
       _ => unreachable!(),
     }
   }
-  pub fn is_right_associative(&self) -> bool {
+  pub fn assignment(&self) -> bool {
     matches!(
       self,
       Operator::Assign
@@ -211,5 +217,19 @@ impl Operator {
         | Operator::LeftShiftAssign
         | Operator::RightShiftAssign
     )
+  }
+  pub fn relational(&self) -> bool {
+    matches!(
+      self,
+      Operator::Less
+        | Operator::LessEqual
+        | Operator::Greater
+        | Operator::GreaterEqual
+        | Operator::EqualEqual
+        | Operator::NotEqual
+    )
+  }
+  pub fn logical(&self) -> bool {
+    matches!(self, Operator::And | Operator::Or | Operator::Not)
   }
 }

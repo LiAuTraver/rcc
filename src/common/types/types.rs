@@ -199,9 +199,15 @@ impl Type {
       }
     }
   }
+  pub fn is_void(&self) -> bool {
+    matches!(self, Type::Primitive(Primitive::Void))
+  }
 }
 impl QualifiedType {
   pub fn is_modifiable(&self) -> bool {
     self.unqualified_type.is_modifiable() && !self.qualifiers.contains(Qualifiers::Const)
+  }
+  pub fn is_void(&self) -> bool {
+    self.unqualified_type.is_void()
   }
 }

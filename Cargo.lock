@@ -21,6 +21,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
+name = "lilac"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "log",
+ "once_cell",
+ "paste",
+ "pretty_assertions",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
 name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -64,19 +77,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a338cc41d27e6cc6dce6cefc13a0729dfbb81c262b1f519331575dd80ef3067f"
 dependencies = [
  "proc-macro2",
-]
-
-[[package]]
-name = "rcns"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "log",
- "once_cell",
- "paste",
- "pretty_assertions",
- "strum",
- "strum_macros",
 ]
 
 [[package]]

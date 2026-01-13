@@ -1,7 +1,7 @@
-use crate::analyzer::expression::{Binary, Expression, ImplicitCast, RawExpr, ValueCategory};
+use crate::analyzer::expression::{Expression, ImplicitCast, RawExpr};
 use crate::common::error::Error;
 use crate::common::types::{
-  CastType, Pointer, Primitive, Promotion, QualifiedType, Qualifiers, Type,
+  CastType, Compatibility, Pointer, Primitive, Promotion, QualifiedType, Type,
 };
 
 impl Expression {
@@ -28,30 +28,29 @@ impl Expression {
 
     Ok((lhs, rhs, common_qtype))
   }
+  fn get_cast_type(from: &Type, to: &Type) -> CastType {
+    match (from, to) {
+      (Type::Primitive(from_prim), Type::Primitive(to_prim)) => {
+        if from_prim.is_integer() && to_prim.is_integer() {
+          CastType::IntegralCast
+        } else if from_prim.is_integer() && to_prim.is_floating_point() {
+          CastType::IntegralToFloating
+        } else if from_prim.is_floating_point() && to_prim.is_integer() {
+          CastType::FloatingToIntegral
+        } else if from_prim.is_floating_point() && to_prim.is_floating_point() {
+          CastType::FloatingCast
+        } else {
+          panic!("Invalid cast: {:?} -> {:?}", from_prim, to_prim)
+        }
+      }
+      _ => panic!("Invalid cast: {:?} -> {:?}", from, to),
+    }
+  }
   fn cast_if_needed_unqual(expr: Expression, target_type: Type) -> Expression {
     if expr.unqualified_type() == &target_type {
       expr // no cast needed
     } else {
-      let cast_type = match (&expr.unqualified_type(), &target_type) {
-        (Type::Primitive(from), Type::Primitive(to)) => {
-          if from.is_integer() && to.is_integer() {
-            CastType::IntegralCast
-          } else if from.is_integer() && to.is_floating_point() {
-            CastType::IntegralToFloating
-          } else if from.is_floating_point() && to.is_integer() {
-            CastType::FloatingToIntegral
-          } else if from.is_floating_point() && to.is_floating_point() {
-            CastType::FloatingCast
-          } else {
-            panic!("Invalid cast: {:?} -> {:?}", from, to)
-          }
-        }
-        _ => panic!(
-          "Invalid cast: {:?} -> {:?}",
-          expr.unqualified_type(),
-          target_type
-        ),
-      };
+      let cast_type = Self::get_cast_type(&expr.unqualified_type(), &target_type);
 
       Expression::new_rvalue(
         RawExpr::ImplicitCast(ImplicitCast::new(expr.into(), cast_type)),
@@ -89,21 +88,21 @@ impl Expression {
           decayed.into(),
           CastType::IntegralToBoolean,
         )),
-        QualifiedType::new_unqualified(Type::Primitive(Primitive::Bool)),
+        QualifiedType::new_unqualified(Primitive::Bool.into()),
       )),
       Type::Primitive(ref p) if p.is_floating_point() => Ok(Self::new_rvalue(
         RawExpr::ImplicitCast(ImplicitCast::new(
           decayed.into(),
           CastType::FloatingToBoolean,
         )),
-        QualifiedType::new_unqualified(Type::Primitive(Primitive::Bool)),
+        QualifiedType::new_unqualified(Primitive::Bool.into()),
       )),
       Type::Primitive(Primitive::Nullptr) => Ok(Self::new_rvalue(
         RawExpr::ImplicitCast(ImplicitCast::new(
           decayed.into(),
           CastType::NullptrToBoolean,
         )),
-        QualifiedType::new_unqualified(Type::Primitive(Primitive::Bool)),
+        QualifiedType::new_unqualified(Primitive::Bool.into()),
       )),
       Type::Primitive(Primitive::Void) => {
         Err(()) // void cannot be converted to bool
@@ -117,15 +116,14 @@ impl Expression {
           decayed.into(),
           CastType::PointerToBoolean,
         )),
-        QualifiedType::new_unqualified(Type::Primitive(Primitive::Bool)),
+        QualifiedType::new_unqualified(Primitive::Bool.into()),
       )),
 
-      Type::Array(array) => {
-        panic!(
-          "should be decayed before conditional conversion: {:?}",
-          array
-        )
-      }
+      Type::Array(array) => panic!(
+        "should be decayed before conditional conversion: {:?}",
+        array
+      ),
+
       Type::FunctionProto(function_proto) => panic!(
         "should be decayed before conditional conversion: {:?}",
         function_proto
@@ -141,10 +139,9 @@ impl Expression {
   /// unary.
   #[must_use]
   pub fn void_conversion(self) -> Self {
-    let target_type = QualifiedType::new_unqualified(Type::Primitive(Primitive::Void));
     Self::new_rvalue(
       RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::ToVoid)),
-      target_type,
+      QualifiedType::new_unqualified(Type::Primitive(Primitive::Void)),
     )
   }
   #[must_use]
@@ -156,7 +153,7 @@ impl Expression {
     }
   }
   /// A function designator is an expression that has function type. Except when it is the operand of the
-  ///     sizeof operator,56) a typeof operator, or the unary & operator, a function designator with type
+  ///     sizeof operator, a typeof operator, or the unary & operator, a function designator with type
   ///     "function returning type" is converted to an expression that has type "pointer to function returning
   ///     type"
   #[must_use]
@@ -214,9 +211,81 @@ impl Expression {
       QualifiedType::new_unqualified(pointer_type),
     )
   }
+  /// 6.5.17.2 Simple assignment
   #[must_use]
   pub fn assignment_conversion(self, target_type: &QualifiedType) -> Result<Self, Error> {
-    todo!()
+    let decayed = self.lvalue_conversion().decay();
+    match (&target_type.unqualified_type, &decayed.unqualified_type()) {
+      //  the left operand has [...] arithmetic type, and the right operand has arithmetic type;
+      (Type::Primitive(left), Type::Primitive(right))
+        if left.is_arithmetic() && right.is_arithmetic() =>
+      {
+        Ok(Self::cast_if_needed_unqual(
+          decayed,
+          target_type.unqualified_type.clone(),
+        ))
+      }
+      // the left operand has [...] of a structure or union type compatible with the type of the right operand;
+      (Type::Record(_), Type::Record(_)) | (Type::Union(_), Type::Union(_)) => {
+        todo!()
+      }
+      // the left operand has atomic, qualified, or unqualified pointer type,
+      //    and (considering the type the left operand would have after lvalue conversion) one operand is a pointer to an object type,
+      //    and the other is a pointer to a qualified or unqualified version of void,
+      //    and the type pointed to by the left operand has all the qualifiers of the type pointed to by the right operand;
+      (Type::Pointer(lhs), Type::Pointer(rhs)) => {
+        // can add qualifiers, but cannot remove them
+        // error if removing qualifiers (const, volatile, etc.)
+        if !lhs.pointee.qualifiers.contains(rhs.pointee.qualifiers) {
+          return Err(()); // discarding qualifiers
+        }
+
+        if lhs
+          .pointee
+          .unqualified_type
+          .compatible_with(&rhs.pointee.unqualified_type)
+          || lhs.pointee.unqualified_type.is_void()
+          || rhs.pointee.unqualified_type.is_void()
+        {
+          // no need to create composite type -- pointer types are the same except for qualifiers
+          Ok(Self::new_rvalue(
+            RawExpr::ImplicitCast(ImplicitCast::new(decayed.into(), CastType::BitCast)),
+            target_type.clone(),
+          ))
+        } else {
+          Err(()) // incompatible pointer types
+        }
+      }
+      // the left operand has an atomic, qualified, or unqualified version of the nullptr_t type and the right operand is a null pointer constant or its type is nullptr_t;
+      (Type::Primitive(Primitive::Nullptr), Type::Primitive(Primitive::Nullptr)) => Ok(decayed),
+      // the left operand is an atomic, qualified, or unqualified pointer, and the right operand is a null pointer constant or its type is nullptr_t;
+      (Type::Pointer(_), Type::Primitive(Primitive::Nullptr)) => Ok(Self::new_rvalue(
+        RawExpr::ImplicitCast(ImplicitCast::new(
+          decayed.into(),
+          CastType::NullptrToPointer,
+        )),
+        target_type.clone(),
+      )),
+
+      // the left operand has atomic, qualified, or unqualified bool, and the right operand is a pointer or its type is nullptr_t.
+      (Type::Primitive(Primitive::Bool), Type::Pointer(_)) => Ok(Self::new_rvalue(
+        RawExpr::ImplicitCast(ImplicitCast::new(
+          decayed.into(),
+          CastType::PointerToBoolean,
+        )),
+        target_type.clone(),
+      )),
+      (Type::Primitive(Primitive::Bool), Type::Primitive(Primitive::Nullptr)) => {
+        Ok(Self::new_rvalue(
+          RawExpr::ImplicitCast(ImplicitCast::new(
+            decayed.into(),
+            CastType::NullptrToBoolean,
+          )),
+          target_type.clone(),
+        ))
+      }
+      _ => Err(()), // other cases are invalid
+    }
   }
   /// 6.3.2.1 Lvalues, arrays, and function designators
   ///

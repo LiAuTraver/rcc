@@ -8,16 +8,16 @@
       "type": "lldb",
       "request": "launch",
       // codelldb provide better support as for breakpoint
-      "name": "codelldb debug rcns",
+      "name": "codelldb debug lilac",
       "cwd": "${workspaceFolder}",
-      // "program": "${workspaceFolder}/target/debug/rcns.exe",
+      // "program": "${workspaceFolder}/target/debug/lilac.exe",
       // "preLaunchTask": "rust: cargo build",
       "cargo": {
         "args": [
           "build"
         ],
         "filter": {
-          "name": "rcns",
+          "name": "lilac",
           "kind": "bin"
         }
       },
@@ -31,9 +31,9 @@
       "type": "lldb-dap",
       "request": "launch",
       // lldb-dap is more friendly as for debug console
-      "name": "lldb-dap debug rcns",
+      "name": "lldb-dap debug lilac",
       "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/target/debug/rcns.exe",
+      "program": "${workspaceFolder}/target/debug/lilac.exe",
       "preLaunchTask": "rust: cargo build",
       "console": "internalConsole",
       "stopOnEntry": false,

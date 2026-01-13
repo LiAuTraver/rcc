@@ -4,7 +4,7 @@
 #![allow(unused_imports)]
 
 use ::std::{env::args, fs::File, io::Read, path::PathBuf, process::exit};
-use rcns::{analyzer::Analyzer, lexer::Lexer, parser::Parser};
+use lilac::{analyzer::Analyzer, lexer::Lexer, parser::Parser};
 // use rcns::preprocessor;
 
 fn main() {

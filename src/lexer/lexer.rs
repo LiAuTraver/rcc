@@ -207,6 +207,16 @@ impl Lexer {
       ),
       '^' => self.lex_compound_op(start_loc, Operator::Caret, &[("^=", Operator::CaretAssign)]),
       ':' => self.lex_compound_op(start_loc, Operator::Colon, &[("::", Operator::DoubleColon)]),
+      '[' => self.lex_compound_op(
+        start_loc,
+        Operator::LeftBracket,
+        &[("[[", Operator::DoubleLeftBracket)],
+      ),
+      ']' => self.lex_compound_op(
+        start_loc,
+        Operator::RightBracket,
+        &[("]]", Operator::DoubleRightBracket)],
+      ),
 
       '#' => self.lex_compound_op(start_loc, Operator::Hash, &[("##", Operator::HashHash)]),
 
@@ -217,10 +227,9 @@ impl Lexer {
       ')' => Some(Token::operator(Operator::RightParen, start_loc)),
       '{' => Some(Token::operator(Operator::LeftBrace, start_loc)),
       '}' => Some(Token::operator(Operator::RightBrace, start_loc)),
-      '[' => Some(Token::operator(Operator::LeftBracket, start_loc)),
-      ']' => Some(Token::operator(Operator::RightBracket, start_loc)),
       '~' => Some(Token::operator(Operator::Tilde, start_loc)),
       '?' => Some(Token::operator(Operator::Question, start_loc)),
+      '\\' => todo!("character literals not implemented yet"),
 
       _ => {
         self.errors.push(format!(

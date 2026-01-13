@@ -218,9 +218,9 @@ pub enum CastType {
   IntegralToPointer, // int -> ptr (addr 0 is null)
   PointerToIntegral,
   PointerToBoolean, // ptr -> bool (ptr != 0)
+  BitCast,          // pesudo cast; no actual conversion, just reinterpret the bits
 
   // ^^^ those exist in Clang's frontend too
   // vvv custom casts
-  PointerToPointer, // pointer type conversion
   NullptrToBoolean, // nullptr -> bool
 }

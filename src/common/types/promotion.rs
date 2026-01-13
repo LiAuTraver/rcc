@@ -83,10 +83,9 @@ impl Primitive {
   }
   #[must_use]
   pub fn integer_promotion(self) -> (Primitive, CastType) {
-    if !self.is_integer() {
-      breakpoint!();
-      panic!("Type {:?} is not an integer type", self);
-    } else if self.integer_rank() < Primitive::Int.integer_rank() {
+    assert!(self.is_integer(), "Type {:?} is not an integer type", self);
+
+    if self.integer_rank() < Primitive::Int.integer_rank() {
       (Primitive::Int, CastType::IntegralCast)
     } else {
       (self, CastType::Noop)
@@ -94,10 +93,12 @@ impl Primitive {
   }
   #[must_use]
   pub fn floating_promotion(self) -> (Primitive, CastType) {
-    if !self.is_floating_point() {
-      breakpoint!();
-      panic!("Type {:?} is not a floating point type", self);
-    } else if self.floating_rank() < Primitive::Double.floating_rank() {
+    assert!(
+      self.is_floating_point(),
+      "Type {:?} is not a floating point type",
+      self
+    );
+    if self.floating_rank() < Primitive::Double.floating_rank() {
       (Primitive::Double, CastType::FloatingCast)
     } else {
       (self, CastType::Noop)
@@ -107,7 +108,8 @@ impl Primitive {
   pub fn into_unsigned(self) -> Primitive {
     match self {
       Primitive::Bool => Primitive::Bool,
-      Primitive::Char | Primitive::SChar => Primitive::UChar,
+      Primitive::Char => Primitive::UChar,
+      Primitive::SChar => Primitive::UChar,
       Primitive::Short => Primitive::UShort,
       Primitive::Int => Primitive::UInt,
       Primitive::Long => Primitive::ULong,
@@ -124,12 +126,14 @@ impl Type {
     match self {
       Type::Primitive(p) => p.is_unsigned(),
       Type::Pointer(_) => true,
+      Type::Enum(e) => e.underlying_type.is_unsigned(),
       _ => false,
     }
   }
   pub fn is_signed(&self) -> bool {
     match self {
       Type::Primitive(p) => p.is_signed(),
+      Type::Enum(e) => e.underlying_type.is_signed(),
       _ => false,
     }
   }

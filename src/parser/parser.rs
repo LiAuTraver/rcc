@@ -870,7 +870,7 @@ impl Parser {
         if op.binary() && op.precedence() >= lmin_precedence {
           let op = op.clone();
           self.get(); // operator
-          let right = self.next_expression(if op.is_right_associative() {
+          let right = self.next_expression(if op.assignment() {
             op.precedence()
           } else {
             op.precedence() + 1
