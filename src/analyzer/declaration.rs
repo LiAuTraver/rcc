@@ -87,7 +87,7 @@ impl Function {
 
   pub fn proto_unqual(&self) -> Ref<'_, Type> {
     Ref::map(self.symbol.borrow(), |sym| {
-      &sym.qualified_type.unqualified_type
+      sym.qualified_type.unqualified_type()
     })
   }
 }
@@ -139,7 +139,7 @@ mod fmt {
 
       // For functions, sym.qualified_type is Type::FunctionProto
       // We want: return_type name(params)
-      match &sym.qualified_type.unqualified_type {
+      match sym.qualified_type.unqualified_type() {
         Type::FunctionProto(proto) => {
           write!(f, "{} {}(", proto.return_type, sym.name)?;
           for (i, param) in self.parameters.iter().enumerate() {

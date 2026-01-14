@@ -1,13 +1,8 @@
-#[cfg(test)]
-use ::pretty_assertions::assert_eq;
-
 use crate::{
-  analyzer::{
-    Analyzer, declaration as ad, expression as ae, statement as astmt,
-  },
+  analyzer::{declaration as ad, expression as ae, statement as astmt},
   breakpoint,
   common::{
-    environment::{Environment, Symbol, VarDeclKind},
+    environment::{Environment, Symbol, SymbolRef, VarDeclKind},
     error::Error,
     operator::{Category, Operator},
     rawdecl::FunctionSpecifier,
@@ -24,6 +19,14 @@ type TypeRes = Result<Type, Error>;
 type ExprRes = Result<ae::Expression, Error>;
 type DeclRes<T> = Result<T, Error>;
 type StmtRes<T> = Result<T, Error>;
+#[derive(Debug)]
+pub struct Analyzer {
+  program: pd::Program,
+  environment: Environment,
+  current_function: Option<SymbolRef>,
+  errors: Vec<String>,
+  warnings: Vec<String>,
+}
 
 /// i haven't built up the error handling system yet, and all tests are expected to pass, so use this macro to catch bugs while debugging
 macro_rules! err_or_debugbreak {
@@ -535,7 +538,7 @@ impl Analyzer {
     match sizeof {
       pe::SizeOf::Expression(expression) => {
         let analyzed_expr = self.expression(*expression)?;
-        let size = analyzed_expr.qualified_type().unqualified_type.size();
+        let size = analyzed_expr.unqualified_type().size();
         Ok(ae::Expression::new_rvalue(
           ae::RawExpr::Constant(ae::Constant::ULongLong(size as u64)),
           QualifiedType::new_unqualified(Primitive::ULongLong.into()),
@@ -566,7 +569,7 @@ impl Analyzer {
 
     let function_proto = match analyzed_callee.unqualified_type() {
       Type::FunctionProto(proto) => proto,
-      Type::Pointer(ptr) => match &ptr.pointee.unqualified_type {
+      Type::Pointer(ptr) => match ptr.pointee.unqualified_type() {
         Type::FunctionProto(proto) => proto,
         _ => return err_or_debugbreak!(), // error: callee is not a function pointer
       },
@@ -817,7 +820,7 @@ impl Analyzer {
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
-    if pointee_type.unqualified_type == Type::Primitive(Primitive::Void) {
+    if pointee_type.unqualified_type() == &Type::Primitive(Primitive::Void) {
       err_or_debugbreak!() // error: cannot dereference void pointer
     } else {
       // If the operand points to a function, the result is a function designator; -- which means the we don't need to perform decay here
@@ -1093,7 +1096,7 @@ impl Analyzer {
       .unwrap()
       .borrow()
       .qualified_type
-      .unqualified_type
+      .unqualified_type()
     {
       Type::FunctionProto(proto) => proto.return_type.as_ref().clone(),
       _ => {
@@ -1101,7 +1104,7 @@ impl Analyzer {
         panic!("current function's type is not function proto")
       },
     };
-    match (&analyzed_expr, &return_type.unqualified_type) {
+    match (&analyzed_expr, return_type.unqualified_type()) {
       (None, Type::Primitive(Primitive::Void)) => Ok(astmt::Return::new(None)),
       (None, _) => {
         err_or_debugbreak!() // error: non-void function must return a value

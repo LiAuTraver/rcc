@@ -21,9 +21,9 @@ pub enum ValueCategory {
 }
 #[derive(Debug)]
 pub struct Expression {
-  pub(super) raw_expr: RawExpr,
-  pub(super) expr_type: QualifiedType,
-  pub(super) value_category: ValueCategory,
+  raw_expr: RawExpr,
+  expr_type: QualifiedType,
+  value_category: ValueCategory,
 }
 impl Expression {
   pub fn new(
@@ -55,11 +55,11 @@ impl Expression {
   }
 
   pub fn unqualified_type(&self) -> &Type {
-    &self.expr_type.unqualified_type
+    &self.expr_type.unqualified_type()
   }
 
   pub fn qualifiers(&self) -> &Qualifiers {
-    &self.expr_type.qualifiers
+    &self.expr_type.qualifiers()
   }
 
   pub fn qualified_type(&self) -> &QualifiedType {
@@ -171,17 +171,6 @@ impl Expression {
     Self {
       value_category: ValueCategory::RValue,
       ..self
-    }
-  }
-
-  pub fn default_int() -> Self {
-    Self {
-      raw_expr: RawExpr::Constant(Constant::Int(0)),
-      expr_type: QualifiedType::new(
-        Qualifiers::empty(),
-        Type::Primitive(Primitive::Int),
-      ),
-      value_category: ValueCategory::RValue,
     }
   }
 }

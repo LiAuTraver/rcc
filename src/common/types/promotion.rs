@@ -1,7 +1,13 @@
 //! applied during unary operations, including (implicit) unary inside binary operations
 
-use super::{CastType, Primitive, Promotion, QualifiedType, Type};
+use super::{CastType, Primitive, QualifiedType, Type};
 use crate::breakpoint;
+pub trait Promotion {
+  #[must_use]
+  fn promote(self) -> (Self, CastType)
+  where
+    Self: Sized;
+}
 
 impl Primitive {
   pub fn is_integer(&self) -> bool {
@@ -103,6 +109,7 @@ impl Primitive {
     }
   }
 
+  /// floating promotion is only happened during variadic function calls and the old `functionnoproto`, which i wont implement
   #[must_use]
   pub fn floating_promotion(self) -> (Primitive, CastType) {
     assert!(
@@ -156,10 +163,6 @@ impl Promotion for Primitive {
   fn promote(self) -> (Self, CastType) {
     if self.is_integer() {
       self.integer_promotion()
-      // floating point promotion only happens in variadic functions and old functionnoproto.
-      // }
-      // else if self.is_floating_point() {
-      //   self.floating_promotion()
     } else {
       (self, CastType::Noop)
     }
@@ -178,13 +181,9 @@ impl Promotion for Type {
 }
 impl Promotion for QualifiedType {
   fn promote(self) -> (Self, CastType) {
-    let (promoted, cast_type) = self.unqualified_type.promote();
-    (
-      Self {
-        qualifiers: self.qualifiers,
-        unqualified_type: promoted,
-      },
-      cast_type,
-    )
+    let (qualifiers, promoted) = self.destructure();
+    let (promoted, cast_type) = promoted.promote();
+
+    (Self::new(qualifiers, promoted), cast_type)
   }
 }

@@ -1,14 +1,21 @@
 use ::std::{path::PathBuf, rc::Rc, str::FromStr};
 
-use crate::{
-  common::{
-    keyword::Keyword,
-    operator::Operator,
-    rawexpr::Constant,
-    token::{SourceLocation, Token},
-  },
-  lexer::Lexer,
+use crate::common::{
+  keyword::Keyword,
+  operator::Operator,
+  rawexpr::Constant,
+  token::{SourceLocation, Token},
 };
+pub struct Lexer {
+  source: String,
+  chars: Vec<char>,
+  byte_positions: Vec<usize>,
+  cursor: usize,
+  line: u32,
+  column: u32,
+  errors: Vec<String>,
+  filepath: Rc<PathBuf>,
+}
 
 impl Lexer {
   pub fn new(source: String, filepath: PathBuf) -> Self {

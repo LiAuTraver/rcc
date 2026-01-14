@@ -1,15 +1,161 @@
 use ::once_cell::sync::Lazy;
 use ::std::str::FromStr;
+use ::strum_macros::{Display, EnumString, IntoStaticStr};
 
-use crate::common::{
-  error::Error,
-  rawdecl::FunctionSpecifier,
-  types::{
-    Array, ArraySize, Compatibility, Enum, EnumConstant, FunctionProto,
-    Pointer, Primitive, QualifiedType, Qualifiers, Record, Type, TypeInfo,
-    Union,
-  },
-};
+use super::TypeInfo;
+use crate::common::{error::Error, rawdecl::FunctionSpecifier};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+  Primitive(Primitive),
+  Array(Array),
+  Pointer(Pointer),
+  FunctionProto(FunctionProto),
+  Enum(Enum),
+  Record(Record),
+  Union(Union),
+}
+
+::bitflags::bitflags! {
+/// type-specifier-qualifier:
+/// -    type-specifier
+/// -    type-qualifier
+/// -    alignment-specifier (don't care)
+///
+/// specifier would be merged into `Type` directly, so here only have qualifiers
+  #[derive(Debug, Copy, Clone, PartialEq)]
+  pub struct Qualifiers: u8 {
+    const Const = 0x01;
+    const Volatile = 0x02;
+    const Restrict = 0x04;
+    const Atomic = 0x08; // ignore for now
+  }
+}
+// C's built-in types
+#[derive(Debug, Display, IntoStaticStr, EnumString, Clone, PartialEq)]
+pub enum Primitive {
+  #[strum(serialize = "bool")]
+  #[strum(serialize = "_Bool")]
+  Bool,
+  #[strum(serialize = "char")]
+  Char, // plain char
+  #[strum(serialize = "signed char")]
+  SChar, // signed char
+  #[strum(serialize = "short")]
+  Short,
+  #[strum(serialize = "int")]
+  Int,
+  #[strum(serialize = "long")]
+  Long,
+  #[strum(serialize = "long long")]
+  LongLong,
+  #[strum(serialize = "unsigned char")]
+  UChar,
+  #[strum(serialize = "unsigned short")]
+  UShort,
+  #[strum(serialize = "unsigned int")]
+  UInt,
+  #[strum(serialize = "unsigned long")]
+  ULong,
+  #[strum(serialize = "unsigned long long")]
+  ULongLong,
+  #[strum(serialize = "float")]
+  Float,
+  #[strum(serialize = "double")]
+  Double,
+  #[strum(serialize = "long double")]
+  LongDouble,
+  #[strum(serialize = "void")]
+  Void,
+  #[strum(serialize = "nullptr_t")]
+  Nullptr,
+  // ignore below for now: __STDC_NO_COMPLEX__
+  #[strum(serialize = "_Complex float")]
+  ComplexFloat,
+  #[strum(serialize = "_Complex")]
+  #[strum(serialize = "_Complex double")]
+  ComplexDouble,
+  #[strum(serialize = "_Complex long double")]
+  ComplexLongDouble,
+  // wchar_t is a built-in in C++, but not C, in C it's `typedef`-ed as unsigned short on Windows
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QualifiedType {
+  qualifiers: Qualifiers,
+  unqualified_type: Type,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pointer {
+  pub pointee: Box<QualifiedType>,
+}
+
+#[derive(Debug, Clone, Display, PartialEq)]
+pub enum ArraySize {
+  Constant(usize),
+  Incomplete,
+  // Variable, // ignore for now
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Array {
+  /// Array itself cannot have qualifiers, hence the QualifiedType::qualifiers of the whole array should be empty, the actual element type's qualifiers are stored here.
+  pub element_type: Box<QualifiedType>,
+  pub size: ArraySize,
+}
+
+/// function types themselves don't have qualifiers, but pointers to them can.
+/// so the functionproto's qualifiers must be dropped.
+///
+/// ```c
+/// int func(int a, float b);
+/// int (*pfunc)(int, float) = &func;
+/// int (*const cpfunc)(int, float) = &func;
+///
+/// const int* cptr_func(int a, float b);
+/// const int* (*pfunc2)(int, float) = &cptr_func;
+/// const int* (*const cpfunc2)(int, float) = &cptr_func;
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionProto {
+  pub return_type: Box<QualifiedType>,
+  pub parameter_types: Vec<QualifiedType>,
+  pub is_variadic: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Field {
+  pub name: String,
+  pub field_type: QualifiedType,
+}
+
+// ignore unnamed/anonymous structs/unions for now
+#[derive(Debug, Clone, PartialEq)]
+pub struct Record {
+  pub name: Option<String>,
+  pub fields: Vec<Field>,
+}
+
+// seems not so much difference between struct and union here, but for convenience we keep them separate
+#[derive(Debug, Clone, PartialEq)]
+pub struct Union {
+  pub name: Option<String>,
+  pub fields: Vec<Field>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumConstant {
+  pub name: String,
+  pub value: Option<isize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Enum {
+  pub name: Option<String>,
+  pub constants: Vec<EnumConstant>,
+  pub underlying_type: Primitive, // must be integer type
+}
 
 impl QualifiedType {
   pub fn new(qualifiers: Qualifiers, unqualified_type: Type) -> Self {
@@ -136,54 +282,10 @@ impl Enum {
   }
 }
 
-use paste::paste;
-
-use crate::breakpoint;
-
-macro_rules! make_trio_for {
-  ($variant:ident) => {
-    make_trio_for!($variant, $variant);
-  };
-  // We use :ident because we are working with names, not complex types
-  ($variant:ident, $inner:ident) => {
-    paste! {
-        impl Type {
-            #[inline]
-            pub fn [<is_ $variant:lower>](&self) -> bool {
-                matches!(self, Self::$variant(_))
-            }
-
-            #[inline]
-            pub fn [<as_ $variant:lower>](&self) -> Option<&$inner> {
-                match self {
-                    Self::$variant(v) => Some(v),
-                    _ => None,
-                }
-            }
-
-            #[inline]
-            pub fn [<as_ $variant:lower _unchecked>](&self) -> &$inner {
-                match self {
-                    Self::$variant(v) => v,
-                    _ => {
-                        breakpoint!();
-                        unreachable!()
-                    }
-                }
-            }
-
-            #[inline]
-            pub fn [<into_ $variant:lower>](self) -> Option<$inner> {
-                match self {
-                    Self::$variant(v) => Some(v),
-                    _ => None,
-                }
-            }
-        }
-    }
-  };
-}
-use crate::interconvert;
+use crate::{
+  breakpoint, common::types::compatible::Compatibility, interconvert,
+  make_trio_for,
+};
 
 interconvert!(Primitive, Type);
 interconvert!(Array, Type);
@@ -193,13 +295,13 @@ interconvert!(Enum, Type);
 interconvert!(Record, Type);
 interconvert!(Union, Type);
 
-make_trio_for!(Primitive);
-make_trio_for!(Array);
-make_trio_for!(Pointer);
-make_trio_for!(FunctionProto);
-make_trio_for!(Enum);
-make_trio_for!(Record);
-make_trio_for!(Union);
+make_trio_for!(Primitive, Type);
+make_trio_for!(Array, Type);
+make_trio_for!(Pointer, Type);
+make_trio_for!(FunctionProto, Type);
+make_trio_for!(Enum, Type);
+make_trio_for!(Record, Type);
+make_trio_for!(Union, Type);
 
 impl Type {
   pub fn is_modifiable(&self) -> bool {
@@ -251,6 +353,18 @@ impl QualifiedType {
 
   pub fn is_void(&self) -> bool {
     self.unqualified_type.is_void()
+  }
+
+  pub fn qualifiers(&self) -> &Qualifiers {
+    &self.qualifiers
+  }
+
+  pub fn unqualified_type(&self) -> &Type {
+    &self.unqualified_type
+  }
+
+  pub fn destructure(self) -> (Qualifiers, Type) {
+    (self.qualifiers, self.unqualified_type)
   }
 }
 impl From<Type> for QualifiedType {

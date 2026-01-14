@@ -3,8 +3,8 @@
 #![allow(unreachable_code)]
 #![allow(unused_imports)]
 
+use ::lilac::{analyzer::Analyzer, lexer::Lexer, parser::Parser};
 use ::std::{env::args, fs::File, io::Read, path::PathBuf, process::exit};
-use lilac::{analyzer::Analyzer, lexer::Lexer, parser::Parser};
 // use rcns::preprocessor;
 
 fn main() {
@@ -78,6 +78,6 @@ fn main() {
     analyze_errors.iter().for_each(|e| eprintln!("{e}"));
     exit(1);
   }
-  println!("{:#?}", translation_unit.unwrap());
+  println!("{:}", translation_unit.unwrap());
   println!("Analyze succeeded.");
 }

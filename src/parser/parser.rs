@@ -1,6 +1,3 @@
-#[cfg(test)]
-use pretty_assertions::assert_eq;
-
 use crate::{
   breakpoint,
   common::{
@@ -13,7 +10,6 @@ use crate::{
     types::Qualifiers,
   },
   parser::{
-    Parser,
     declaration::{
       DeclSpecs, Declaration, Declarator, DeclaratorType, Function,
       FunctionSignature, Initializer, Modifier, Parameter, Program,
@@ -29,6 +25,15 @@ use crate::{
     },
   },
 };
+pub struct Parser {
+  tokens: Vec<Token>,
+  cursor: usize,
+  errors: Vec<String>,
+  warnings: Vec<String>,
+  loop_labels: Vec<String>,
+  // contest-sensitive part - needed to parse `T * x`.
+  typedefs: UnitScope,
+}
 impl ::core::default::Default for Parser {
   fn default() -> Self {
     Self {

@@ -1,17 +1,22 @@
-use super::{
+use crate::common::types::{
   Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, QualifiedType,
-  Record, Type, TypeInfo, Union,
+  Record, Type, Union,
 };
+#[allow(unused)]
+pub trait TypeInfo {
+  fn size(&self) -> usize;
+  fn is_scalar(&self) -> bool;
+}
 
 impl TypeInfo for QualifiedType {
   #[inline]
   fn size(&self) -> usize {
-    self.unqualified_type.size()
+    self.unqualified_type().size()
   }
 
   #[inline]
   fn is_scalar(&self) -> bool {
-    self.unqualified_type.is_scalar()
+    self.unqualified_type().is_scalar()
   }
 }
 macro_rules! dispatch_down {
@@ -69,7 +74,8 @@ impl TypeInfo for Primitive {
 impl TypeInfo for Array {
   fn size(&self) -> usize {
     match &self.size {
-      ArraySize::Constant(sz) => sz * self.element_type.unqualified_type.size(),
+      ArraySize::Constant(sz) =>
+        sz * self.element_type.unqualified_type().size(),
       ArraySize::Incomplete => 0,
     }
   }
@@ -84,7 +90,7 @@ impl TypeInfo for Record {
     self
       .fields
       .iter()
-      .map(|f| f.field_type.unqualified_type.size())
+      .map(|f| f.field_type.unqualified_type().size())
       .sum() // rough, padding and alignment not considered -- incomplete type has no members anyway so this handles it too
   }
 
@@ -99,7 +105,7 @@ impl TypeInfo for Union {
     self
       .fields
       .iter()
-      .map(|f| f.field_type.unqualified_type.size())
+      .map(|f| f.field_type.unqualified_type().size())
       .max()
       .unwrap_or(0) // ditto
   }
@@ -117,7 +123,7 @@ impl TypeInfo for Pointer {
 
   #[inline]
   fn is_scalar(&self) -> bool {
-    true
+    Primitive::ULongLong.is_scalar() // shall always be true
   }
 }
 
@@ -140,6 +146,6 @@ impl TypeInfo for Enum {
 
   #[inline]
   fn is_scalar(&self) -> bool {
-    true
+    self.underlying_type.is_scalar()
   }
 }

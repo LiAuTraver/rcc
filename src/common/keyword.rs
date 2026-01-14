@@ -1,7 +1,6 @@
-use ::std::marker::ConstParamTy;
 use ::strum_macros::{Display, EnumString};
 
-#[derive(Debug, Clone, Display, EnumString, PartialEq, Eq, ConstParamTy)]
+#[derive(Debug, Clone, Display, EnumString, PartialEq, Eq, ::std::marker::ConstParamTy)]
 pub enum Keyword {
   // C
   #[strum(serialize = "auto")]
@@ -105,7 +104,7 @@ pub enum Keyword {
   #[strum(serialize = "constexpr")]
   Constexpr,
 }
-#[derive(Debug, Clone, Display, EnumString, PartialEq, Eq, ConstParamTy)]
+#[derive(Debug, Clone, Display, EnumString, PartialEq, Eq, ::std::marker::ConstParamTy)]
 #[allow(unused)]
 pub enum Reserved {
   #[strum(serialize = "typeof")] // C23

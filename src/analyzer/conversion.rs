@@ -12,6 +12,7 @@ use crate::{
 impl Expression {
   /// 6.3.1.8 Usual arithmetic conversions, applied implicitly where arithmetic conversions are required
   #[must_use]
+  #[inline]
   pub fn usual_arithmetic_conversion(
     lhs: Expression,
     rhs: Expression,
@@ -44,7 +45,7 @@ impl Expression {
       ),
       "perform decay first"
     );
-    self.usual_arithmetic_conversion_unary_unchecked()
+    Self::usual_arithmetic_conversion_unary_unchecked(self)
   }
 
   /// 6.3.1.2.1: When any scalar value is converted to bool, the result is false if:
@@ -69,7 +70,7 @@ impl Expression {
       ),
       "perform decay first"
     );
-    self.conditional_conversion_unchecked()
+    Self::conditional_conversion_unchecked(self)
   }
 
   /// If an expression of any other type is evaluated as a void expression, its value or designator is discarded.
@@ -99,7 +100,7 @@ impl Expression {
       ),
       "perform decay first"
     );
-    self.assignment_conversion_unchecked(target_type)
+    Self::assignment_conversion_unchecked(self, target_type)
   }
 
   /// 6.3.2.1 Lvalues, arrays, and function designators
@@ -117,7 +118,7 @@ impl Expression {
       self
     } else if self.is_lvalue() {
       // If the lvalue has qualified type, the value has the unqualified version of the type of the lvalue. perform cast from lvalue to rvalue
-      let old_unqual_type = self.expr_type.unqualified_type.clone();
+      let old_unqual_type = self.unqualified_type().clone();
       Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::LValueToRValue).into(),
         QualifiedType::new_unqualified(old_unqual_type),
@@ -150,7 +151,7 @@ impl Expression {
     assert!(
       self.qualifiers().is_empty(),
       "function type should not have qualifiers: {:?}",
-      self.expr_type
+      self.qualified_type()
     );
     let pointer_type = Pointer::new(
       QualifiedType::new(
@@ -179,7 +180,7 @@ impl Expression {
     assert!(
       self.qualifiers().is_empty(),
       "array type should not have qualifiers: {:?}",
-      self.expr_type
+      self.qualified_type()
     );
     let pointer_type = Type::from(Pointer::new(
       // array itself should not have qualifiers, but the element qualifiers are preserved
@@ -199,14 +200,14 @@ impl Expression {
     self,
     target_type: &QualifiedType,
   ) -> Result<Self, Error> {
-    match (&target_type.unqualified_type, &self.unqualified_type()) {
+    match (&target_type.unqualified_type(), &self.unqualified_type()) {
       //  the left operand has [...] arithmetic type, and the right operand has arithmetic type;
       (Type::Primitive(left), Type::Primitive(right))
         if left.is_arithmetic() && right.is_arithmetic() =>
       {
         let cast_type = Self::get_cast_type(
           self.unqualified_type(),
-          &target_type.unqualified_type,
+          target_type.unqualified_type(),
         );
         Ok(Self::maybe_cast(self, cast_type, target_type))
       },
@@ -221,16 +222,16 @@ impl Expression {
       (Type::Pointer(lhs), Type::Pointer(rhs)) => {
         // can add qualifiers, but cannot remove them
         // error if removing qualifiers (const, volatile, etc.)
-        if !lhs.pointee.qualifiers.contains(rhs.pointee.qualifiers) {
+        if !lhs.pointee.qualifiers().contains(*rhs.pointee.qualifiers()) {
           return Err(()); // discarding qualifiers
         }
 
         if lhs
           .pointee
-          .unqualified_type
-          .compatible_with(&rhs.pointee.unqualified_type)
-          || lhs.pointee.unqualified_type.is_void()
-          || rhs.pointee.unqualified_type.is_void()
+          .unqualified_type()
+          .compatible_with(&rhs.pointee.unqualified_type())
+          || lhs.pointee.unqualified_type().is_void()
+          || rhs.pointee.unqualified_type().is_void()
         {
           // no need to create composite type -- pointer types are the same except for qualifiers
           Ok(Self::new_rvalue(
@@ -272,11 +273,11 @@ impl Expression {
 
   #[must_use]
   fn conditional_conversion_unchecked(self) -> Result<Self, Error> {
-    match self.expr_type.unqualified_type {
+    match self.unqualified_type() {
       Type::Primitive(Primitive::Bool) => Ok(self),
-      Type::Primitive(ref p) if p.is_integer() =>
+      Type::Primitive(p) if p.is_integer() =>
         Ok(self.cast_if_needed(&QualifiedType::int())),
-      Type::Primitive(ref p) if p.is_floating_point() => Ok(Self::new_rvalue(
+      Type::Primitive(p) if p.is_floating_point() => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::FloatingToIntegral).into(),
         QualifiedType::int(),
       )),
@@ -305,7 +306,7 @@ impl Expression {
         "should be decayed before conditional conversion: {:#?}",
         function_proto
       ),
-      Type::Enum(ref e) => {
+      Type::Enum(e) => {
         // let underlying_type = e.underlying_type.clone();
         todo!("conditional conversion for enum types {:#?}", e)
       },
@@ -388,15 +389,15 @@ impl Expression {
   #[must_use]
   fn cast_if_needed(self, target_type: &QualifiedType) -> Self {
     let cast_type = Self::get_cast_type(
-      &self.unqualified_type(),
-      &target_type.unqualified_type,
+      self.unqualified_type(),
+      target_type.unqualified_type(),
     );
     self.maybe_cast(cast_type, target_type)
   }
 
   #[must_use]
   pub fn promote(self) -> Self {
-    let (promoted_type, cast_type) = self.expr_type.clone().promote();
+    let (promoted_type, cast_type) = self.qualified_type().clone().promote();
     match cast_type {
       CastType::Noop => self,
       cast_type => Self::new_rvalue(

@@ -23,10 +23,10 @@ impl Display for Qualifiers {
 
 impl Display for QualifiedType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.qualifiers.is_empty() {
-      write!(f, "{}", self.unqualified_type)
+    if self.qualifiers().is_empty() {
+      write!(f, "{}", self.unqualified_type())
     } else {
-      write!(f, "{} {}", self.qualifiers, self.unqualified_type)
+      write!(f, "{} {}", self.qualifiers(), self.unqualified_type())
     }
   }
 }

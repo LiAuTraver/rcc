@@ -1,7 +1,7 @@
 #![allow(unused)]
 use super::{
-  Array, ArraySize, Compatibility, Enum, FunctionProto, Pointer, Primitive,
-  QualifiedType, Record, Type, Union,
+  Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, QualifiedType,
+  Record, Type, Union,
 };
 use crate::breakpoint;
 
@@ -159,7 +159,8 @@ impl Compatibility for FunctionProto {
     for (lparam, rparam) in
       lhs.parameter_types.iter().zip(rhs.parameter_types.iter())
     {
-      if !Type::compatible(&lparam.unqualified_type, &rparam.unqualified_type) {
+      if !Type::compatible(lparam.unqualified_type(), rparam.unqualified_type())
+      {
         return false;
       }
     }
@@ -191,10 +192,10 @@ impl Compatibility for FunctionProto {
       let param_type = QualifiedType::new(
         // this is actually not strictly correct -
         // e.g., const decl + non-const def -> var is const, non-const decl + const def -> var is non-const
-        lparam.qualifiers | rparam.qualifiers,
+        *lparam.qualifiers() | *rparam.qualifiers(),
         Type::composite_unchecked(
-          &lparam.unqualified_type,
-          &rparam.unqualified_type,
+          lparam.unqualified_type(),
+          rparam.unqualified_type(),
         ),
       );
       parameter_types.push(param_type);
@@ -264,12 +265,12 @@ impl Compatibility for QualifiedType {
       return true;
     }
     // 6.7.4.1.11: For two qualified types to be compatible, both shall have the identically qualified version of a compatible type.
-    if lhs.qualifiers != rhs.qualifiers {
+    if *lhs.qualifiers() != *rhs.qualifiers() {
       return false;
     }
     <Type as Compatibility>::compatible(
-      &lhs.unqualified_type,
-      &rhs.unqualified_type,
+      lhs.unqualified_type(),
+      rhs.unqualified_type(),
     )
   }
 
@@ -352,5 +353,36 @@ impl Compatibility for Union {
     Self: Sized,
   {
     todo!()
+  }
+}
+
+/// rules about the `metadata`. used for declaration and definition.
+#[allow(unused)]
+pub trait Compatibility {
+  fn compatible(lhs: &Self, rhs: &Self) -> bool;
+  #[inline]
+  fn compatible_with(&self, other: &Self) -> bool {
+    Self::compatible(self, other)
+  }
+  fn composite(lhs: &Self, rhs: &Self) -> Option<Self>
+  where
+    Self: Sized;
+  #[inline]
+  fn composite_with(&self, other: &Self) -> Option<Self>
+  where
+    Self: Sized,
+  {
+    Self::composite(self, other)
+  }
+  /// used internally to avoid unnecessary compatibility checks
+  fn composite_unchecked(lhs: &Self, rhs: &Self) -> Self
+  where
+    Self: Sized;
+  #[inline]
+  fn composite_unchecked_with(&self, other: &Self) -> Self
+  where
+    Self: Sized,
+  {
+    Self::composite_unchecked(self, other)
   }
 }
