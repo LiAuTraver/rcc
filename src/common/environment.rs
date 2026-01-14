@@ -137,10 +137,7 @@ impl UnitScope {
     self.scopes.pop();
   }
   pub fn shallow_contains(&self, name: &str) -> bool {
-    self
-      .scopes
-      .last()
-      .map_or(false, |scope| scope.contains(name))
+    self.scopes.last().is_some_and(|scope| scope.contains(name))
   }
   pub fn contains(&self, name: &str) -> bool {
     for scope in self.scopes.iter().rev() {
@@ -152,9 +149,8 @@ impl UnitScope {
   }
   pub fn declare(&mut self, name: String) {
     let current = self.scopes.last_mut();
-    assert_eq!(
+    assert!(
       current.is_some(),
-      true,
       "No scope to declare variable `{}` in",
       name
     );
@@ -190,9 +186,8 @@ impl<T> Scope<T> {
   }
   pub fn declare(&mut self, name: String, val: shared_ptr<T>) -> shared_ptr<T> {
     let current = self.scopes.last_mut();
-    assert_eq!(
+    assert!(
       current.is_some(),
-      true,
       "No scope to declare variable `{}` in",
       name
     );

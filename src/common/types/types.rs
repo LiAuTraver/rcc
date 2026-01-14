@@ -25,6 +25,9 @@ impl QualifiedType {
   pub fn void() -> Self {
     Self::new_unqualified(Type::void())
   }
+  pub fn bool() -> Self {
+    Self::new_unqualified(Type::bool())
+  }
 }
 impl Pointer {
   pub fn new(pointee: Box<QualifiedType>) -> Self {
@@ -117,29 +120,6 @@ impl Enum {
   }
 }
 
-macro_rules! interconvert {
-  ($inner:ident, $outer:ident) => {
-    interconvert!($inner, $outer, $inner);
-  };
-
-  ($inner:ident, $outer:ident, $variant:ident) => {
-    impl From<$inner> for $outer {
-      fn from(value: $inner) -> Self {
-        $outer::$variant(value)
-      }
-    }
-    impl TryFrom<$outer> for $inner {
-      type Error = ();
-
-      fn try_from(value: $outer) -> Result<Self, Self::Error> {
-        match value {
-          $outer::$variant(inner) => Ok(inner),
-          _ => Err(()),
-        }
-      }
-    }
-  };
-}
 use crate::breakpoint;
 use paste::paste;
 
@@ -186,6 +166,8 @@ macro_rules! make_trio_for {
     }
   };
 }
+use crate::interconvert;
+
 interconvert!(Primitive, Type);
 interconvert!(Array, Type);
 interconvert!(Pointer, Type);
@@ -231,6 +213,9 @@ impl Type {
   pub fn void() -> Self {
     Type::Primitive(Primitive::Void)
   }
+  pub fn bool() -> Self {
+    Type::Primitive(Primitive::Bool)
+  }
 }
 impl QualifiedType {
   pub fn is_modifiable(&self) -> bool {
@@ -238,5 +223,10 @@ impl QualifiedType {
   }
   pub fn is_void(&self) -> bool {
     self.unqualified_type.is_void()
+  }
+}
+impl From<Type> for QualifiedType {
+  fn from(value: Type) -> Self {
+    QualifiedType::new_unqualified(value)
   }
 }

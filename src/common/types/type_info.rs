@@ -60,10 +60,7 @@ impl TypeInfo for Primitive {
   }
 
   fn is_scalar(&self) -> bool {
-    match self {
-      Primitive::Void => false,
-      _ => true,
-    }
+    !matches!(self, Primitive::Void)
   }
 }
 

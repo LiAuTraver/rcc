@@ -1,4 +1,4 @@
-use crate::analyzer::expression::{Expression, ImplicitCast, RawExpr};
+use crate::analyzer::expression::{Expression, ImplicitCast};
 use crate::common::error::Error;
 use crate::common::types::{
   CastType, Compatibility, Pointer, Primitive, Promotion, QualifiedType, Type,
@@ -65,16 +65,16 @@ impl Expression {
     match self.expr_type.unqualified_type {
       Type::Primitive(Primitive::Bool) => Ok(self),
       Type::Primitive(ref p) if p.is_integer() => Ok(Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::IntegralToBoolean)),
-        QualifiedType::new_unqualified(Primitive::Bool.into()),
+        ImplicitCast::new(self.into(), CastType::IntegralToBoolean).into(),
+        QualifiedType::bool(),
       )),
       Type::Primitive(ref p) if p.is_floating_point() => Ok(Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::FloatingToBoolean)),
-        QualifiedType::new_unqualified(Primitive::Bool.into()),
+        ImplicitCast::new(self.into(), CastType::FloatingToBoolean).into(),
+        QualifiedType::bool(),
       )),
       Type::Primitive(Primitive::Nullptr) => Ok(Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::NullptrToBoolean)),
-        QualifiedType::new_unqualified(Primitive::Bool.into()),
+        ImplicitCast::new(self.into(), CastType::NullptrToBoolean).into(),
+        QualifiedType::bool(),
       )),
       Type::Primitive(Primitive::Void) => {
         Err(()) // void cannot be converted to bool
@@ -84,8 +84,8 @@ impl Expression {
       }
       // compare with nullptr
       Type::Pointer(_) => Ok(Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::PointerToBoolean)),
-        QualifiedType::new_unqualified(Primitive::Bool.into()),
+        ImplicitCast::new(self.into(), CastType::PointerToBoolean).into(),
+        QualifiedType::bool(),
       )),
 
       Type::Array(array) => panic!(
@@ -109,7 +109,7 @@ impl Expression {
   #[must_use]
   pub fn void_conversion(self) -> Self {
     Self::new_rvalue(
-      RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::ToVoid)),
+      ImplicitCast::new(self.into(), CastType::ToVoid).into(),
       QualifiedType::void(),
     )
   }
@@ -155,7 +155,7 @@ impl Expression {
         {
           // no need to create composite type -- pointer types are the same except for qualifiers
           Ok(Self::new_rvalue(
-            RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::BitCast)),
+            ImplicitCast::new(self.into(), CastType::BitCast).into(),
             target_type.clone(),
           ))
         } else {
@@ -166,18 +166,18 @@ impl Expression {
       (Type::Primitive(Primitive::Nullptr), Type::Primitive(Primitive::Nullptr)) => Ok(self),
       // the left operand is an atomic, qualified, or unqualified pointer, and the right operand is a null pointer constant or its type is nullptr_t;
       (Type::Pointer(_), Type::Primitive(Primitive::Nullptr)) => Ok(Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::NullptrToPointer)),
+        ImplicitCast::new(self.into(), CastType::NullptrToPointer).into(),
         target_type.clone(),
       )),
 
       // the left operand has atomic, qualified, or unqualified bool, and the right operand is a pointer or its type is nullptr_t.
       (Type::Primitive(Primitive::Bool), Type::Pointer(_)) => Ok(Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::PointerToBoolean)),
+        ImplicitCast::new(self.into(), CastType::PointerToBoolean).into(),
         target_type.clone(),
       )),
       (Type::Primitive(Primitive::Bool), Type::Primitive(Primitive::Nullptr)) => {
         Ok(Self::new_rvalue(
-          RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::NullptrToBoolean)),
+          ImplicitCast::new(self.into(), CastType::NullptrToBoolean).into(),
           target_type.clone(),
         ))
       }
@@ -196,7 +196,7 @@ impl Expression {
       // If the lvalue has qualified type, the value has the unqualified version of the type of the lvalue. perform cast from lvalue to rvalue
       let old_unqual_type = self.expr_type.unqualified_type.clone();
       Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), CastType::LValueToRValue)),
+        ImplicitCast::new(self.into(), CastType::LValueToRValue).into(),
         QualifiedType::new_unqualified(old_unqual_type),
       )
     } else {
@@ -226,18 +226,16 @@ impl Expression {
       "function type should not have qualifiers: {:?}",
       self.expr_type
     );
-    let pointer_type = Type::from(Pointer::new(
+    let pointer_type = Pointer::new(
       QualifiedType::new(
-        self.qualifiers().clone(), // should equal to empty -- functionproto never has qualifiers
+        *self.qualifiers(), // should equal to empty -- functionproto never has qualifiers
         Type::FunctionProto(function_type.clone()),
       )
       .into(),
-    ));
+    )
+    .into();
     Self::new_rvalue(
-      RawExpr::ImplicitCast(ImplicitCast::new(
-        self.into(),
-        CastType::FunctionToPointerDecay,
-      )),
+      ImplicitCast::new(self.into(), CastType::FunctionToPointerDecay).into(),
       // The pointer itself is never qualified
       QualifiedType::new_unqualified(pointer_type),
     )
@@ -259,13 +257,10 @@ impl Expression {
     );
     let pointer_type = Type::from(Pointer::new(
       // array itself should not have qualifiers, but the element qualifiers are preserved
-      array_type.element_type.clone().into(),
+      array_type.element_type.clone(),
     ));
     Self::new_rvalue(
-      RawExpr::ImplicitCast(ImplicitCast::new(
-        self.into(),
-        CastType::ArrayToPointerDecay,
-      )),
+      ImplicitCast::new(self.into(), CastType::ArrayToPointerDecay).into(),
       // The pointer itself is never qualified
       QualifiedType::new_unqualified(pointer_type),
     )
@@ -294,7 +289,7 @@ impl Expression {
     match cast_type {
       CastType::Noop => expr,
       _ => Expression::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(expr.into(), cast_type)),
+        ImplicitCast::new(expr.into(), cast_type).into(),
         target_type.clone(),
       ),
     }
@@ -304,7 +299,7 @@ impl Expression {
     match cast_type {
       CastType::Noop => self,
       cast_type => Self::new_rvalue(
-        RawExpr::ImplicitCast(ImplicitCast::new(self.into(), cast_type)),
+        ImplicitCast::new(self.into(), cast_type).into(),
         promoted_type,
       ),
     }

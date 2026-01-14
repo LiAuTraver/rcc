@@ -21,7 +21,7 @@ fn main() {
     }
   };
 
-  let file = File::open(&filename);
+  let file = File::open(filename);
   let mut s = String::new();
   _ = file.and_then(|mut f| f.read_to_string(&mut s));
 

@@ -38,7 +38,7 @@ macro_rules! type_alias_expr {
     pub type ArraySubscript = crate::common::rawexpr::ArraySubscript<$exprty>;
     pub type CompoundLiteral = crate::common::rawexpr::CompoundLiteral;
 
-    pub mod fmtrawexpr {
+    mod fmtrawexpr {
       use super::*;
       use ::std::fmt::Display;
       impl Display for RawExpr {
@@ -57,6 +57,23 @@ macro_rules! type_alias_expr {
           }
         }
       }
+    }
+    mod cvtrawexpr {
+      use crate::interconvert;
+      use super::*;
+      interconvert!(Constant, RawExpr);
+      interconvert!(Unary, RawExpr);
+      interconvert!(Binary, RawExpr);
+      interconvert!(Call, RawExpr);
+      interconvert!(MemberAccess, RawExpr);
+      interconvert!(Ternary, RawExpr);
+      interconvert!(SizeOf, RawExpr);
+      interconvert!(CStyleCast, RawExpr);
+      interconvert!(ArraySubscript, RawExpr);
+      interconvert!(CompoundLiteral, RawExpr);
+      $(
+        interconvert!($extra, RawExpr);
+      )*
     }
   };
 }

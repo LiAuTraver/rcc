@@ -173,9 +173,7 @@ impl<StmtTy, ExprTy> If<StmtTy, ExprTy> {
 
 impl<ExprTy> Return<ExprTy> {
   pub fn new(expression: Option<ExprTy>) -> Self {
-    Self {
-      expression: expression,
-    }
+    Self { expression }
   }
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-  common::environment::{Environment, Symbol, SymbolRef},
+  common::environment::{Environment, SymbolRef},
   parser::declaration::Program,
 };
 

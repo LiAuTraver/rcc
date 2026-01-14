@@ -373,7 +373,7 @@ mod fmt {
       self
         .declarations
         .iter()
-        .try_for_each(|decl| write!(f, "{}\n", decl))
+        .try_for_each(|decl| writeln!(f, "{}", decl))
     }
   }
   impl Display for Function {

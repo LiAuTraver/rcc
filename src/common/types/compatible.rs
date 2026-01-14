@@ -168,7 +168,7 @@ impl Compatibility for FunctionProto {
     Self: Sized,
   {
     if !Self::compatible(lhs, rhs) {
-      return None;
+      None
     } else {
       Some(Self::composite_unchecked(lhs, rhs))
     }

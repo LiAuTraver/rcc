@@ -11,7 +11,7 @@ pub enum Storage {
   #[strum(serialize = "register")]
   Register,
   /// - Function declarations with no storage-class specifier are always handled
-  /// as though they include an extern specifier
+  ///     as though they include an extern specifier
   /// - if variable declarations appear at file scope, they have external linkage
   /// - use extern to declare an identifier that’s already visible.
   /// ```c
@@ -23,7 +23,7 @@ pub enum Storage {
   #[strum(serialize = "extern")]
   Extern,
   /// - At file scope, the static specifier indicates that a function or variable
-  /// has internal linkage.
+  ///     has internal linkage.
   /// - At block scope(i.e., for variables), the static specifier controls storage duration, not linkage.
   #[strum(serialize = "static")]
   Static,

@@ -299,10 +299,10 @@ impl Lexer {
     let mut is_floating = false;
 
     // decimal point for base-10 numbers
-    if base == 10 && matches!(self.peek(0), '.') && matches!(self.peek(1), ('0'..='9')) {
+    if base == 10 && matches!(self.peek(0), '.') && self.peek(1).is_ascii_digit() {
       self.advance(); // consume '.'
       is_floating = true;
-      while matches!(self.peek(0), ('0'..='9')) {
+      while self.peek(0).is_ascii_digit() {
         self.advance();
       }
     }
@@ -318,10 +318,10 @@ impl Lexer {
       }
 
       // exponent digits, required
-      if !matches!(self.peek(0), '0'..='9') {
+      if !self.peek(0).is_ascii_digit() {
         self.add_error("Expected digits after exponent marker".to_string());
       } else {
-        while matches!(self.peek(0), '0'..='9') {
+        while self.peek(0).is_ascii_digit() {
           self.advance();
         }
       }
@@ -337,10 +337,10 @@ impl Lexer {
         self.advance();
       }
 
-      if !matches!(self.peek(0), '0'..='9') {
+      if !self.peek(0).is_ascii_digit() {
         self.add_error("Expected digits after hexadecimal exponent marker".to_string());
       } else {
-        while matches!(self.peek(0), '0'..='9') {
+        while self.peek(0).is_ascii_digit() {
           self.advance();
         }
       }

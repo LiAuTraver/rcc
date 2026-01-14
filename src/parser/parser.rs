@@ -583,11 +583,8 @@ impl Parser {
         }
         _ => match self.next_statement() {
           Statement::Declaration(Declaration::Variable(vardef)) => {
-            match vardef.initializer {
-              None => {
-                self.add_warning("Expect initializer in for loop variable declaration".to_string());
-              }
-              Some(_) => {}
+            if let None = vardef.initializer {
+              self.add_warning("Expect initializer in for loop variable declaration".to_string());
             }
             Some(Statement::Declaration(Declaration::Variable(vardef)))
           }
@@ -694,7 +691,7 @@ impl Parser {
       }
       Literal::Keyword(Keyword::Goto) => self.next_gotostmt(),
       Literal::Keyword(_) => Statement::Declaration(self.next_declaration()),
-      Literal::Identifier(ref ident) if self.typedefs.contains(&ident) => {
+      Literal::Identifier(ref ident) if self.typedefs.contains(ident) => {
         Statement::Declaration(self.next_declaration())
       }
       Literal::Identifier(ref ident) if self.peek(1) == &Literal::Operator(Operator::Colon) => {
