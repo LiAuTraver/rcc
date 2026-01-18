@@ -1,4 +1,4 @@
-use ::std::cell::Ref;
+use ::std::{cell::Ref, collections::HashSet};
 
 use crate::{
   analyzer::{expression::Expression, statement::Compound},
@@ -8,10 +8,10 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TranslationUnit {
-  pub declarations: Vec<Declaration>,
+  pub declarations: Vec<ExternalDeclaration>,
 }
 #[derive(Debug)]
-pub enum Declaration {
+pub enum ExternalDeclaration {
   Function(Function),
   Variable(VarDef),
 }
@@ -23,9 +23,8 @@ pub struct Function {
   pub parameters: Vec<Parameter>, // some duplication with symbol's qualified_type, but we need this for param names
   pub specifier: FunctionSpecifier,
   pub body: Option<Compound>,
-  // todo: static declarations inside function body, return path checking, goto stmt, irgen related info
-  // pub gotos: Vec<Goto>,
-  // pub labels: Vec<Label>,
+  pub labels: HashSet<String>, // just holds a name
+  pub gotos: HashSet<String>,  // just holds a name
 }
 
 #[derive(Debug)]
@@ -49,7 +48,7 @@ pub enum Initializer {
   Aggregate(Vec<Initializer>),
 }
 impl TranslationUnit {
-  pub fn new(declarations: Vec<Declaration>) -> Self {
+  pub fn new(declarations: Vec<ExternalDeclaration>) -> Self {
     Self { declarations }
   }
 }
@@ -65,6 +64,8 @@ impl Function {
       parameters,
       specifier,
       body,
+      labels: HashSet::new(),
+      gotos: HashSet::new(),
     }
   }
 
@@ -108,7 +109,8 @@ mod fmt {
   use ::std::fmt::Display;
 
   use super::{
-    Declaration, Function, Initializer, Parameter, TranslationUnit, VarDef,
+    ExternalDeclaration, Function, Initializer, Parameter, TranslationUnit,
+    VarDef,
   };
   use crate::types::Type;
 
@@ -121,11 +123,12 @@ mod fmt {
     }
   }
 
-  impl Display for Declaration {
+  impl Display for ExternalDeclaration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       match self {
-        Declaration::Function(func) => <Function as Display>::fmt(func, f),
-        Declaration::Variable(var) => <VarDef as Display>::fmt(var, f),
+        ExternalDeclaration::Function(func) =>
+          <Function as Display>::fmt(func, f),
+        ExternalDeclaration::Variable(var) => <VarDef as Display>::fmt(var, f),
       }
     }
   }

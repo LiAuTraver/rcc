@@ -21,21 +21,21 @@ pub enum RawStmt<StmtTy, DeclTy, ExprTy> {
 macro_rules! type_alias_stmt {
   ($stmtty:ident,$declty:ident,$exprty:ident) => {
     pub type RawStmt =
-      crate::common::rawstmt::RawStmt<$stmtty, $declty, $exprty>;
-    pub type Return = crate::common::rawstmt::Return<$exprty>;
-    pub type If = crate::common::rawstmt::If<$stmtty, $exprty>;
-    pub type While = crate::common::rawstmt::While<$stmtty, $exprty>;
-    pub type DoWhile = crate::common::rawstmt::DoWhile<$stmtty, $exprty>;
-    pub type For = crate::common::rawstmt::For<$stmtty, $exprty>;
-    pub type Switch = crate::common::rawstmt::Switch<$stmtty, $exprty>;
-    pub type Case = crate::common::rawstmt::Case<$stmtty, $exprty>;
-    pub type Default = crate::common::rawstmt::Default<$stmtty>;
-    pub type Label = crate::common::rawstmt::Label<$stmtty>;
-    pub type Goto = crate::common::rawstmt::Goto;
-    pub type Compound = crate::common::rawstmt::Compound<$stmtty>;
-    pub type SingleLabel = crate::common::rawstmt::SingleLabel;
-    pub type Break = crate::common::rawstmt::SingleLabel;
-    pub type Continue = crate::common::rawstmt::SingleLabel;
+      $crate::common::rawstmt::RawStmt<$stmtty, $declty, $exprty>;
+    pub type Return = $crate::common::rawstmt::Return<$exprty>;
+    pub type If = $crate::common::rawstmt::If<$stmtty, $exprty>;
+    pub type While = $crate::common::rawstmt::While<$stmtty, $exprty>;
+    pub type DoWhile = $crate::common::rawstmt::DoWhile<$stmtty, $exprty>;
+    pub type For = $crate::common::rawstmt::For<$stmtty, $exprty>;
+    pub type Switch = $crate::common::rawstmt::Switch<$stmtty, $exprty>;
+    pub type Case = $crate::common::rawstmt::Case<$stmtty, $exprty>;
+    pub type Default = $crate::common::rawstmt::Default<$stmtty>;
+    pub type Label = $crate::common::rawstmt::Label<$stmtty>;
+    pub type Goto = $crate::common::rawstmt::Goto;
+    pub type Compound = $crate::common::rawstmt::Compound<$stmtty>;
+    pub type SingleLabel = $crate::common::rawstmt::SingleLabel;
+    pub type Break = $crate::common::rawstmt::SingleLabel;
+    pub type Continue = $crate::common::rawstmt::SingleLabel;
   };
 }
 

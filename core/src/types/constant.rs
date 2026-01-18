@@ -14,6 +14,7 @@ pub enum Constant {
   Double(f64),
   Bool(bool),
   String(String),
+  Nullptr,
 }
 
 impl Constant {
@@ -195,6 +196,7 @@ impl Constant {
       Self::Float(_) => Type::Primitive(Primitive::Float),
       Self::Double(_) => Type::Primitive(Primitive::Double),
       Self::Bool(_) => Type::Primitive(Primitive::Bool),
+      Self::Nullptr => Type::Primitive(Primitive::Nullptr),
       // in C, char[N] is the type of string literal - although it's stored in read-only memory
       // in C++ it's const char[N]
       // ^^^ verified by clangd's AST
@@ -211,5 +213,49 @@ impl Constant {
 
   pub fn is_char_array(&self) -> bool {
     matches!(self, Self::String(_))
+  }
+
+  pub fn is_integer(&self) -> bool {
+    matches!(
+      self,
+      Self::Char(_)
+        | Self::Short(_)
+        | Self::Int(_)
+        | Self::LongLong(_)
+        | Self::UChar(_)
+        | Self::UShort(_)
+        | Self::UInt(_)
+        | Self::ULongLong(_)
+    )
+  }
+
+  pub fn is_floating(&self) -> bool {
+    matches!(self, Self::Float(_) | Self::Double(_))
+  }
+
+  pub fn is_boolean(&self) -> bool {
+    matches!(self, Self::Bool(_))
+  }
+
+  pub fn is_zero(&self) -> bool {
+    match self {
+      Self::Char(c) => *c == 0,
+      Self::Short(s) => *s == 0,
+      Self::Int(i) => *i == 0,
+      Self::LongLong(l) => *l == 0,
+      Self::UChar(u) => *u == 0,
+      Self::UShort(u) => *u == 0,
+      Self::UInt(u) => *u == 0,
+      Self::ULongLong(u) => *u == 0,
+      Self::Float(f) => *f == 0.0,
+      Self::Double(d) => *d == 0.0,
+      Self::Bool(b) => !*b,
+      Self::Nullptr => true,
+      Self::String(s) => s.is_empty(),
+    }
+  }
+
+  pub fn is_nullptr(&self) -> bool {
+    matches!(self, Self::Nullptr)
   }
 }

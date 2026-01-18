@@ -10,9 +10,9 @@
 // extern int k[10];
 inline static int foo(int a) { return a + 1; }
 int main(void) { //
-  // goto label;
+  goto label;
   {
-    // label:;
+  label:;
     int k = foo(0);
   }
   int f(int, int);
@@ -33,8 +33,9 @@ int main(void) { //
 }
 
 int f(int i, int j) {
-  // label:;
+label:;
   int k = i + j;
   float a = 1.0;
+  goto label;
   return k;
 }

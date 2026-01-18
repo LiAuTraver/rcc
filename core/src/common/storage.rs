@@ -74,6 +74,34 @@ impl Storage {
     }
   }
 
+  pub fn is_static(&self) -> bool {
+    matches!(self, Storage::Static)
+  }
+
+  pub fn is_extern(&self) -> bool {
+    matches!(self, Storage::Extern)
+  }
+
+  pub fn is_thread_local(&self) -> bool {
+    matches!(self, Storage::ThreadLocal)
+  }
+
+  pub fn is_constexpr(&self) -> bool {
+    matches!(self, Storage::Constexpr)
+  }
+
+  pub fn is_typedef(&self) -> bool {
+    matches!(self, Storage::Typedef)
+  }
+
+  pub fn is_automatic(&self) -> bool {
+    matches!(self, Storage::Automatic)
+  }
+
+  pub fn is_register(&self) -> bool {
+    matches!(self, Storage::Register)
+  }
+
   // pub fn try_merge_with_funcspecs(
   //   lhs: (
   //     Option<&Storage>,

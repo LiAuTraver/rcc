@@ -23,7 +23,7 @@ type StmtRes<T> = Result<T, Error>;
 pub struct Analyzer {
   program: pd::Program,
   environment: Environment,
-  current_function: Option<SymbolRef>,
+  current_function: Option<ad::Function>,
   errors: Vec<String>,
   warnings: Vec<String>,
 }
@@ -54,16 +54,9 @@ impl Analyzer {
 
   pub fn analyze(&mut self) -> DeclRes<ad::TranslationUnit> {
     self.environment.enter();
-    let mut declarations = Vec::new();
-    std::mem::take(&mut self.program)
-      .declarations
-      .into_iter()
-      .try_for_each(|decl| {
-        let analyzed_decl = self.declarations(decl)?;
-        declarations.push(analyzed_decl);
-        Ok(())
-      })?;
+    let declarations = self.externaldecl()?;
     self.environment.exit();
+
     match self.errors.is_empty() {
       true => Ok(ad::TranslationUnit::new(declarations)),
       false => err_or_debugbreak!(),
@@ -199,76 +192,76 @@ impl Analyzer {
     // todo, convert typedefs into real types
     // type_specifiers.iter_mut().for_each(|ts| {});
     type_specifiers.sort_by_key(|s| s.sort_key());
-    type Ts = pd::TypeSpecifier;
+    type TS = pd::TypeSpecifier;
     // 6.7.3.1
     let m = match type_specifiers.as_slice() {
-      [Ts::Nullptr] => Type::Primitive(Primitive::Nullptr),
-      [Ts::Void] => Type::Primitive(Primitive::Void),
+      [TS::Nullptr] => Type::Primitive(Primitive::Nullptr),
+      [TS::Void] => Type::Primitive(Primitive::Void),
 
-      [Ts::Bool] => Type::Primitive(Primitive::Bool),
+      [TS::Bool] => Type::Primitive(Primitive::Bool),
 
-      [Ts::Char] => Type::Primitive(Primitive::Char),
-      [Ts::Signed, Ts::Char] => Type::Primitive(Primitive::SChar),
-      [Ts::Unsigned, Ts::Char] => Type::Primitive(Primitive::UChar),
+      [TS::Char] => Type::Primitive(Primitive::Char),
+      [TS::Signed, TS::Char] => Type::Primitive(Primitive::SChar),
+      [TS::Unsigned, TS::Char] => Type::Primitive(Primitive::UChar),
 
-      [Ts::Short]
-      | [Ts::Short, Ts::Int]
-      | [Ts::Signed, Ts::Short]
-      | [Ts::Signed, Ts::Short, Ts::Int] => Type::Primitive(Primitive::Short),
-      [Ts::Unsigned, Ts::Short] | [Ts::Unsigned, Ts::Short, Ts::Int] =>
+      [TS::Short]
+      | [TS::Short, TS::Int]
+      | [TS::Signed, TS::Short]
+      | [TS::Signed, TS::Short, TS::Int] => Type::Primitive(Primitive::Short),
+      [TS::Unsigned, TS::Short] | [TS::Unsigned, TS::Short, TS::Int] =>
         Type::Primitive(Primitive::UShort),
 
-      [Ts::Int] | [Ts::Signed] | [Ts::Signed, Ts::Int] =>
+      [TS::Int] | [TS::Signed] | [TS::Signed, TS::Int] =>
         Type::Primitive(Primitive::Int),
-      [Ts::Unsigned] | [Ts::Unsigned, Ts::Int] =>
+      [TS::Unsigned] | [TS::Unsigned, TS::Int] =>
         Type::Primitive(Primitive::UInt),
 
-      [Ts::Long]
-      | [Ts::Long, Ts::Int]
-      | [Ts::Signed, Ts::Long]
-      | [Ts::Signed, Ts::Long, Ts::Int] => Type::Primitive(Primitive::Long),
-      [Ts::Unsigned, Ts::Long] | [Ts::Unsigned, Ts::Long, Ts::Int] =>
+      [TS::Long]
+      | [TS::Long, TS::Int]
+      | [TS::Signed, TS::Long]
+      | [TS::Signed, TS::Long, TS::Int] => Type::Primitive(Primitive::Long),
+      [TS::Unsigned, TS::Long] | [TS::Unsigned, TS::Long, TS::Int] =>
         Type::Primitive(Primitive::ULong),
 
-      [Ts::Long, Ts::Long]
-      | [Ts::Long, Ts::Long, Ts::Int]
-      | [Ts::Signed, Ts::Long, Ts::Long]
-      | [Ts::Signed, Ts::Long, Ts::Long, Ts::Int] =>
+      [TS::Long, TS::Long]
+      | [TS::Long, TS::Long, TS::Int]
+      | [TS::Signed, TS::Long, TS::Long]
+      | [TS::Signed, TS::Long, TS::Long, TS::Int] =>
         Type::Primitive(Primitive::LongLong),
-      [Ts::Unsigned, Ts::Long, Ts::Long]
-      | [Ts::Unsigned, Ts::Long, Ts::Long, Ts::Int] =>
+      [TS::Unsigned, TS::Long, TS::Long]
+      | [TS::Unsigned, TS::Long, TS::Long, TS::Int] =>
         Primitive::ULongLong.into(),
 
-      [Ts::Float] => Type::Primitive(Primitive::Float),
-      [Ts::Double] => Type::Primitive(Primitive::Double),
-      [Ts::Long, Ts::Double] => Type::Primitive(Primitive::LongDouble),
+      [TS::Float] => Type::Primitive(Primitive::Float),
+      [TS::Double] => Type::Primitive(Primitive::Double),
+      [TS::Long, TS::Double] => Type::Primitive(Primitive::LongDouble),
 
-      [Ts::Float, Ts::Complex] => Type::Primitive(Primitive::ComplexFloat),
-      [Ts::Double, Ts::Complex] => Type::Primitive(Primitive::ComplexDouble),
-      [Ts::Long, Ts::Double, Ts::Complex] =>
+      [TS::Float, TS::Complex] => Type::Primitive(Primitive::ComplexFloat),
+      [TS::Double, TS::Complex] => Type::Primitive(Primitive::ComplexDouble),
+      [TS::Long, TS::Double, TS::Complex] =>
         Type::Primitive(Primitive::ComplexLongDouble),
 
       // treat complex integers as error
-      [Ts::Char, Ts::Complex]
-      | [Ts::Signed, Ts::Char, Ts::Complex]
-      | [Ts::Unsigned, Ts::Char, Ts::Complex]
-      | [Ts::Short, Ts::Complex]
-      | [Ts::Short, Ts::Int, Ts::Complex]
-      | [Ts::Signed, Ts::Short, Ts::Complex]
-      | [Ts::Signed, Ts::Short, Ts::Int, Ts::Complex]
-      | [Ts::Unsigned, Ts::Short, Ts::Complex]
-      | [Ts::Unsigned, Ts::Short, Ts::Int, Ts::Complex]
-      | [Ts::Int, Ts::Complex]
-      | [Ts::Signed, Ts::Complex]
-      | [Ts::Signed, Ts::Int, Ts::Complex]
-      | [Ts::Unsigned, Ts::Complex]
-      | [Ts::Unsigned, Ts::Int, Ts::Complex]
-      | [Ts::Long, Ts::Complex]
-      | [Ts::Long, Ts::Int, Ts::Complex]
-      | [Ts::Signed, Ts::Long, Ts::Complex]
-      | [Ts::Signed, Ts::Long, Ts::Int, Ts::Complex]
-      | [Ts::Unsigned, Ts::Long, Ts::Complex]
-      | [Ts::Unsigned, Ts::Long, Ts::Int, Ts::Complex] => {
+      [TS::Char, TS::Complex]
+      | [TS::Signed, TS::Char, TS::Complex]
+      | [TS::Unsigned, TS::Char, TS::Complex]
+      | [TS::Short, TS::Complex]
+      | [TS::Short, TS::Int, TS::Complex]
+      | [TS::Signed, TS::Short, TS::Complex]
+      | [TS::Signed, TS::Short, TS::Int, TS::Complex]
+      | [TS::Unsigned, TS::Short, TS::Complex]
+      | [TS::Unsigned, TS::Short, TS::Int, TS::Complex]
+      | [TS::Int, TS::Complex]
+      | [TS::Signed, TS::Complex]
+      | [TS::Signed, TS::Int, TS::Complex]
+      | [TS::Unsigned, TS::Complex]
+      | [TS::Unsigned, TS::Int, TS::Complex]
+      | [TS::Long, TS::Complex]
+      | [TS::Long, TS::Int, TS::Complex]
+      | [TS::Signed, TS::Long, TS::Complex]
+      | [TS::Signed, TS::Long, TS::Int, TS::Complex]
+      | [TS::Unsigned, TS::Long, TS::Complex]
+      | [TS::Unsigned, TS::Long, TS::Int, TS::Complex] => {
         breakpoint!();
         panic!("Complex integer types are not supported");
       },
@@ -281,18 +274,31 @@ impl Analyzer {
 }
 
 impl Analyzer {
+  fn externaldecl(&mut self) -> DeclRes<Vec<ad::ExternalDeclaration>> {
+    let mut declarations = Vec::new();
+    std::mem::take(&mut self.program)
+      .declarations
+      .into_iter()
+      .try_for_each(|decl| {
+        let analyzed_decl = self.declarations(decl)?;
+        declarations.push(analyzed_decl);
+        Ok(())
+      })?;
+    Ok(declarations)
+  }
+
   pub fn declarations(
     &mut self,
     declaration: pd::Declaration,
-  ) -> DeclRes<ad::Declaration> {
+  ) -> DeclRes<ad::ExternalDeclaration> {
     match declaration {
       pd::Declaration::Function(function) => {
         let func = self.functiondecl(function)?;
-        Ok(ad::Declaration::Function(func))
+        Ok(ad::ExternalDeclaration::Function(func))
       },
       pd::Declaration::Variable(vardef) => {
         let var = self.vardef(vardef)?;
-        Ok(ad::Declaration::Variable(var))
+        Ok(ad::ExternalDeclaration::Variable(var))
       },
     }
   }
@@ -327,42 +333,62 @@ impl Analyzer {
       },
     ));
 
-    let body = body
-      .map(|b| {
-        if self.current_function.is_some() {
-          return err_or_debugbreak!(); // error: nested function definition is not allowed, this should be handled in parser
-        }
+    let name = symbol.borrow().name.clone();
 
-        self.current_function = Some(symbol.clone());
+    self.environment.symbols.declare(name, symbol.clone());
 
-        let result = self.compound_with(b, |analyzer| {
-          for parameter in &parameters {
-            if let Some(param_symbol) = &parameter.symbol {
-              analyzer.environment.symbols.declare(
-                param_symbol.borrow().name.clone(),
-                param_symbol.clone(),
-              );
-            }
-          }
-        });
+    let function =
+      ad::Function::new(symbol, parameters, function_specifier, None);
 
-        self.current_function = None;
+    match body {
+      Some(body) => match self.current_function {
+        Some(_) => err_or_debugbreak!(), // error: nested function definition is not allowed, this should be handled in parser
+        None => self.function_with_body(body, function),
+      },
+      None => Ok(function),
+    }
+  }
 
-        result
-      })
-      .transpose()?;
+  fn function_with_body(
+    &mut self,
+    body: ps::Compound,
+    function: ad::Function,
+  ) -> DeclRes<ad::Function> {
+    self.current_function = Some(function);
 
-    self
-      .environment
-      .symbols
-      .declare(symbol.borrow().name.clone(), symbol.clone());
+    self.environment.enter();
 
-    Ok(ad::Function::new(
-      symbol,
-      parameters,
-      function_specifier,
-      body,
-    ))
+    for parameter in &self.current_function.as_ref().unwrap().parameters {
+      if let Some(param_symbol) = &parameter.symbol {
+        self
+          .environment
+          .symbols
+          .declare(param_symbol.borrow().name.clone(), param_symbol.clone());
+      }
+    }
+
+    let result = (|| {
+      let mut statements = Vec::new();
+      for stmt in body.statements {
+        let analyzed_stmt = self.statement(stmt)?;
+        statements.push(analyzed_stmt);
+      }
+      Ok(astmt::Compound::new(statements))
+    })();
+
+    self.environment.exit();
+
+    self.current_function.as_mut().unwrap().body = Some(result?);
+
+    // verify labels and gotos
+    let function = std::mem::take(&mut self.current_function).unwrap();
+
+    for goto in &function.gotos {
+      if !function.labels.contains(goto) {
+        return err_or_debugbreak!(); // error: goto to undefined label
+      }
+    }
+    Ok(function)
   }
 
   pub fn vardef(&mut self, vardef: pd::VarDef) -> DeclRes<ad::VarDef> {
@@ -628,7 +654,7 @@ impl Analyzer {
   fn unary(&mut self, unary: pe::Unary) -> ExprRes {
     let pe::Unary {
       operator,
-      expression: pe_expr,
+      oprand: pe_expr,
     } = unary;
     // TODO: type conversions based on operator
     let operand = self.expression(*pe_expr)?;
@@ -1025,14 +1051,11 @@ impl Analyzer {
         Ok(astmt::Statement::DoWhile(self.dowhilestmt(do_while)?)),
       ps::Statement::For(for_stmt) =>
         Ok(astmt::Statement::For(self.forstmt(for_stmt)?)),
-      ps::Statement::Label(_) => {
-        todo!(
-          "requires adding field into analyzer struct to indicarte which function we're in"
-        )
-      },
+      ps::Statement::Label(label) =>
+        Ok(astmt::Statement::Label(self.labelstmt(label)?)),
       ps::Statement::Switch(switch) =>
         Ok(astmt::Statement::Switch(self.switchstmt(switch)?)),
-      ps::Statement::Goto(_) => todo!(),
+      ps::Statement::Goto(goto) => self.gotostmt(goto),
       ps::Statement::Break(_) => {
         todo!("ditto, but requires the compound stack")
       },
@@ -1061,8 +1084,7 @@ impl Analyzer {
     let result = (|| {
       let mut statements = Vec::new();
       for statement in compound.statements {
-        let analyzed_stmt = self.statement(statement)?;
-        statements.push(analyzed_stmt);
+        statements.push(self.statement(statement)?);
       }
       Ok(astmt::Compound::new(statements))
     })();
@@ -1094,6 +1116,7 @@ impl Analyzer {
       .current_function
       .as_ref()
       .unwrap()
+      .symbol
       .borrow()
       .qualified_type
       .unqualified_type()
@@ -1197,7 +1220,54 @@ impl Analyzer {
   }
 
   fn switchstmt(&mut self, switch: ps::Switch) -> StmtRes<astmt::Switch> {
+    let ps::Switch {
+      cases,
+      condition,
+      default,
+    } = switch;
     todo!()
+  }
+
+  fn casestmt(&mut self) -> StmtRes<astmt::Case> {
+    todo!()
+  }
+
+  fn defaultstmt(&mut self) -> StmtRes<astmt::Default> {
+    todo!()
+  }
+
+  fn labelstmt(&mut self, label: ps::Label) -> StmtRes<astmt::Label> {
+    match self.environment.is_global() {
+      true => err_or_debugbreak!(), // error: label cannot be declared in global scope
+      false => {
+        let ps::Label { name, statement } = label;
+        match self
+          .current_function
+          .as_mut()
+          .unwrap()
+          .labels
+          .insert(name.clone())
+        {
+          true => Ok(astmt::Label::new(name, self.statement(*statement)?)),
+          false => err_or_debugbreak!(), // error: duplicate label in function
+        }
+      },
+    }
+  }
+
+  fn gotostmt(&mut self, goto: ps::Goto) -> StmtRes<astmt::Statement> {
+    match self.environment.is_global() {
+      true => err_or_debugbreak!(), // error: goto cannot be declared in global scope
+      false => {
+        self
+          .current_function
+          .as_mut()
+          .unwrap()
+          .gotos
+          .insert(goto.label.clone());
+        Ok(astmt::Statement::Goto(astmt::Goto::new(goto.label)))
+      },
+    }
   }
 }
 impl ::core::default::Default for Analyzer {

@@ -23,16 +23,16 @@ macro_rules! type_alias_expr {
         $extra($extra),
       )*
     }
-    pub type Constant = crate::types::Constant;
-    pub type Unary = crate::common::rawexpr::Unary<$exprty>;
-    pub type Binary = crate::common::rawexpr::Binary<$exprty>;
-    pub type Call = crate::common::rawexpr::Call<$exprty>;
-    pub type MemberAccess = crate::common::rawexpr::MemberAccess<$exprty>;
-    pub type Ternary = crate::common::rawexpr::Ternary<$exprty>;
-    pub type SizeOf = crate::common::rawexpr::SizeOf<$exprty, $typety>;
-    pub type CStyleCast = crate::common::rawexpr::CStyleCast<$exprty>;
-    pub type ArraySubscript = crate::common::rawexpr::ArraySubscript<$exprty>;
-    pub type CompoundLiteral = crate::common::rawexpr::CompoundLiteral;
+    pub type Constant = $crate::types::Constant;
+    pub type Unary = $crate::common::rawexpr::Unary<$exprty>;
+    pub type Binary = $crate::common::rawexpr::Binary<$exprty>;
+    pub type Call = $crate::common::rawexpr::Call<$exprty>;
+    pub type MemberAccess = $crate::common::rawexpr::MemberAccess<$exprty>;
+    pub type Ternary = $crate::common::rawexpr::Ternary<$exprty>;
+    pub type SizeOf = $crate::common::rawexpr::SizeOf<$exprty, $typety>;
+    pub type CStyleCast = $crate::common::rawexpr::CStyleCast<$exprty>;
+    pub type ArraySubscript = $crate::common::rawexpr::ArraySubscript<$exprty>;
+    pub type CompoundLiteral = $crate::common::rawexpr::CompoundLiteral;
 
     mod fmtrawexpr {
       use super::*;
@@ -76,7 +76,7 @@ macro_rules! type_alias_expr {
 #[derive(Debug)]
 pub struct Unary<ExprTy> {
   pub operator: Operator,
-  pub expression: Box<ExprTy>,
+  pub oprand: Box<ExprTy>,
 }
 #[derive(Debug)]
 pub struct Binary<ExprTy> {
@@ -109,7 +109,7 @@ pub enum SizeOf<ExprTy, TypeTy> {
 #[derive(Debug)]
 pub struct CStyleCast<ExprTy> {
   pub target_type: QualifiedType,
-  pub expression: Box<ExprTy>,
+  pub expr: Box<ExprTy>,
 }
 #[derive(Debug)]
 pub struct ArraySubscript<ExprTy> {
@@ -123,18 +123,18 @@ pub struct CompoundLiteral {
 }
 
 impl<ExprTy> Unary<ExprTy> {
-  pub fn from_operator(operator: Operator, expression: ExprTy) -> Option<Self> {
+  pub fn from_operator(operator: Operator, oprand: ExprTy) -> Option<Self> {
     match operator.unary() {
       true => Some(Self {
         operator,
-        expression: Box::new(expression),
+        oprand: Box::new(oprand),
       }),
       false => None,
     }
   }
 
-  pub fn new(operator: Operator, expression: ExprTy) -> Self {
-    Self::from_operator(operator, expression).unwrap()
+  pub fn new(operator: Operator, oprand: ExprTy) -> Self {
+    Self::from_operator(operator, oprand).unwrap()
   }
 }
 
@@ -195,7 +195,7 @@ mod fmt {
   }
   impl<ExprTy: Display> Display for Unary<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "({} {})", self.expression, self.operator)
+      write!(f, "({} {})", self.oprand, self.operator)
     }
   }
   impl<ExprTy: Display> Display for Binary<ExprTy> {

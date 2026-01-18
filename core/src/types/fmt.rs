@@ -108,6 +108,7 @@ impl Display for Constant {
       Constant::Double(fl) => write!(f, "{}", fl),
       Constant::Bool(b) => write!(f, "{}", b),
       Constant::String(s) => write!(f, "\"{}\"", s),
+      Constant::Nullptr => write!(f, "nullptr"),
     }
   }
 }

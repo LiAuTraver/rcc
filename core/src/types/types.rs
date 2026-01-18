@@ -33,7 +33,7 @@ pub enum Type {
   }
 }
 ::bitflags::bitflags! {
-  #[derive(Debug,Clone,Copy,PartialEq,Eq)]
+  #[derive(Debug,Clone,Copy,PartialEq,Eq,Default)]
   pub struct FunctionSpecifier : u8 {
     const Inline = 0x01;
     const Noreturn = 0x10;

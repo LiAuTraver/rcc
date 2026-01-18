@@ -1,5 +1,5 @@
 use crate::{
-  analyzer::{declaration::Declaration, expression::Expression},
+  analyzer::{declaration::ExternalDeclaration, expression::Expression},
   type_alias_stmt,
 };
 // no additional info like that one we do in Expression?
@@ -9,7 +9,7 @@ pub enum Statement {
   Empty(),
   Return(Return),
   Expression(Expression),
-  Declaration(Declaration),
+  Declaration(ExternalDeclaration),
   Compound(Compound),
   If(If),
   While(While),
@@ -22,7 +22,7 @@ pub enum Statement {
   Continue(SingleLabel),
 }
 
-type_alias_stmt!(Statement, Declaration, Expression);
+type_alias_stmt!(Statement, ExternalDeclaration, Expression);
 
 mod fmt {
   use ::std::fmt::Display;
