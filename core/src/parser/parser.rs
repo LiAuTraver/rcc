@@ -746,8 +746,14 @@ impl Parser {
     }
 
     self.must_get_op::<{ Operator::RightBrace }>();
+    let switch_stmt = Switch::new(
+      condition,
+      cases,
+      default,
+      self.loop_labels.last().unwrap().clone(),
+    );
     self.loop_labels.pop();
-    Switch::new(condition, cases, default)
+    switch_stmt
   }
 
   fn next_statement(&mut self) -> Statement {

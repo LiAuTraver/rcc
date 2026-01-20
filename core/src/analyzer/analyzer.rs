@@ -3,7 +3,7 @@ use lilac_utils::breakpoint;
 use crate::{
   analyzer::{declaration as ad, expression as ae, statement as astmt},
   common::{
-    environment::{Environment, Symbol, SymbolRef, VarDeclKind},
+    environment::{Environment, Symbol, VarDeclKind},
     error::Error,
     operator::{Category, Operator},
     storage::Storage,
@@ -335,7 +335,7 @@ impl Analyzer {
 
     let name = symbol.borrow().name.clone();
 
-    self.environment.symbols.declare(name, symbol.clone());
+    self.environment.declare_symbol(name, symbol.clone());
 
     let function =
       ad::Function::new(symbol, parameters, function_specifier, None);
@@ -360,10 +360,10 @@ impl Analyzer {
 
     for parameter in &self.current_function.as_ref().unwrap().parameters {
       if let Some(param_symbol) = &parameter.symbol {
-        self
-          .environment
-          .symbols
-          .declare(param_symbol.borrow().name.clone(), param_symbol.clone());
+        self.environment.declare_symbol(
+          param_symbol.borrow().name.clone(),
+          param_symbol.clone(),
+        );
       }
     }
 
@@ -489,10 +489,7 @@ impl Analyzer {
         },
       }
     } else {
-      self
-        .environment
-        .symbols
-        .declare(name, vardef.symbol.clone());
+      self.environment.declare_symbol(name, vardef.symbol.clone());
       Ok(vardef)
     }
   }
@@ -621,8 +618,8 @@ impl Analyzer {
     ))
   }
 
-  fn cast(&mut self, cast: pe::CStyleCast) -> ExprRes {
-    todo!()
+  fn cast(&mut self, _: pe::CStyleCast) -> ExprRes {
+    unimplemented!()
   }
 
   fn variable(&mut self, variable: pe::Variable) -> ExprRes {
@@ -656,7 +653,6 @@ impl Analyzer {
       operator,
       oprand: pe_expr,
     } = unary;
-    // TODO: type conversions based on operator
     let operand = self.expression(*pe_expr)?;
     match operator {
       Operator::Ampersand => self.addressof(operator, operand),
@@ -1056,16 +1052,15 @@ impl Analyzer {
       ps::Statement::Switch(switch) =>
         Ok(astmt::Statement::Switch(self.switchstmt(switch)?)),
       ps::Statement::Goto(goto) => self.gotostmt(goto),
-      ps::Statement::Break(_) => {
-        todo!("ditto, but requires the compound stack")
-      },
-      ps::Statement::Continue(_) => todo!("ditto"),
+      ps::Statement::Break(break_stmt) => self.breakstmt(break_stmt),
+      ps::Statement::Continue(continue_stmt) =>
+        self.continuestmt(continue_stmt),
     }
   }
 
+  #[inline]
   fn compound(&mut self, compound: ps::Compound) -> StmtRes<astmt::Compound> {
-    const IDENTITY: fn(&mut Analyzer) = |_| {};
-    self.compound_with(compound, IDENTITY)
+    self.compound_with(compound, |_| {})
   }
 
   fn compound_with<Fn>(
@@ -1171,7 +1166,7 @@ impl Analyzer {
     let ps::While {
       condition,
       body,
-      label,
+      tag: label,
     } = while_stmt;
     let analyzed_condition = self.expression(condition)?;
     let analyzed_body = Box::new(self.statement(*body)?);
@@ -1182,7 +1177,7 @@ impl Analyzer {
     let ps::DoWhile {
       body,
       condition,
-      label,
+      tag: label,
     } = do_while;
     let analyzed_body = Box::new(self.statement(*body)?);
     let analyzed_condition = self.expression(condition)?;
@@ -1199,7 +1194,7 @@ impl Analyzer {
       condition,
       increment,
       body,
-      label,
+      tag: label,
     } = for_stmt;
     let analyzed_initializer = initializer
       .map(|init| self.statement(*init))
@@ -1224,16 +1219,46 @@ impl Analyzer {
       cases,
       condition,
       default,
+      tag,
     } = switch;
-    todo!()
+    let analyzed_condition = self.expression(condition)?;
+    let mut analyzed_cases = Vec::new();
+    for case in cases {
+      analyzed_cases.push(self.casestmt(case)?);
+    }
+    let analyzed_default = match default {
+      Some(default) => Some(self.defaultstmt(default)?),
+      None => None,
+    };
+    Ok(astmt::Switch::new(
+      analyzed_condition,
+      analyzed_cases,
+      analyzed_default,
+      tag,
+    ))
   }
 
-  fn casestmt(&mut self) -> StmtRes<astmt::Case> {
-    todo!()
+  fn casestmt(&mut self, case: ps::Case) -> StmtRes<astmt::Case> {
+    let ps::Case { body, value } = case;
+    let analyzed_value = self.expression(value)?;
+    if !analyzed_value.is_integer_constant() {
+      Err(()) // error: case value must be an integer constant
+    } else {
+      let mut analyzed_body = vec![];
+      for stmt in body {
+        analyzed_body.push(self.statement(stmt)?);
+      }
+      Ok(astmt::Case::new(analyzed_value, analyzed_body))
+    }
   }
 
-  fn defaultstmt(&mut self) -> StmtRes<astmt::Default> {
-    todo!()
+  fn defaultstmt(&mut self, default: ps::Default) -> StmtRes<astmt::Default> {
+    let ps::Default { body } = default;
+    let mut analyzed_body = vec![];
+    for stmt in body {
+      analyzed_body.push(self.statement(stmt)?);
+    }
+    Ok(astmt::Default::new(analyzed_body))
   }
 
   fn labelstmt(&mut self, label: ps::Label) -> StmtRes<astmt::Label> {
@@ -1269,6 +1294,25 @@ impl Analyzer {
       },
     }
   }
+
+  fn breakstmt(&mut self, break_stmt: ps::Break) -> StmtRes<astmt::Statement> {
+    match self.environment.is_global() {
+      true => err_or_debugbreak!(), // error: should be handled in parser
+      false => Ok(astmt::Statement::Break(astmt::Break::new(break_stmt.tag))),
+    }
+  }
+
+  fn continuestmt(
+    &mut self,
+    continue_stmt: ps::Continue,
+  ) -> StmtRes<astmt::Statement> {
+    match self.environment.is_global() {
+      true => err_or_debugbreak!(), // error: should be handled in parser
+      false => Ok(astmt::Statement::Continue(astmt::Continue::new(
+        continue_stmt.tag,
+      ))),
+    }
+  }
 }
 impl ::core::default::Default for Analyzer {
   fn default() -> Self {
@@ -1289,11 +1333,7 @@ mod test {
     use crate::{analyzer::Analyzer, parser::expression as pe};
     // 1 + 1
     let mut analyzer = Analyzer::default();
-    let expr = pe::Expression::Binary(pe::Binary {
-      left: pe::Expression::Constant(pe::Constant::Short(1)).into(),
-      operator: crate::common::operator::Operator::Plus,
-      right: pe::Expression::Constant(pe::Constant::Int(1)).into(),
-    });
+    let expr = pe::Expression::oneplusone();
     let analyzed_expr = analyzer.expression(expr);
 
     assert!(analyzed_expr.is_ok());

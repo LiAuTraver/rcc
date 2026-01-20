@@ -24,15 +24,15 @@ macro_rules! type_alias_expr {
       )*
     }
     pub type Constant = $crate::types::Constant;
-    pub type Unary = $crate::common::rawexpr::Unary<$exprty>;
-    pub type Binary = $crate::common::rawexpr::Binary<$exprty>;
-    pub type Call = $crate::common::rawexpr::Call<$exprty>;
-    pub type MemberAccess = $crate::common::rawexpr::MemberAccess<$exprty>;
-    pub type Ternary = $crate::common::rawexpr::Ternary<$exprty>;
-    pub type SizeOf = $crate::common::rawexpr::SizeOf<$exprty, $typety>;
-    pub type CStyleCast = $crate::common::rawexpr::CStyleCast<$exprty>;
-    pub type ArraySubscript = $crate::common::rawexpr::ArraySubscript<$exprty>;
-    pub type CompoundLiteral = $crate::common::rawexpr::CompoundLiteral;
+    pub type Unary = $crate::common::rawexpr::RawUnary<$exprty>;
+    pub type Binary = $crate::common::rawexpr::RawBinary<$exprty>;
+    pub type Call = $crate::common::rawexpr::RawCall<$exprty>;
+    pub type MemberAccess = $crate::common::rawexpr::RawMemberAccess<$exprty>;
+    pub type Ternary = $crate::common::rawexpr::RawTernary<$exprty>;
+    pub type SizeOf = $crate::common::rawexpr::RawSizeOf<$exprty, $typety>;
+    pub type CStyleCast = $crate::common::rawexpr::RawCStyleCast<$exprty>;
+    pub type ArraySubscript = $crate::common::rawexpr::RawArraySubscript<$exprty>;
+    pub type CompoundLiteral = $crate::common::rawexpr::RawCompoundLiteral;
 
     mod fmtrawexpr {
       use super::*;
@@ -74,55 +74,55 @@ macro_rules! type_alias_expr {
 }
 
 #[derive(Debug)]
-pub struct Unary<ExprTy> {
+pub struct RawUnary<ExprTy> {
   pub operator: Operator,
   pub oprand: Box<ExprTy>,
 }
 #[derive(Debug)]
-pub struct Binary<ExprTy> {
+pub struct RawBinary<ExprTy> {
   pub operator: Operator,
   pub left: Box<ExprTy>,
   pub right: Box<ExprTy>,
 }
 #[derive(Debug)]
-pub struct Call<ExprTy> {
+pub struct RawCall<ExprTy> {
   pub callee: Box<ExprTy>,
   pub arguments: Vec<ExprTy>,
 }
 #[derive(Debug)]
-pub struct MemberAccess<ExprTy> {
+pub struct RawMemberAccess<ExprTy> {
   pub object: Box<ExprTy>,
   pub member: String,
 }
 #[derive(Debug)]
-pub struct Ternary<ExprTy> {
+pub struct RawTernary<ExprTy> {
   pub condition: Box<ExprTy>,
   pub then_expr: Box<ExprTy>,
   pub else_expr: Box<ExprTy>,
 }
 #[derive(Debug)]
-pub enum SizeOf<ExprTy, TypeTy> {
+pub enum RawSizeOf<ExprTy, TypeTy> {
   Type(TypeTy), // ignore for now
   Expression(Box<ExprTy>),
 }
 
 #[derive(Debug)]
-pub struct CStyleCast<ExprTy> {
+pub struct RawCStyleCast<ExprTy> {
   pub target_type: QualifiedType,
   pub expr: Box<ExprTy>,
 }
 #[derive(Debug)]
-pub struct ArraySubscript<ExprTy> {
+pub struct RawArraySubscript<ExprTy> {
   pub array: Box<ExprTy>,
   pub index: Box<ExprTy>,
 }
 #[derive(Debug)]
-pub struct CompoundLiteral {
+pub struct RawCompoundLiteral {
   pub target_type: QualifiedType,
   // pub initializer: Initializer,
 }
 
-impl<ExprTy> Unary<ExprTy> {
+impl<ExprTy> RawUnary<ExprTy> {
   pub fn from_operator(operator: Operator, oprand: ExprTy) -> Option<Self> {
     match operator.unary() {
       true => Some(Self {
@@ -138,7 +138,7 @@ impl<ExprTy> Unary<ExprTy> {
   }
 }
 
-impl<ExprTy> Binary<ExprTy> {
+impl<ExprTy> RawBinary<ExprTy> {
   pub fn from_operator(
     operator: Operator,
     left: ExprTy,
@@ -158,7 +158,7 @@ impl<ExprTy> Binary<ExprTy> {
     Self::from_operator(operator, left, right).unwrap()
   }
 }
-impl<ExprTy> Ternary<ExprTy> {
+impl<ExprTy> RawTernary<ExprTy> {
   pub fn new(condition: ExprTy, then_expr: ExprTy, else_expr: ExprTy) -> Self {
     Self {
       condition: Box::new(condition),
@@ -168,7 +168,7 @@ impl<ExprTy> Ternary<ExprTy> {
   }
 }
 
-impl<ExprTy> Call<ExprTy> {
+impl<ExprTy> RawCall<ExprTy> {
   pub fn new(callee: ExprTy, arguments: Vec<ExprTy>) -> Self {
     Self {
       callee: Box::new(callee),
@@ -179,9 +179,9 @@ impl<ExprTy> Call<ExprTy> {
 mod fmt {
   use ::std::fmt::Display;
 
-  use super::{Binary, Call, Ternary, Unary};
+  use super::{RawBinary, RawCall, RawTernary, RawUnary};
 
-  impl<ExprTy: Display> Display for Call<ExprTy> {
+  impl<ExprTy: Display> Display for RawCall<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}(", self.callee)?;
       for (i, arg) in self.arguments.iter().enumerate() {
@@ -193,17 +193,17 @@ mod fmt {
       write!(f, ")")
     }
   }
-  impl<ExprTy: Display> Display for Unary<ExprTy> {
+  impl<ExprTy: Display> Display for RawUnary<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "({} {})", self.oprand, self.operator)
     }
   }
-  impl<ExprTy: Display> Display for Binary<ExprTy> {
+  impl<ExprTy: Display> Display for RawBinary<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "({} {} {})", self.left, self.right, self.operator)
     }
   }
-  impl<ExprTy: Display> Display for Ternary<ExprTy> {
+  impl<ExprTy: Display> Display for RawTernary<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
         f,

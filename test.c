@@ -20,15 +20,15 @@ int main(void) { //
   // INT x = 5;
   int x = 0;
   static int y = 1;
-  // switch (x) {
-  // case 0:
-  // case 1:
-  //   y = y + 1;
-  //   x = x + 1;
-  //   break;
-  // default:
-  //   y = y + 2;
-  // }
+  switch (x) {
+  case 0:
+  case 1:
+    y = y + 1;
+    x = x + 1;
+    break;
+  default:
+    y = y + 2;
+  }
   return f(2, 3);
 }
 

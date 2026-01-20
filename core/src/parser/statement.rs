@@ -16,8 +16,8 @@ pub enum Statement {
   Switch(Switch),
   Goto(Goto),
   Label(Label),
-  Break(SingleLabel),
-  Continue(SingleLabel),
+  Break(Break),
+  Continue(Continue),
 }
 
 type_alias_stmt!(Statement, Declaration, Expression);
@@ -47,8 +47,8 @@ mod fmt {
         Statement::Switch(switch_stmt) => write!(f, "{}", switch_stmt),
         Statement::Goto(goto_stmt) => write!(f, "{}", goto_stmt),
         Statement::Label(label_stmt) => write!(f, "{}", label_stmt),
-        Statement::Break(break_stmt) => write!(f, "{};", break_stmt),
-        Statement::Continue(continue_stmt) => write!(f, "{};", continue_stmt),
+        Statement::Break(break_stmt) => write!(f, "{}", break_stmt),
+        Statement::Continue(continue_stmt) => write!(f, "{}", continue_stmt),
       }
     }
   }

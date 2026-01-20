@@ -4,5 +4,7 @@ pub mod expression;
 #[allow(unused_variables)]
 pub mod parser;
 pub mod statement;
+#[cfg(test)]
+pub mod testing;
 
 pub use self::parser::Parser;

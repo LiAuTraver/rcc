@@ -18,8 +18,8 @@ pub enum Statement {
   Switch(Switch),
   Goto(Goto),
   Label(Label),
-  Break(SingleLabel),
-  Continue(SingleLabel),
+  Break(Break),
+  Continue(Continue),
 }
 
 type_alias_stmt!(Statement, ExternalDeclaration, Expression);
@@ -32,7 +32,7 @@ mod fmt {
   impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       match self {
-        Statement::Empty() => write!(f, "<empty statement>"),
+        Statement::Empty() => write!(f, "<noop>"),
         Statement::Return(ret) => write!(f, "{}", ret),
         Statement::Expression(expr) => write!(f, "{};", expr),
         Statement::Declaration(decl) => write!(f, "{}", decl),
@@ -44,8 +44,8 @@ mod fmt {
         Statement::Switch(switch_stmt) => write!(f, "{}", switch_stmt),
         Statement::Goto(goto_stmt) => write!(f, "{}", goto_stmt),
         Statement::Label(label_stmt) => write!(f, "{}", label_stmt),
-        Statement::Break(break_stmt) => write!(f, "{};", break_stmt),
-        Statement::Continue(continue_stmt) => write!(f, "{};", continue_stmt),
+        Statement::Break(break_stmt) => write!(f, "{}", break_stmt),
+        Statement::Continue(continue_stmt) => write!(f, "{}", continue_stmt),
       }
     }
   }

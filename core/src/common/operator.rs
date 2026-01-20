@@ -279,4 +279,15 @@ impl Operator {
         | Operator::RightShiftAssign
     )
   }
+
+  pub fn is_arithmetic(&self) -> bool {
+    matches!(
+      self,
+      Operator::Plus
+        | Operator::Minus
+        | Operator::Star
+        | Operator::Slash
+        | Operator::Percent
+    )
+  }
 }

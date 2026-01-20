@@ -1,5 +1,5 @@
 use crate::{
-  analyzer::expression::{Expression, RawExpr, SizeOf},
+  analyzer::expression::{Expression, RawExpr, SizeOf, Variable},
   common::{operator::Operator, storage::Storage},
   types::Type,
 };
@@ -25,21 +25,27 @@ impl Expression {
       RawExpr::Unary(unary) =>
         matches!(unary.operator, Operator::Plus | Operator::Minus)
           && unary.oprand.is_integer_constant(),
-      _ => self.is_named_integer_constant(),
+      RawExpr::Variable(variable) =>
+        Self::is_named_integer_constant_unchecked(variable),
+      _ => false,
     }
   }
 
+  // todo: enum constant
   fn is_named_integer_constant(&self) -> bool {
     match self.raw_expr() {
-      RawExpr::Variable(variable) => {
-        let sym = variable.name.borrow();
-
-        (sym.qualified_type.unqualified_type().is_integer()
-          || sym.qualified_type.unqualified_type().as_array().is_some())
-          && matches!(sym.storage_class, Storage::Constexpr)
-      },
+      RawExpr::Variable(variable) =>
+        Self::is_named_integer_constant_unchecked(variable),
       _ => false,
     }
+  }
+
+  fn is_named_integer_constant_unchecked(variable: &Variable) -> bool {
+    let sym = variable.name.borrow();
+
+    (sym.qualified_type.unqualified_type().is_integer()
+      || sym.qualified_type.unqualified_type().as_array().is_some())
+      && matches!(sym.storage_class, Storage::Constexpr)
   }
 
   /// 6.6.7

@@ -70,6 +70,10 @@ impl Expression {
     &self.raw_expr
   }
 
+  pub fn raw_expr_mut(&mut self) -> &mut RawExpr {
+    &mut self.raw_expr
+  }
+
   pub fn value_category(&self) -> ValueCategory {
     self.value_category
   }

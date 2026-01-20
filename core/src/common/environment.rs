@@ -58,12 +58,14 @@ pub struct Symbol {
 }
 #[derive(Debug)]
 pub struct Environment {
-  pub symbols: Scope<Symbol>,
+  symbols: Scope<Symbol>,
+  cache: HashMap<String, SymbolRef>,
 }
 impl Environment {
   pub fn new() -> Self {
     Self {
       symbols: Scope::new(),
+      cache: HashMap::new(),
     }
   }
 
@@ -71,21 +73,49 @@ impl Environment {
     self.symbols.is_top_level()
   }
 
+  // does NOT clear cache
   pub fn enter(&mut self) {
     self.symbols.push_scope();
   }
 
   pub fn exit(&mut self) {
     self.symbols.pop_scope();
+    self.cache.clear();
   }
 
-  pub fn find(&self, name: &str) -> Option<shared_ptr<Symbol>> {
-    self.symbols.get(name)
+  /// look up symbol and potentially cache it
+  pub fn find(&mut self, name: &str) -> Option<shared_ptr<Symbol>> {
+    match self.cache.get(name) {
+      Some(sym) => Some(sym.clone()),
+      None => {
+        let sym = self.symbols.get(name);
+        if let Some(s) = &sym {
+          self.cache.insert(name.to_string(), s.clone());
+        }
+        sym
+      },
+    }
+  }
+
+  pub fn declare_symbol(
+    &mut self,
+    name: String,
+    symbol: shared_ptr<Symbol>,
+  ) -> shared_ptr<Symbol> {
+    // overwrite cache
+    self.cache.insert(name.clone(), symbol.clone());
+    self.symbols.declare(name, symbol.clone())
   }
 }
 impl Symbol {
+  #[inline]
   pub fn is_typedef(&self) -> bool {
-    matches!(self.storage_class, Storage::Typedef)
+    self.storage_class.is_typedef()
+  }
+
+  #[inline]
+  pub fn is_constexpr(&self) -> bool {
+    self.storage_class.is_constexpr()
   }
 
   pub fn new(

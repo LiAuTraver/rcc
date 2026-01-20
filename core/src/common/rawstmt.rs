@@ -1,149 +1,157 @@
 #[derive(Debug)]
 pub enum RawStmt<StmtTy, DeclTy, ExprTy> {
   Empty,
-  Return(Return<ExprTy>),
+  Return(RawReturn<ExprTy>),
   // here only vardef, funcdef only permitted in top-level declarations hence it's handled there
   Declaration(DeclTy),
   Expression(ExprTy),
-  Compound(Compound<StmtTy>),
-  If(If<StmtTy, ExprTy>),
-  While(While<StmtTy, ExprTy>),
-  For(For<StmtTy, ExprTy>),
-  DoWhile(DoWhile<StmtTy, ExprTy>),
-  Switch(Switch<StmtTy, ExprTy>),
-  Goto(Goto),
-  Label(Label<StmtTy>),
-  Break(SingleLabel),
-  Continue(SingleLabel),
+  Compound(RawCompound<StmtTy>),
+  If(RawIf<StmtTy, ExprTy>),
+  While(RawWhile<StmtTy, ExprTy>),
+  For(RawFor<StmtTy, ExprTy>),
+  DoWhile(RawDoWhile<StmtTy, ExprTy>),
+  Switch(RawSwitch<StmtTy, ExprTy>),
+  Goto(RawGoto),
+  Label(RawLabel<StmtTy>),
+  Break(RawBreak),
+  Continue(RawContinue),
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! type_alias_stmt {
   ($stmtty:ident,$declty:ident,$exprty:ident) => {
+    #[allow(dead_code)]
     pub type RawStmt =
       $crate::common::rawstmt::RawStmt<$stmtty, $declty, $exprty>;
-    pub type Return = $crate::common::rawstmt::Return<$exprty>;
-    pub type If = $crate::common::rawstmt::If<$stmtty, $exprty>;
-    pub type While = $crate::common::rawstmt::While<$stmtty, $exprty>;
-    pub type DoWhile = $crate::common::rawstmt::DoWhile<$stmtty, $exprty>;
-    pub type For = $crate::common::rawstmt::For<$stmtty, $exprty>;
-    pub type Switch = $crate::common::rawstmt::Switch<$stmtty, $exprty>;
-    pub type Case = $crate::common::rawstmt::Case<$stmtty, $exprty>;
-    pub type Default = $crate::common::rawstmt::Default<$stmtty>;
-    pub type Label = $crate::common::rawstmt::Label<$stmtty>;
-    pub type Goto = $crate::common::rawstmt::Goto;
-    pub type Compound = $crate::common::rawstmt::Compound<$stmtty>;
-    pub type SingleLabel = $crate::common::rawstmt::SingleLabel;
-    pub type Break = $crate::common::rawstmt::SingleLabel;
-    pub type Continue = $crate::common::rawstmt::SingleLabel;
+    pub type Return = $crate::common::rawstmt::RawReturn<$exprty>;
+    pub type If = $crate::common::rawstmt::RawIf<$stmtty, $exprty>;
+    pub type While = $crate::common::rawstmt::RawWhile<$stmtty, $exprty>;
+    pub type DoWhile = $crate::common::rawstmt::RawDoWhile<$stmtty, $exprty>;
+    pub type For = $crate::common::rawstmt::RawFor<$stmtty, $exprty>;
+    pub type Switch = $crate::common::rawstmt::RawSwitch<$stmtty, $exprty>;
+    pub type Case = $crate::common::rawstmt::RawCase<$stmtty, $exprty>;
+    pub type Default = $crate::common::rawstmt::RawDefault<$stmtty>;
+    pub type Label = $crate::common::rawstmt::RawLabel<$stmtty>;
+    pub type Goto = $crate::common::rawstmt::RawGoto;
+    pub type Compound = $crate::common::rawstmt::RawCompound<$stmtty>;
+    pub type Break = $crate::common::rawstmt::RawBreak;
+    pub type Continue = $crate::common::rawstmt::RawContinue;
   };
 }
 
 #[derive(Debug)]
-pub struct Return<ExprTy> {
+pub struct RawReturn<ExprTy> {
   pub expression: Option<ExprTy>,
 }
 
 #[derive(Debug)]
-pub struct If<StmtTy, ExprTy> {
+pub struct RawIf<StmtTy, ExprTy> {
   pub condition: ExprTy,
   pub then_branch: Box<StmtTy>,
   pub else_branch: Option<Box<StmtTy>>,
 }
 
 #[derive(Debug)]
-pub struct While<StmtTy, ExprTy> {
+pub struct RawWhile<StmtTy, ExprTy> {
   pub condition: ExprTy,
   pub body: Box<StmtTy>,
-  pub label: String,
+  pub tag: String,
 }
 
 #[derive(Debug)]
-pub struct DoWhile<StmtTy, ExprTy> {
+pub struct RawDoWhile<StmtTy, ExprTy> {
   pub body: Box<StmtTy>,
   pub condition: ExprTy,
-  pub label: String,
+  pub tag: String,
 }
 
 #[derive(Debug)]
-pub struct For<StmtTy, ExprTy> {
+pub struct RawFor<StmtTy, ExprTy> {
   pub initializer: Option<Box<StmtTy>>,
   pub condition: Option<ExprTy>,
   pub increment: Option<ExprTy>,
   pub body: Box<StmtTy>,
-  pub label: String,
+  pub tag: String,
 }
 
 #[derive(Debug)]
-pub struct Switch<StmtTy, ExprTy> {
+pub struct RawSwitch<StmtTy, ExprTy> {
   pub condition: ExprTy,
-  pub cases: Vec<Case<StmtTy, ExprTy>>,
-  pub default: Option<Default<StmtTy>>,
+  pub cases: Vec<RawCase<StmtTy, ExprTy>>,
+  pub default: Option<RawDefault<StmtTy>>,
+  pub tag: String,
 }
 #[derive(Debug)]
-pub struct Case<StmtTy, ExprTy> {
+pub struct RawCase<StmtTy, ExprTy> {
   pub value: ExprTy, // Must be constant integer expression
   pub body: Vec<StmtTy>,
 }
 
 #[derive(Debug)]
-pub struct Default<StmtTy> {
+pub struct RawDefault<StmtTy> {
   pub body: Vec<StmtTy>,
 }
 
 #[derive(Debug)]
-pub struct Label<StmtTy> {
+pub struct RawLabel<StmtTy> {
   pub name: String,
   pub statement: Box<StmtTy>,
 }
 
 #[derive(Debug)]
-pub struct Goto {
+pub struct RawGoto {
   pub label: String,
 }
 
 #[derive(Debug)]
-pub struct Compound<StmtTy> {
+pub struct RawCompound<StmtTy> {
   pub statements: Vec<StmtTy>,
 }
 
 #[derive(Debug)]
-pub struct SingleLabel {
-  pub name: String,
+pub struct RawBreak {
+  pub tag: String,
 }
 
-impl Goto {
+#[derive(Debug)]
+pub struct RawContinue {
+  pub tag: String,
+}
+
+impl RawGoto {
   pub fn new(label: String) -> Self {
     Self { label }
   }
 }
 
-impl<StmtTy> Compound<StmtTy> {
+impl<StmtTy> RawCompound<StmtTy> {
   pub fn new(statements: Vec<StmtTy>) -> Self {
     Self { statements }
   }
 }
-impl<StmtTy> ::core::default::Default for Compound<StmtTy> {
+impl<StmtTy> ::core::default::Default for RawCompound<StmtTy> {
   fn default() -> Self {
     Self { statements: vec![] }
   }
 }
 
-impl<StmtTy, ExprTy> Switch<StmtTy, ExprTy> {
+impl<StmtTy, ExprTy> RawSwitch<StmtTy, ExprTy> {
   pub fn new(
     condition: ExprTy,
-    cases: Vec<Case<StmtTy, ExprTy>>,
-    default: Option<Default<StmtTy>>,
+    cases: Vec<RawCase<StmtTy, ExprTy>>,
+    default: Option<RawDefault<StmtTy>>,
+    tag: String,
   ) -> Self {
     Self {
       condition,
       cases,
       default,
+      tag,
     }
   }
 }
 
-impl<StmtTy> Label<StmtTy> {
+impl<StmtTy> RawLabel<StmtTy> {
   pub fn new(name: String, statement: StmtTy) -> Self {
     Self {
       name,
@@ -152,13 +160,13 @@ impl<StmtTy> Label<StmtTy> {
   }
 }
 
-impl<StmtTy, ExprTy> Case<StmtTy, ExprTy> {
+impl<StmtTy, ExprTy> RawCase<StmtTy, ExprTy> {
   pub fn new(value: ExprTy, body: Vec<StmtTy>) -> Self {
     Self { value, body }
   }
 }
 
-impl<StmtTy, ExprTy> If<StmtTy, ExprTy> {
+impl<StmtTy, ExprTy> RawIf<StmtTy, ExprTy> {
   pub fn new(
     condition: ExprTy,
     then_branch: Box<StmtTy>,
@@ -172,41 +180,41 @@ impl<StmtTy, ExprTy> If<StmtTy, ExprTy> {
   }
 }
 
-impl<ExprTy> Return<ExprTy> {
+impl<ExprTy> RawReturn<ExprTy> {
   pub fn new(expression: Option<ExprTy>) -> Self {
     Self { expression }
   }
 }
 
-impl<StmtTy, ExprTy> While<StmtTy, ExprTy> {
+impl<StmtTy, ExprTy> RawWhile<StmtTy, ExprTy> {
   pub fn new(condition: ExprTy, body: Box<StmtTy>, label: String) -> Self {
     Self {
       condition,
       body,
-      label,
+      tag: label,
     }
   }
 
   pub fn get_label(&self) -> &str {
-    &self.label
+    &self.tag
   }
 }
 
-impl<StmtTy, ExprTy> DoWhile<StmtTy, ExprTy> {
+impl<StmtTy, ExprTy> RawDoWhile<StmtTy, ExprTy> {
   pub fn new(body: Box<StmtTy>, condition: ExprTy, label: String) -> Self {
     Self {
       body,
       condition,
-      label,
+      tag: label,
     }
   }
 
   pub fn get_label(&self) -> &str {
-    &self.label
+    &self.tag
   }
 }
 
-impl<StmtTy, ExprTy> For<StmtTy, ExprTy> {
+impl<StmtTy, ExprTy> RawFor<StmtTy, ExprTy> {
   pub fn new(
     initializer: Option<Box<StmtTy>>,
     condition: Option<ExprTy>,
@@ -219,28 +227,30 @@ impl<StmtTy, ExprTy> For<StmtTy, ExprTy> {
       condition,
       increment,
       body,
-      label,
+      tag: label,
     }
   }
 
   pub fn get_label(&self) -> &str {
-    &self.label
+    &self.tag
   }
 }
 
-impl<StmtTy> Default<StmtTy> {
+impl<StmtTy> RawDefault<StmtTy> {
   pub fn new(body: Vec<StmtTy>) -> Self {
     Self { body }
   }
 }
 
-impl SingleLabel {
-  pub fn new(name: String) -> Self {
-    Self { name }
+impl RawBreak {
+  pub fn new(tag: String) -> Self {
+    Self { tag }
   }
+}
 
-  pub fn get_label(&self) -> &str {
-    &self.name
+impl RawContinue {
+  pub fn new(tag: String) -> Self {
+    Self { tag }
   }
 }
 
@@ -276,13 +286,13 @@ mod fmt {
         RawStmt::Switch(switch_stmt) => write!(f, "{}", switch_stmt),
         RawStmt::Goto(goto) => write!(f, "{}", goto),
         RawStmt::Label(label) => write!(f, "{}", label),
-        RawStmt::Break(_) => write!(f, "break;"),
-        RawStmt::Continue(_) => write!(f, "continue;"),
+        RawStmt::Break(break_stmt) => write!(f, "{}", break_stmt),
+        RawStmt::Continue(continue_stmt) => write!(f, "{}", continue_stmt),
       }
     }
   }
 
-  impl<ExprTy: Display> Display for Return<ExprTy> {
+  impl<ExprTy: Display> Display for RawReturn<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       match &self.expression {
         Some(expr) => write!(f, "return {}", expr),
@@ -291,7 +301,7 @@ mod fmt {
     }
   }
 
-  impl<StmtTy: Display, ExprTy: Display> Display for If<StmtTy, ExprTy> {
+  impl<StmtTy: Display, ExprTy: Display> Display for RawIf<StmtTy, ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "if {} {}", self.condition, self.then_branch)?;
       if let Some(else_branch) = &self.else_branch {
@@ -301,7 +311,7 @@ mod fmt {
     }
   }
 
-  impl<StmtTy: Display> Display for Compound<StmtTy> {
+  impl<StmtTy: Display> Display for RawCompound<StmtTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{{\n")?;
       for stmt in &self.statements {
@@ -311,19 +321,19 @@ mod fmt {
     }
   }
 
-  impl<StmtTy: Display, ExprTy: Display> Display for While<StmtTy, ExprTy> {
+  impl<StmtTy: Display, ExprTy: Display> Display for RawWhile<StmtTy, ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "while {} {}", self.condition, self.body)
     }
   }
 
-  impl<StmtTy: Display, ExprTy: Display> Display for DoWhile<StmtTy, ExprTy> {
+  impl<StmtTy: Display, ExprTy: Display> Display for RawDoWhile<StmtTy, ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "do {} while {}", self.body, self.condition)
     }
   }
 
-  impl<StmtTy: Display, ExprTy: Display> Display for For<StmtTy, ExprTy> {
+  impl<StmtTy: Display, ExprTy: Display> Display for RawFor<StmtTy, ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
         f,
@@ -345,13 +355,19 @@ mod fmt {
     }
   }
 
-  impl Display for SingleLabel {
+  impl Display for RawBreak {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "{}", self.name)
+      write!(f, "break {};", self.tag)
     }
   }
 
-  impl<StmtTy: Display> Display for Default<StmtTy> {
+  impl Display for RawContinue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "continue {};", self.tag)
+    }
+  }
+
+  impl<StmtTy: Display> Display for RawDefault<StmtTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
         f,
@@ -366,18 +382,19 @@ mod fmt {
     }
   }
 
-  impl<StmtTy: Display> Display for Label<StmtTy> {
+  impl<StmtTy: Display> Display for RawLabel<StmtTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}: {}", self.name, self.statement)
     }
   }
 
-  impl<StmtTy: Display, ExprTy: Display> Display for Case<StmtTy, ExprTy> {
+  impl<StmtTy: Display, ExprTy: Display> Display for RawCase<StmtTy, ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
         f,
-        "case {}: {}",
+        "case {}:{}{}",
         self.value,
+        if self.body.len() > 1 { "\n" } else { " " },
         self
           .body
           .iter()
@@ -388,7 +405,7 @@ mod fmt {
     }
   }
 
-  impl<StmtTy: Display, ExprTy: Display> Display for Switch<StmtTy, ExprTy> {
+  impl<StmtTy: Display, ExprTy: Display> Display for RawSwitch<StmtTy, ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "switch ({}) {{\n", self.condition)?;
       for case in &self.cases {
@@ -401,7 +418,7 @@ mod fmt {
     }
   }
 
-  impl Display for Goto {
+  impl Display for RawGoto {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "goto {};", self.label)
     }
