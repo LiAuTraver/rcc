@@ -146,6 +146,7 @@ impl TypeInfo for Enum {
 
   #[inline]
   fn is_scalar(&self) -> bool {
-    self.underlying_type.is_scalar()
+    assert!(self.underlying_type.is_scalar(), "never fails");
+    true
   }
 }

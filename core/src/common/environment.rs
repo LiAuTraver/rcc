@@ -86,7 +86,10 @@ impl Environment {
   /// look up symbol and potentially cache it
   pub fn find(&mut self, name: &str) -> Option<shared_ptr<Symbol>> {
     match self.cache.get(name) {
-      Some(sym) => Some(sym.clone()),
+      Some(sym) => {
+        // println!("cache hit for symbol {}", name);
+        Some(sym.clone())
+      },
       None => {
         let sym = self.symbols.get(name);
         if let Some(s) = &sym {

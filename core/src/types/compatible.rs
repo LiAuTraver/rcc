@@ -5,6 +5,8 @@ use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, QualifiedType,
   Record, Type, Union,
 };
+use crate::types::Qualifiers;
+
 /// rules about the `metadata`. used for declaration and definition.
 #[allow(unused)]
 pub trait Compatibility {
@@ -322,12 +324,30 @@ impl Compatibility for QualifiedType {
   where
     Self: Sized,
   {
-    // there's some nasty rules about merging qualifiers for function types -- handled in analyzer
-    // also nasty rules about arrays -- todo
+    debug_assert!(
+      lhs.qualifiers() == rhs.qualifiers()
+        && *lhs.qualifiers() | *rhs.qualifiers() == *lhs.qualifiers(),
+      "idk, but they should be equal"
+    );
+
+    // function and array types cannot have qualifiers
+    if lhs.unqualified_type().is_array()
+      || lhs.unqualified_type().is_functionproto()
+    {
+      debug_assert!(
+        *lhs.qualifiers() == Qualifiers::empty()
+          && *rhs.qualifiers() == Qualifiers::empty(),
+        "array and function types cannot have qualifiers"
+      );
+    }
+
     // struct, enum, union -- todo
-    // alignment specifier -- don't care
-    // QualifiedType::new(qualifiers, lhs.unqualified_type.clone())
-    todo!()
+    // alignment specifier -- won't care
+
+    QualifiedType::new(
+      *lhs.qualifiers() | *rhs.qualifiers(),
+      Type::composite_unchecked(lhs.unqualified_type(), rhs.unqualified_type()),
+    )
   }
 }
 

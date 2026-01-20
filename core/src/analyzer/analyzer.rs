@@ -325,15 +325,13 @@ impl Analyzer {
     let symbol = Symbol::new_ref(Symbol::new(
       qualified_type,
       storage,
-      name,
+      name.clone(),
       if body.is_some() {
         VarDeclKind::Definition
       } else {
         VarDeclKind::Declaration
       },
     ));
-
-    let name = symbol.borrow().name.clone();
 
     self.environment.declare_symbol(name, symbol.clone());
 
@@ -471,8 +469,8 @@ impl Analyzer {
               prev.storage_class.clone()
             });
             prev.qualified_type = QualifiedType::composite_unchecked(
-              &vardef.symbol.borrow().qualified_type,
-              &prev_symbol_ref.borrow().qualified_type,
+              &new_symbol.qualified_type,
+              &prev.qualified_type,
             );
 
             // dropped prev and new_symbol here

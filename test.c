@@ -1,10 +1,10 @@
 
-// extern int j;
-// static int j = 0;
-// extern int j;
-// int j;
+extern int j;
+static int j = 0;
+extern int j;
+int j;
 
-//// this is also ok???
+// this is also ok???
 // extern int k[10];
 // int k[];
 // extern int k[10];
