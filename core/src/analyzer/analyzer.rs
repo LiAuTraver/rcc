@@ -19,7 +19,7 @@ type TypeRes = Result<Type, Error>;
 type ExprRes = Result<ae::Expression, Error>;
 type DeclRes<T> = Result<T, Error>;
 type StmtRes<T> = Result<T, Error>;
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Analyzer {
   program: pd::Program,
   environment: Environment,
@@ -1309,17 +1309,6 @@ impl Analyzer {
       false => Ok(astmt::Statement::Continue(astmt::Continue::new(
         continue_stmt.tag,
       ))),
-    }
-  }
-}
-impl ::core::default::Default for Analyzer {
-  fn default() -> Self {
-    Self {
-      program: pd::Program::new(),
-      environment: Environment::new(),
-      current_function: None,
-      errors: Vec::new(),
-      warnings: Vec::new(),
     }
   }
 }

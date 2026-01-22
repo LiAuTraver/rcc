@@ -1,3 +1,5 @@
+use ::rc_utils::interconvert;
+
 use crate::{
   common::{keyword::Keyword, storage::Storage, token::Literal},
   parser::{expression::Expression, statement::Compound},
@@ -19,6 +21,9 @@ pub enum Declaration {
   Variable(VarDef),
 }
 
+interconvert!(Function, Declaration);
+interconvert!(VarDef, Declaration, Variable);
+
 impl From<&Literal> for Qualifiers {
   fn from(literal: &Literal) -> Self {
     match literal {
@@ -39,8 +44,11 @@ impl From<&Literal> for Qualifiers {
 /// used in parsing
 #[derive(::std::marker::ConstParamTy, PartialEq, Eq)]
 pub enum DeclaratorType {
+  /// declarator with no name. sizeof, typeof, cast, etc.
   Abstract,
+  /// declarator with name. variable/function decl/def
   Named,
+  /// indeterminate
   Maybe,
 }
 /// declarator:
@@ -293,7 +301,7 @@ impl FunctionSignature {
 impl ::core::default::Default for FunctionSignature {
   fn default() -> Self {
     Self {
-      parameters: Vec::new(),
+      parameters: Vec::default(),
       is_variadic: false,
     }
   }
@@ -309,7 +317,7 @@ impl Parameter {
 impl Program {
   pub fn new() -> Self {
     Self {
-      declarations: Vec::new(),
+      declarations: Vec::default(),
     }
   }
 }
@@ -317,7 +325,14 @@ impl Declarator {
   pub fn new(name: Option<String>) -> Self {
     Self {
       name,
-      modifiers: Vec::new(),
+      modifiers: Vec::default(),
+    }
+  }
+
+  pub fn decltype(&self) -> DeclaratorType {
+    match &self.name {
+      Some(_) => DeclaratorType::Named,
+      None => DeclaratorType::Abstract,
     }
   }
 }
@@ -327,7 +342,7 @@ impl ::core::default::Default for DeclSpecs {
       function_specifiers: FunctionSpecifier::empty(),
       storage_class: None,
       qualifiers: Qualifiers::empty(),
-      type_specifiers: Vec::new(),
+      type_specifiers: Vec::default(),
     }
   }
 }
@@ -364,8 +379,8 @@ mod fmt {
   use ::std::fmt::Display;
 
   use super::{
-    DeclSpecs, Declaration, EnumSpecifier, Function, FunctionSignature,
-    Modifier, Program, Struct, TypeSpecifier, VarDef,
+    DeclSpecs, Declaration, Declarator, EnumSpecifier, Function,
+    FunctionSignature, Modifier, Program, Struct, TypeSpecifier, VarDef,
   };
 
   impl Display for Declaration {
@@ -520,7 +535,38 @@ mod fmt {
   }
   impl Display for DeclSpecs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "<declaration specs>")
+      write!(f, "{} ", self.function_specifiers)?;
+      if let Some(storage) = &self.storage_class {
+        write!(f, "{} ", storage)?;
+      }
+      write!(
+        f,
+        "{}",
+        self
+          .type_specifiers
+          .iter()
+          .map(|s| s.to_string())
+          .collect::<Vec<_>>()
+          .join(" ")
+      )
+    }
+  }
+  impl Display for Declarator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(
+        f,
+        "{} {}",
+        match &self.name {
+          Some(name) => name,
+          None => "<anonymous>",
+        },
+        self
+          .modifiers
+          .iter()
+          .map(|m| m.to_string())
+          .collect::<Vec<_>>()
+          .join(" ")
+      )
     }
   }
   impl Display for TypeSpecifier {

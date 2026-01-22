@@ -39,16 +39,18 @@ pub enum Storage {
   Constexpr, // ditto
 }
 
+use Storage::*;
+
 impl From<&Keyword> for Storage {
   fn from(kw: &Keyword) -> Self {
     match kw {
-      Keyword::Auto => Storage::Automatic,
-      Keyword::Register => Storage::Register,
-      Keyword::Extern => Storage::Extern,
-      Keyword::Static => Storage::Static,
-      Keyword::Typedef => Storage::Typedef,
-      Keyword::ThreadLocal => Storage::ThreadLocal,
-      Keyword::Constexpr => Storage::Constexpr,
+      Keyword::Auto => Automatic,
+      Keyword::Register => Register,
+      Keyword::Extern => Extern,
+      Keyword::Static => Static,
+      Keyword::Typedef => Typedef,
+      Keyword::ThreadLocal => ThreadLocal,
+      Keyword::Constexpr => Constexpr,
       _ => panic!("cannot convert {:?} to Storage", kw),
     }
   }
@@ -67,39 +69,39 @@ impl Storage {
   pub fn try_merge(lhs: &Storage, rhs: &Storage) -> Result<Storage, Error> {
     match (lhs, rhs) {
       (lhs, rhs) if lhs == rhs => Ok(lhs.clone()),
-      (Storage::Constexpr, _) | (_, Storage::Constexpr) => Err(()), // unimplemented
-      (Storage::Typedef, _) | (_, Storage::Typedef) => Err(()), // unmergeable
-      (Storage::Extern, other) | (other, Storage::Extern) => Ok(other.clone()), // extern is compatible with any other storage class
+      (Constexpr, _) | (_, Constexpr) => Err(()), // unimplemented
+      (Typedef, _) | (_, Typedef) => Err(()),     // unmergeable
+      (Extern, other) | (other, Extern) => Ok(other.clone()), // extern is compatible with any other storage class
       _ => Err(()),
     }
   }
 
   pub fn is_static(&self) -> bool {
-    matches!(self, Storage::Static)
+    matches!(self, Static)
   }
 
   pub fn is_extern(&self) -> bool {
-    matches!(self, Storage::Extern)
+    matches!(self, Extern)
   }
 
   pub fn is_thread_local(&self) -> bool {
-    matches!(self, Storage::ThreadLocal)
+    matches!(self, ThreadLocal)
   }
 
   pub fn is_constexpr(&self) -> bool {
-    matches!(self, Storage::Constexpr)
+    matches!(self, Constexpr)
   }
 
   pub fn is_typedef(&self) -> bool {
-    matches!(self, Storage::Typedef)
+    matches!(self, Typedef)
   }
 
   pub fn is_automatic(&self) -> bool {
-    matches!(self, Storage::Automatic)
+    matches!(self, Automatic)
   }
 
   pub fn is_register(&self) -> bool {
-    matches!(self, Storage::Register)
+    matches!(self, Register)
   }
 
   // pub fn try_merge_with_funcspecs(

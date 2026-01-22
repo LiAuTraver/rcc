@@ -22,6 +22,7 @@ pub struct Scope<T> {
   scopes: Vec<ScopeAssoc<T>>,
 }
 /// only tracks names
+#[derive(Debug, Default)]
 pub struct UnitScope {
   scopes: Vec<HashSet<String>>,
 }
@@ -44,7 +45,8 @@ pub enum VarDeclKind {
   /// extern int a; // ok, still declaration
   /// // int a = 1; // error: redefinition
   /// ```
-  /// multiple tentative definitions are allowed
+  /// multiple tentative definitions are allowed.
+  ///
   /// if no complete definition is found, the tentative definition is treated as a complete definition uninitialized (initialized to zero)
   Tentative,
 }
@@ -56,17 +58,14 @@ pub struct Symbol {
   /// declaration or definition
   pub declkind: VarDeclKind,
 }
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Environment {
   symbols: Scope<Symbol>,
   cache: HashMap<String, SymbolRef>,
 }
 impl Environment {
   pub fn new() -> Self {
-    Self {
-      symbols: Scope::new(),
-      cache: HashMap::new(),
-    }
+    Self::default()
   }
 
   pub fn is_global(&self) -> bool {
@@ -84,7 +83,7 @@ impl Environment {
   }
 
   /// look up symbol and potentially cache it
-  pub fn find(&mut self, name: &str) -> Option<shared_ptr<Symbol>> {
+  pub fn find(&mut self, name: &str) -> Option<SymbolRef> {
     match self.cache.get(name) {
       Some(sym) => {
         // println!("cache hit for symbol {}", name);
@@ -103,8 +102,8 @@ impl Environment {
   pub fn declare_symbol(
     &mut self,
     name: String,
-    symbol: shared_ptr<Symbol>,
-  ) -> shared_ptr<Symbol> {
+    symbol: SymbolRef,
+  ) -> SymbolRef {
     // overwrite cache
     self.cache.insert(name.clone(), symbol.clone());
     self.symbols.declare(name, symbol.clone())
@@ -180,11 +179,11 @@ impl Symbol {
 }
 impl UnitScope {
   pub fn new() -> Self {
-    Self { scopes: Vec::new() }
+    Self::default()
   }
 
   pub fn push_scope(&mut self) {
-    self.scopes.push(HashSet::new());
+    self.scopes.push(Default::default());
   }
 
   pub fn pop_scope(&mut self) {
@@ -218,13 +217,20 @@ impl UnitScope {
     self.scopes.len() == 1
   }
 }
+impl<T> Default for Scope<T> {
+  fn default() -> Self {
+    Self {
+      scopes: Vec::default(),
+    }
+  }
+}
 impl<T> Scope<T> {
   pub fn new() -> Self {
-    Self { scopes: Vec::new() }
+    Self::default()
   }
 
   pub fn push_scope(&mut self) {
-    self.scopes.push(ScopeAssoc::new());
+    self.scopes.push(Default::default());
   }
 
   pub fn pop_scope(&mut self) {

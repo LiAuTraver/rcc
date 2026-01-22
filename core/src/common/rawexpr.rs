@@ -127,7 +127,7 @@ impl<ExprTy> RawUnary<ExprTy> {
     match operator.unary() {
       true => Some(Self {
         operator,
-        oprand: Box::new(oprand),
+        oprand: oprand.into(),
       }),
       false => None,
     }
@@ -147,10 +147,23 @@ impl<ExprTy> RawBinary<ExprTy> {
     match operator.binary() {
       true => Some(Self {
         operator,
-        left: Box::new(left),
-        right: Box::new(right),
+        left: left.into(),
+        right: right.into(),
       }),
       false => None,
+    }
+  }
+
+  pub fn from_operator_unchecked(
+    operator: Operator,
+    left: ExprTy,
+    right: ExprTy,
+  ) -> Self {
+    debug_assert!(operator.binary());
+    Self {
+      operator,
+      left: left.into(),
+      right: right.into(),
     }
   }
 
@@ -161,9 +174,9 @@ impl<ExprTy> RawBinary<ExprTy> {
 impl<ExprTy> RawTernary<ExprTy> {
   pub fn new(condition: ExprTy, then_expr: ExprTy, else_expr: ExprTy) -> Self {
     Self {
-      condition: Box::new(condition),
-      then_expr: Box::new(then_expr),
-      else_expr: Box::new(else_expr),
+      condition: condition.into(),
+      then_expr: then_expr.into(),
+      else_expr: else_expr.into(),
     }
   }
 }
@@ -171,7 +184,7 @@ impl<ExprTy> RawTernary<ExprTy> {
 impl<ExprTy> RawCall<ExprTy> {
   pub fn new(callee: ExprTy, arguments: Vec<ExprTy>) -> Self {
     Self {
-      callee: Box::new(callee),
+      callee: callee.into(),
       arguments,
     }
   }
@@ -179,7 +192,7 @@ impl<ExprTy> RawCall<ExprTy> {
 mod fmt {
   use ::std::fmt::Display;
 
-  use super::{RawBinary, RawCall, RawTernary, RawUnary};
+  use super::*;
 
   impl<ExprTy: Display> Display for RawCall<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -210,6 +223,14 @@ mod fmt {
         "({} ? {} : {})",
         self.condition, self.then_expr, self.else_expr
       )
+    }
+  }
+  impl<ExprTy: Display, TypeTy: Display> Display for RawSizeOf<ExprTy, TypeTy> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+        RawSizeOf::Type(ty) => write!(f, "sizeof({})", ty),
+        RawSizeOf::Expression(expr) => write!(f, "sizeof {}", expr),
+      }
     }
   }
 }

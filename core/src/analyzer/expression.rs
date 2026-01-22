@@ -6,7 +6,10 @@ use crate::{
     operator::{Category, Operator},
   },
   type_alias_expr,
-  types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeInfo},
+  types::{
+    CastType::{self, *},
+    Primitive, QualifiedType, Qualifiers, Type, TypeInfo,
+  },
 };
 
 type_alias_expr! {Expression, QualifiedType, Variable, ImplicitCast, Assignment}
@@ -19,6 +22,7 @@ pub enum ValueCategory {
   #[strum(serialize = "rvalue")]
   RValue,
 }
+use ValueCategory::{LValue, RValue};
 #[derive(Debug)]
 pub struct Expression {
   raw_expr: RawExpr,
@@ -42,7 +46,7 @@ impl Expression {
     Self {
       raw_expr,
       expr_type,
-      value_category: ValueCategory::RValue,
+      value_category: RValue,
     }
   }
 
@@ -50,7 +54,7 @@ impl Expression {
     Self {
       raw_expr,
       expr_type,
-      value_category: ValueCategory::LValue,
+      value_category: LValue,
     }
   }
 
@@ -85,7 +89,7 @@ impl Primitive {
     // first: _Decimal types ignored
     // also, complex types ignored
     if lhs == rhs {
-      return (lhs.clone(), CastType::Noop, CastType::Noop);
+      return (lhs.clone(), Noop, Noop);
     }
     if matches!(lhs, Self::Void | Self::Nullptr)
       || matches!(rhs, Self::Void | Self::Nullptr)
@@ -95,10 +99,8 @@ impl Primitive {
     // otherwise, if either operand is of some floating type, the other operand is converted to it.
     // Otherwise, if any of the two types is an enumeration, it is converted to its underlying type. - handled upstream
     match (lhs.is_floating_point(), rhs.is_floating_point()) {
-      (true, false) =>
-        (lhs.clone(), CastType::Noop, CastType::IntegralToFloating),
-      (false, true) =>
-        (rhs.clone(), CastType::IntegralToFloating, CastType::Noop),
+      (true, false) => (lhs.clone(), Noop, IntegralToFloating),
+      (false, true) => (rhs.clone(), IntegralToFloating, Noop),
       (true, true) => Self::common_floating_rank(lhs.clone(), rhs.clone()),
       (false, false) => Self::common_integer_rank(lhs.clone(), rhs.clone()),
     }
@@ -108,9 +110,9 @@ impl Primitive {
   fn common_floating_rank(lhs: Self, rhs: Self) -> (Self, CastType, CastType) {
     assert!(lhs.is_floating_point() && rhs.is_floating_point());
     if lhs.floating_rank() > rhs.floating_rank() {
-      (lhs, CastType::Noop, CastType::FloatingCast)
+      (lhs, Noop, FloatingCast)
     } else {
-      (rhs, CastType::FloatingCast, CastType::Noop)
+      (rhs, FloatingCast, Noop)
     }
   }
 
@@ -122,45 +124,45 @@ impl Primitive {
     let (rhs, _) = rhs.integer_promotion();
     if lhs == rhs {
       // done
-      return (lhs, CastType::Noop, CastType::Noop);
+      return (lhs, Noop, Noop);
     }
     if lhs.is_unsigned() == rhs.is_unsigned() {
       return if lhs.integer_rank() > rhs.integer_rank() {
-        (lhs, CastType::Noop, CastType::IntegralCast)
+        (lhs, Noop, IntegralCast)
       } else {
-        (rhs, CastType::IntegralCast, CastType::Noop)
+        (rhs, IntegralCast, Noop)
       };
     }
     if lhs.is_unsigned() {
       assert!(!rhs.is_unsigned());
       if lhs.integer_rank() >= rhs.integer_rank() {
-        (lhs, CastType::Noop, CastType::IntegralCast)
+        (lhs, Noop, IntegralCast)
       } else if rhs.size() > lhs.size() {
-        (rhs, CastType::IntegralCast, CastType::Noop)
+        (rhs, IntegralCast, Noop)
       } else {
         // if the signed type cannot represent all values of the unsigned type, return the unsigned version of the signed type
         // the signed type is always larger than the corresponding unsigned type on my x86_64 architecture
         // so this branch is unlikely to be taken
         let promoted_rhs = rhs.into_unsigned();
-        (promoted_rhs, CastType::IntegralCast, CastType::IntegralCast)
+        (promoted_rhs, IntegralCast, IntegralCast)
       }
     } else {
       assert!(rhs.is_unsigned());
       // symmetric to above
       if rhs.integer_rank() >= lhs.integer_rank() {
-        (rhs, CastType::Noop, CastType::IntegralCast)
+        (rhs, Noop, IntegralCast)
       } else if lhs.size() > rhs.size() {
-        (lhs, CastType::IntegralCast, CastType::Noop)
+        (lhs, IntegralCast, Noop)
       } else {
         let promoted_lhs = lhs.into_unsigned();
-        (promoted_lhs, CastType::IntegralCast, CastType::IntegralCast)
+        (promoted_lhs, IntegralCast, IntegralCast)
       }
     }
   }
 }
 impl Expression {
   pub fn is_lvalue(&self) -> bool {
-    matches!(self.value_category, ValueCategory::LValue)
+    matches!(self.value_category, LValue)
   }
 
   /// 6.3.2.1:  A modifiable lvalue is an lvalue that does not have array type, does not have an incomplete
@@ -173,7 +175,7 @@ impl Expression {
 
   pub fn to_rvalue(self) -> Self {
     Self {
-      value_category: ValueCategory::RValue,
+      value_category: RValue,
       ..self
     }
   }
@@ -183,11 +185,8 @@ impl ::core::default::Default for Expression {
   fn default() -> Self {
     Self {
       raw_expr: RawExpr::Empty,
-      expr_type: QualifiedType::new(
-        Qualifiers::empty(),
-        Type::Primitive(Primitive::Void),
-      ),
-      value_category: ValueCategory::RValue,
+      expr_type: Type::void().into(),
+      value_category: RValue,
     }
   }
 }
@@ -277,13 +276,13 @@ mod test {
 
     let int_expr = Expression::new(
       RawExpr::Constant(Constant::Int(42)),
-      QualifiedType::new_unqualified(Type::from(Primitive::Int)),
-      ValueCategory::RValue,
+      Type::from(Primitive::Int).into(),
+      RValue,
     );
     let float_expr = Expression::new(
       RawExpr::Constant(Constant::Float(3.14)),
-      QualifiedType::new_unqualified(Type::from(Primitive::Float)),
-      ValueCategory::RValue,
+      Type::from(Primitive::Float).into(),
+      RValue,
     );
     let promoted_expr =
       Expression::usual_arithmetic_conversion(int_expr, float_expr)

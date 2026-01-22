@@ -6,6 +6,7 @@ macro_rules! interconvert {
 
   ($inner:ident, $outer:ident, $variant:ident) => {
     impl From<$inner> for $outer {
+      #[inline]
       fn from(value: $inner) -> Self {
         $outer::$variant(value)
       }
@@ -13,6 +14,7 @@ macro_rules! interconvert {
     impl TryFrom<$outer> for $inner {
       type Error = ();
 
+      #[inline]
       fn try_from(value: $outer) -> Result<Self, Self::Error> {
         match value {
           $outer::$variant(inner) => Ok(inner),

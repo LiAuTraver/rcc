@@ -127,20 +127,21 @@ impl Compatibility for Pointer {
     Self: Sized,
   {
     if !Self::compatible(lhs, rhs) {
-      return None;
+      None
+    } else {
+      Some(Self::new(
+        QualifiedType::composite_unchecked(&lhs.pointee, &rhs.pointee).into(),
+      ))
     }
-    let pointee =
-      QualifiedType::composite_unchecked(&lhs.pointee, &rhs.pointee);
-    Some(Self::new(Box::new(pointee)))
   }
 
   fn composite_unchecked(lhs: &Self, rhs: &Self) -> Self
   where
     Self: Sized,
   {
-    let pointee =
-      QualifiedType::composite_unchecked(&lhs.pointee, &rhs.pointee);
-    Self::new(Box::new(pointee))
+    Self::new(
+      QualifiedType::composite_unchecked(&lhs.pointee, &rhs.pointee).into(),
+    )
   }
 }
 
@@ -232,7 +233,7 @@ impl Compatibility for FunctionProto {
       );
       parameter_types.push(param_type);
     }
-    Self::new(Box::new(return_type), parameter_types, lhs.is_variadic)
+    Self::new(return_type.into(), parameter_types, lhs.is_variadic)
   }
 }
 
@@ -300,10 +301,7 @@ impl Compatibility for QualifiedType {
     if *lhs.qualifiers() != *rhs.qualifiers() {
       return false;
     }
-    <Type as Compatibility>::compatible(
-      lhs.unqualified_type(),
-      rhs.unqualified_type(),
-    )
+    Compatibility::compatible(lhs.unqualified_type(), rhs.unqualified_type())
   }
 
   #[inline]
@@ -312,9 +310,10 @@ impl Compatibility for QualifiedType {
     rhs: &QualifiedType,
   ) -> Option<QualifiedType> {
     if !QualifiedType::compatible(lhs, rhs) {
-      return None;
+      None
+    } else {
+      Some(Self::composite_unchecked(lhs, rhs))
     }
-    Some(Self::composite_unchecked(lhs, rhs))
   }
 
   fn composite_unchecked(
@@ -381,8 +380,10 @@ impl Compatibility for Array {
       &lhs.element_type,
       &rhs.element_type,
     );
-    let size = ArraySize::composite_unchecked(&lhs.size, &rhs.size);
-    Self::new(Box::new(element_type), size)
+    Self::new(
+      element_type.into(),
+      ArraySize::composite_unchecked(&lhs.size, &rhs.size),
+    )
   }
 }
 

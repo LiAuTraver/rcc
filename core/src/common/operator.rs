@@ -116,6 +116,7 @@ pub enum Operator {
   #[strum(disabled)]
   EOF,
 }
+use Operator::*;
 impl Operator {
   /// default precedence level when parsing expressions
   pub const DEFAULT: u8 = 0x00;
@@ -129,44 +130,44 @@ impl Operator {
     matches!(
       self,
       // arithmetic
-      Operator::Plus
-        | Operator::Minus
+      Plus
+        | Minus
       // logical
-        | Operator::Not
+        | Not
       // bitwise
-        | Operator::Tilde
+        | Tilde
       // dereference and address-of
-        | Operator::Star
-        | Operator::Ampersand
+        | Star
+        | Ampersand
       // increment and decrement
-        | Operator::PlusPlus
-        | Operator::MinusMinus
+        | PlusPlus
+        | MinusMinus
     )
   }
 
   pub fn binary(&self) -> bool {
     matches!(
       self,
-      Operator::Star
-        | Operator::Slash
-        | Operator::Percent
-        | Operator::Plus
-        | Operator::Minus
-        | Operator::LeftShift
-        | Operator::RightShift
-        | Operator::Less
-        | Operator::LessEqual
-        | Operator::Greater
-        | Operator::GreaterEqual
-        | Operator::EqualEqual
-        | Operator::NotEqual
-        | Operator::Ampersand
-        | Operator::Caret
-        | Operator::Pipe
-        | Operator::And
-        | Operator::Or
+      Star
+        | Slash
+        | Percent
+        | Plus
+        | Minus
+        | LeftShift
+        | RightShift
+        | Less
+        | LessEqual
+        | Greater
+        | GreaterEqual
+        | EqualEqual
+        | NotEqual
+        | Ampersand
+        | Caret
+        | Pipe
+        | And
+        | Or
         // special cases
-        | Operator::Comma
+        | Comma
     ) || self.assignment()
   }
 
@@ -175,38 +176,38 @@ impl Operator {
     debug_assert!(self.binary(), "precedence called on non-binary operator");
     match self {
       // multiplicative
-      Operator::Star => 0x80,
-      Operator::Slash => 0x80,
-      Operator::Percent => 0x80,
+      Star => 0x80,
+      Slash => 0x80,
+      Percent => 0x80,
       // additive
-      Operator::Plus => 0x70,
-      Operator::Minus => 0x70,
+      Plus => 0x70,
+      Minus => 0x70,
       // shift
-      Operator::LeftShift => 0x60,
-      Operator::RightShift => 0x60,
+      LeftShift => 0x60,
+      RightShift => 0x60,
       // relational
-      Operator::Less => 0x50,
-      Operator::LessEqual => 0x50,
-      Operator::Greater => 0x50,
-      Operator::GreaterEqual => 0x50,
+      Less => 0x50,
+      LessEqual => 0x50,
+      Greater => 0x50,
+      GreaterEqual => 0x50,
       // equality
-      Operator::EqualEqual => 0x40,
-      Operator::NotEqual => 0x40,
+      EqualEqual => 0x40,
+      NotEqual => 0x40,
       // bitwise AND
-      Operator::Ampersand => 0x38,
+      Ampersand => 0x38,
       // bitwise XOR
-      Operator::Caret => 0x20,
+      Caret => 0x20,
       // bitwise OR
-      Operator::Pipe => 0x18,
+      Pipe => 0x18,
       // logical AND
-      Operator::And => 0x10,
+      And => 0x10,
       // logical OR
-      Operator::Or => 0x08,
+      Or => 0x08,
       // Question mark: 0x06,
       // assignment - it's a trick since it's mostly right associative
       _ if self.assignment() => 0x04,
       // comma operator
-      Operator::Comma => 0x02,
+      Comma => 0x02,
       _ => unreachable!(),
     }
   }
@@ -224,41 +225,22 @@ pub enum Category {
 impl Operator {
   pub fn category(&self) -> Category {
     match self {
-      Operator::And | Operator::Or | Operator::Not => Category::Logical,
+      And | Or | Not => Category::Logical,
 
-      Operator::LeftShift | Operator::RightShift => Category::BitShift,
+      LeftShift | RightShift => Category::BitShift,
 
-      Operator::Tilde
-      | Operator::Ampersand
-      | Operator::Pipe
-      | Operator::Caret => Category::Bitwise,
+      Tilde | Ampersand | Pipe | Caret => Category::Bitwise,
 
-      Operator::Plus
-      | Operator::Minus
-      | Operator::Star
-      | Operator::Slash
-      | Operator::Percent => Category::Arithmetic,
+      Plus | Minus | Star | Slash | Percent => Category::Arithmetic,
 
-      Operator::Less
-      | Operator::LessEqual
-      | Operator::Greater
-      | Operator::GreaterEqual
-      | Operator::EqualEqual
-      | Operator::NotEqual => Category::Relational,
+      Less | LessEqual | Greater | GreaterEqual | EqualEqual | NotEqual =>
+        Category::Relational,
 
-      Operator::Assign
-      | Operator::PlusAssign
-      | Operator::MinusAssign
-      | Operator::StarAssign
-      | Operator::SlashAssign
-      | Operator::PercentAssign
-      | Operator::AmpersandAssign
-      | Operator::PipeAssign
-      | Operator::CaretAssign
-      | Operator::LeftShiftAssign
-      | Operator::RightShiftAssign => Category::Assignment,
+      Assign | PlusAssign | MinusAssign | StarAssign | SlashAssign
+      | PercentAssign | AmpersandAssign | PipeAssign | CaretAssign
+      | LeftShiftAssign | RightShiftAssign => Category::Assignment,
 
-      Operator::Comma => Category::Comma,
+      Comma => Category::Comma,
       _ => panic!(),
     }
   }
@@ -266,28 +248,21 @@ impl Operator {
   pub fn assignment(&self) -> bool {
     matches!(
       self,
-      Operator::Assign
-        | Operator::PlusAssign
-        | Operator::MinusAssign
-        | Operator::StarAssign
-        | Operator::SlashAssign
-        | Operator::PercentAssign
-        | Operator::AmpersandAssign
-        | Operator::PipeAssign
-        | Operator::CaretAssign
-        | Operator::LeftShiftAssign
-        | Operator::RightShiftAssign
+      Assign
+        | PlusAssign
+        | MinusAssign
+        | StarAssign
+        | SlashAssign
+        | PercentAssign
+        | AmpersandAssign
+        | PipeAssign
+        | CaretAssign
+        | LeftShiftAssign
+        | RightShiftAssign
     )
   }
 
   pub fn is_arithmetic(&self) -> bool {
-    matches!(
-      self,
-      Operator::Plus
-        | Operator::Minus
-        | Operator::Star
-        | Operator::Slash
-        | Operator::Percent
-    )
+    matches!(self, Plus | Minus | Star | Slash | Percent)
   }
 }

@@ -3,7 +3,7 @@ use ::std::{path::PathBuf, rc::Rc, str::FromStr};
 use crate::{
   common::{
     keyword::Keyword,
-    operator::Operator,
+    operator::Operator::{self, *},
     token::{SourceLocation, Token},
   },
   types::Constant,
@@ -32,7 +32,7 @@ impl Lexer {
       cursor: 0,
       line: 1,
       column: 1,
-      errors: Vec::new(),
+      errors: Vec::default(),
       filepath: Rc::new(filepath),
     }
   }
@@ -117,7 +117,7 @@ impl Lexer {
         tokens.push(token);
       }
     }
-    tokens.push(Token::operator(Operator::EOF, self.loc()));
+    tokens.push(Token::operator(EOF, self.loc()));
     tokens
   }
 
@@ -146,11 +146,7 @@ impl Lexer {
         if self.peek(0).is_ascii_hexdigit() {
           Some(self.lex_number(start, start_loc, true))
         } else {
-          self.lex_compound_op(
-            start_loc,
-            Operator::Dot,
-            &[("...", Operator::Ellipsis)],
-          )
+          self.lex_compound_op(start_loc, Dot, &[("...", Ellipsis)])
         },
 
       // comments/division
@@ -166,110 +162,75 @@ impl Lexer {
         },
         '=' => {
           self.advance();
-          Some(Token::operator(Operator::SlashAssign, start_loc))
+          Some(Token::operator(SlashAssign, start_loc))
         },
-        _ => Some(Token::operator(Operator::Slash, start_loc)),
+        _ => Some(Token::operator(Slash, start_loc)),
       },
 
       // multi-character operators
       '+' => self.lex_compound_op(
         start_loc,
-        Operator::Plus,
-        &[("++", Operator::PlusPlus), ("+=", Operator::PlusAssign)],
+        Plus,
+        &[("++", PlusPlus), ("+=", PlusAssign)],
       ),
       '-' => self.lex_compound_op(
         start_loc,
-        Operator::Minus,
-        &[
-          ("--", Operator::MinusMinus),
-          ("-=", Operator::MinusAssign),
-          ("->", Operator::Arrow),
-        ],
+        Minus,
+        &[("--", MinusMinus), ("-=", MinusAssign), ("->", Arrow)],
       ),
-      '*' => self.lex_compound_op(
-        start_loc,
-        Operator::Star,
-        &[("*=", Operator::StarAssign)],
-      ),
-      '%' => self.lex_compound_op(
-        start_loc,
-        Operator::Percent,
-        &[("%=", Operator::PercentAssign)],
-      ),
-      '=' => self.lex_compound_op(
-        start_loc,
-        Operator::Assign,
-        &[("==", Operator::EqualEqual)],
-      ),
-      '!' => self.lex_compound_op(
-        start_loc,
-        Operator::Not,
-        &[("!=", Operator::NotEqual)],
-      ),
+      '*' => self.lex_compound_op(start_loc, Star, &[("*=", StarAssign)]),
+      '%' => self.lex_compound_op(start_loc, Percent, &[("%=", PercentAssign)]),
+      '=' => self.lex_compound_op(start_loc, Assign, &[("==", EqualEqual)]),
+      '!' => self.lex_compound_op(start_loc, Not, &[("!=", NotEqual)]),
       '<' => self.lex_compound_op(
         start_loc,
-        Operator::Less,
+        Less,
         &[
-          ("<<=", Operator::LeftShiftAssign),
-          ("<<", Operator::LeftShift),
-          ("<=", Operator::LessEqual),
+          ("<<=", LeftShiftAssign),
+          ("<<", LeftShift),
+          ("<=", LessEqual),
         ],
       ),
       '>' => self.lex_compound_op(
         start_loc,
-        Operator::Greater,
+        Greater,
         &[
-          (">>=", Operator::RightShiftAssign),
-          (">>", Operator::RightShift),
-          (">=", Operator::GreaterEqual),
+          (">>=", RightShiftAssign),
+          (">>", RightShift),
+          (">=", GreaterEqual),
         ],
       ),
       '&' => self.lex_compound_op(
         start_loc,
-        Operator::Ampersand,
-        &[("&&", Operator::And), ("&=", Operator::AmpersandAssign)],
+        Ampersand,
+        &[("&&", And), ("&=", AmpersandAssign)],
       ),
-      '|' => self.lex_compound_op(
-        start_loc,
-        Operator::Pipe,
-        &[("||", Operator::Or), ("|=", Operator::PipeAssign)],
-      ),
-      '^' => self.lex_compound_op(
-        start_loc,
-        Operator::Caret,
-        &[("^=", Operator::CaretAssign)],
-      ),
-      ':' => self.lex_compound_op(
-        start_loc,
-        Operator::Colon,
-        &[("::", Operator::DoubleColon)],
-      ),
+      '|' =>
+        self.lex_compound_op(start_loc, Pipe, &[("||", Or), ("|=", PipeAssign)]),
+      '^' => self.lex_compound_op(start_loc, Caret, &[("^=", CaretAssign)]),
+      ':' => self.lex_compound_op(start_loc, Colon, &[("::", DoubleColon)]),
       '[' => self.lex_compound_op(
         start_loc,
-        Operator::LeftBracket,
-        &[("[[", Operator::DoubleLeftBracket)],
+        LeftBracket,
+        &[("[[", DoubleLeftBracket)],
       ),
       ']' => self.lex_compound_op(
         start_loc,
-        Operator::RightBracket,
-        &[("]]", Operator::DoubleRightBracket)],
+        RightBracket,
+        &[("]]", DoubleRightBracket)],
       ),
 
-      '#' => self.lex_compound_op(
-        start_loc,
-        Operator::Hash,
-        &[("##", Operator::HashHash)],
-      ),
+      '#' => self.lex_compound_op(start_loc, Hash, &[("##", HashHash)]),
 
       // single-character operators
-      ',' => Some(Token::operator(Operator::Comma, start_loc)),
-      ';' => Some(Token::operator(Operator::Semicolon, start_loc)),
-      '(' => Some(Token::operator(Operator::LeftParen, start_loc)),
-      ')' => Some(Token::operator(Operator::RightParen, start_loc)),
-      '{' => Some(Token::operator(Operator::LeftBrace, start_loc)),
-      '}' => Some(Token::operator(Operator::RightBrace, start_loc)),
-      '~' => Some(Token::operator(Operator::Tilde, start_loc)),
-      '?' => Some(Token::operator(Operator::Question, start_loc)),
+      ',' => Some(Token::operator(Comma, start_loc)),
+      ';' => Some(Token::operator(Semicolon, start_loc)),
+      '(' => Some(Token::operator(LeftParen, start_loc)),
+      ')' => Some(Token::operator(RightParen, start_loc)),
+      '{' => Some(Token::operator(LeftBrace, start_loc)),
+      '}' => Some(Token::operator(RightBrace, start_loc)),
+      '~' => Some(Token::operator(Tilde, start_loc)),
+      '?' => Some(Token::operator(Question, start_loc)),
       '\\' => todo!("character literals not implemented yet"),
 
       _ => {

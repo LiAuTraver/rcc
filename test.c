@@ -16,10 +16,9 @@ int main(void) { //
     int k = foo(0);
   }
   int f(int, int);
-  // typedef int INT;
-  // INT x = 5;
-  int x = 0;
-  static int y = 1;
+  typedef int INT;
+  INT x = sizeof(char);
+  static int y = sizeof x;
   switch (x) {
   case 0:
   case 1:

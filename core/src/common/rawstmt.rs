@@ -131,7 +131,9 @@ impl<StmtTy> RawCompound<StmtTy> {
 }
 impl<StmtTy> ::core::default::Default for RawCompound<StmtTy> {
   fn default() -> Self {
-    Self { statements: vec![] }
+    Self {
+      statements: Vec::default(),
+    }
   }
 }
 
@@ -187,30 +189,22 @@ impl<ExprTy> RawReturn<ExprTy> {
 }
 
 impl<StmtTy, ExprTy> RawWhile<StmtTy, ExprTy> {
-  pub fn new(condition: ExprTy, body: Box<StmtTy>, label: String) -> Self {
+  pub fn new(condition: ExprTy, body: Box<StmtTy>, tag: String) -> Self {
     Self {
       condition,
       body,
-      tag: label,
+      tag,
     }
-  }
-
-  pub fn get_label(&self) -> &str {
-    &self.tag
   }
 }
 
 impl<StmtTy, ExprTy> RawDoWhile<StmtTy, ExprTy> {
-  pub fn new(body: Box<StmtTy>, condition: ExprTy, label: String) -> Self {
+  pub fn new(body: Box<StmtTy>, condition: ExprTy, tag: String) -> Self {
     Self {
       body,
       condition,
-      tag: label,
+      tag,
     }
-  }
-
-  pub fn get_label(&self) -> &str {
-    &self.tag
   }
 }
 
@@ -220,19 +214,15 @@ impl<StmtTy, ExprTy> RawFor<StmtTy, ExprTy> {
     condition: Option<ExprTy>,
     increment: Option<ExprTy>,
     body: Box<StmtTy>,
-    label: String,
+    tag: String,
   ) -> Self {
     Self {
       initializer,
       condition,
       increment,
       body,
-      tag: label,
+      tag,
     }
-  }
-
-  pub fn get_label(&self) -> &str {
-    &self.tag
   }
 }
 

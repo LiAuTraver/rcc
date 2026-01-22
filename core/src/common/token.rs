@@ -1,7 +1,10 @@
 use ::std::{fmt::Debug, path::PathBuf, rc::Rc};
 
 use crate::{
-  common::{keyword::Keyword, operator::Operator},
+  common::{
+    keyword::Keyword::{self, *},
+    operator::Operator,
+  },
   types::Constant,
 };
 
@@ -96,45 +99,94 @@ impl Literal {
 
 impl Keyword {
   pub fn is_qualifier(&self) -> bool {
-    matches!(
-      self,
-      Keyword::Const | Keyword::Volatile | Keyword::Restrict | Keyword::Atomic
-    )
+    matches!(self, Const | Volatile | Restrict | Atomic)
   }
 
   pub fn is_storage_class(&self) -> bool {
-    matches!(
-      self,
-      Keyword::Auto
-        | Keyword::Register
-        | Keyword::Static
-        | Keyword::Extern
-        | Keyword::Typedef
-    )
+    matches!(self, Auto | Register | Static | Extern | Typedef)
   }
 
   pub fn is_function_specifier(&self) -> bool {
-    matches!(self, Keyword::Inline | Keyword::Noreturn)
+    matches!(self, Inline | Noreturn)
   }
 
   /// this isn't exhaustive, need to check typedefs in parser
   pub fn is_type_specifier(&self) -> bool {
     matches!(
       self,
-      Keyword::Void
-        | Keyword::Char
-        | Keyword::Short
-        | Keyword::Int
-        | Keyword::Long
-        | Keyword::Float
-        | Keyword::Double
-        | Keyword::Signed
-        | Keyword::Unsigned
-        | Keyword::Bool
-        | Keyword::Struct
-        | Keyword::Union
-        | Keyword::Enum
+      Void
+        | Char
+        | Short
+        | Int
+        | Long
+        | Float
+        | Double
+        | Signed
+        | Unsigned
+        | Bool
+        | Struct
+        | Union
+        | Enum
     )
+  }
+}
+mod cmp {
+  use super::{Keyword, Literal, Operator};
+
+  impl PartialEq<Literal> for Keyword {
+    #[inline]
+    fn eq(&self, other: &Literal) -> bool {
+      match other {
+        Literal::Keyword(kw) => self == kw,
+        _ => false,
+      }
+    }
+  }
+  impl PartialEq<Keyword> for Literal {
+    #[inline]
+    fn eq(&self, other: &Keyword) -> bool {
+      match self {
+        Literal::Keyword(kw) => kw == other,
+        _ => false,
+      }
+    }
+  }
+  impl PartialEq<Operator> for Literal {
+    #[inline]
+    fn eq(&self, other: &Operator) -> bool {
+      match self {
+        Literal::Operator(op) => op == other,
+        _ => false,
+      }
+    }
+  }
+  impl PartialEq<Literal> for Operator {
+    #[inline]
+    fn eq(&self, other: &Literal) -> bool {
+      match other {
+        Literal::Operator(op) => self == op,
+        _ => false,
+      }
+    }
+  }
+  impl PartialEq<Operator> for &Literal {
+    #[inline]
+    fn eq(&self, other: &Operator) -> bool {
+      match self {
+        Literal::Operator(op) => op == other,
+        _ => false,
+      }
+    }
+  }
+
+  impl PartialEq<Keyword> for &Literal {
+    #[inline]
+    fn eq(&self, other: &Keyword) -> bool {
+      match self {
+        Literal::Keyword(kw) => kw == other,
+        _ => false,
+      }
+    }
   }
 }
 mod fmt {

@@ -25,6 +25,7 @@ use crate::{
   },
   types::{FunctionSpecifier, Qualifiers},
 };
+#[derive(Debug, Default)]
 pub struct Parser {
   tokens: Vec<Token>,
   cursor: usize,
@@ -33,18 +34,6 @@ pub struct Parser {
   loop_labels: Vec<String>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
-}
-impl ::core::default::Default for Parser {
-  fn default() -> Self {
-    Self {
-      tokens: vec![],
-      cursor: 0,
-      errors: vec![],
-      warnings: vec![],
-      loop_labels: vec![],
-      typedefs: UnitScope::new(),
-    }
-  }
 }
 /// utility functions
 impl Parser {
@@ -137,17 +126,6 @@ impl Parser {
       self.must_get_op::<OP>();
     }
   }
-  // fn recoverable_consume<const OP: Operator>(&mut self) {
-  //   if *self.peek(0) == Literal::Operator(OP) {
-  //     self.must_get_op::<OP>();
-  //   } else {
-  //     self.errors.push(format!(
-  //       "Expect '{}' at {}:{}.",
-  //       OP, self.tokens[self.cursor].location.line, self.tokens[self.cursor].location.column
-  //     ));
-  //     self.get();
-  //   }
-  // }
 }
 /// diagnostic functions
 impl Parser {
@@ -414,9 +392,9 @@ impl Parser {
 
   fn parse_case_and_default_body(&mut self) -> Vec<Statement> {
     let mut body = Vec::new();
-    while self.peek(0) != &Literal::Keyword(Keyword::Case)
-      && self.peek(0) != &Literal::Keyword(Keyword::Default)
-      && self.peek(0) != &Literal::Operator(Operator::RightBrace)
+    while self.peek(0) != Keyword::Case
+      && self.peek(0) != Keyword::Default
+      && self.peek(0) != Operator::RightBrace
     {
       body.push(self.next_statement());
     }
@@ -425,7 +403,7 @@ impl Parser {
 
   fn parse_case(&mut self) -> Case {
     self.must_get_key::<{ Keyword::Case }>();
-    let expression = if self.peek(0) == &Literal::Operator(Operator::Colon) {
+    let expression = if self.peek(0) == Operator::Colon {
       self.add_error("Expect constant expression after 'case'".to_string());
       self.must_get_op::<{ Operator::Colon }>();
       Expression::Empty
@@ -475,7 +453,7 @@ impl Parser {
     VarDef::new(
       declspecs,
       declarator,
-      initializer.map(|init_expr| Initializer::Expression(Box::new(init_expr))),
+      initializer.map(|init_expr| Initializer::Expression(init_expr.into())),
     )
   }
 
@@ -485,7 +463,7 @@ impl Parser {
       Literal::Operator(Operator::Semicolon)
         | Literal::Operator(Operator::Hash)
     ) {
-      if *self.peek(0) == Literal::Operator(Operator::Semicolon) {
+      if *self.peek(0) == Operator::Semicolon {
         // self.add_warning("Redundant ';'".to_string());
         self.must_get_op::<{ Operator::Semicolon }>();
       } else {
@@ -501,7 +479,7 @@ impl Parser {
 
     let mut recovery = false;
     // block definition is not allowed in top
-    if *self.peek(0) == Literal::Operator(Operator::LeftBrace) {
+    if *self.peek(0) == Operator::LeftBrace {
       self.add_error("Block definition is not allowed here.".to_string());
       self.must_get_op::<{ Operator::LeftBrace }>();
       recovery = true;
@@ -511,13 +489,13 @@ impl Parser {
     let declarator = self.parse_declarator::<{ DeclaratorType::Maybe }, true>();
 
     if matches!(declspecs.storage_class, Some(Storage::Typedef)) {
-      if let Some(ref name) = declarator.name {
+      if let Some(name) = &declarator.name {
         self.typedefs.declare(name.clone());
       } else {
         self.add_warning("Typedef defines nothing.".to_string());
       }
       self.must_get_op::<{ Operator::Semicolon }>();
-      return Declaration::Variable(VarDef::new(declspecs, declarator, None));
+      return VarDef::new(declspecs, declarator, None).into();
     }
     let declaration = if declarator
       .modifiers
@@ -526,12 +504,12 @@ impl Parser {
     {
       // int(void) is not allowed
       if declarator.name.is_none() {
-        self.add_error("Expcet a function name.".to_string());
+        self.add_error("Expect a function name.".to_string());
       }
-      Declaration::Function(self.next_function_body(declspecs, declarator))
+      self.next_function_body(declspecs, declarator).into()
     } else {
       // `int;` is allowed although useless
-      Declaration::Variable(self.next_vardef(declspecs, declarator))
+      self.next_vardef(declspecs, declarator).into()
     };
     if recovery {
       self.recoverable_get::<{ Operator::RightBrace }>();
@@ -562,7 +540,7 @@ impl Parser {
     self.typedefs.push_scope();
     let mut block = Compound::default();
 
-    while *self.peek(0) != Literal::Operator(Operator::RightBrace) {
+    while *self.peek(0) != Operator::RightBrace {
       block.statements.push(self.next_statement());
     }
     self.typedefs.pop_scope();
@@ -572,8 +550,7 @@ impl Parser {
 
   fn next_return(&mut self) -> Return {
     self.must_get_key::<{ Keyword::Return }>();
-    let expression = if *self.peek(0) == Literal::Operator(Operator::Semicolon)
-    {
+    let expression = if *self.peek(0) == Operator::Semicolon {
       None
     } else {
       Some(self.next_expression(Operator::DEFAULT))
@@ -589,7 +566,7 @@ impl Parser {
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
     let then_branch = self.next_statement();
     self.ios_c_strict_check_for_decl(&then_branch);
-    let else_branch = if self.peek(0) == &Literal::Keyword(Keyword::Else) {
+    let else_branch = if self.peek(0) == Keyword::Else {
       self.must_get_key::<{ Keyword::Else }>();
       let body = self.next_statement();
       self.ios_c_strict_check_for_decl(&body);
@@ -597,7 +574,7 @@ impl Parser {
     } else {
       None
     };
-    If::new(condition, Box::new(then_branch), else_branch.map(Box::new))
+    If::new(condition, then_branch.into(), else_branch.map(Box::new))
   }
 
   fn next_while(&mut self) -> While {
@@ -610,7 +587,7 @@ impl Parser {
     self.ios_c_strict_check_for_decl(&body);
     let while_stmt = While::new(
       condition,
-      Box::new(body),
+      body.into(),
       self.loop_labels.last().unwrap().clone(),
     );
     self.loop_labels.pop();
@@ -639,7 +616,7 @@ impl Parser {
 
   fn next_for(&mut self) -> For {
     self.must_get_key::<{ Keyword::For }>();
-    if *self.peek(0) != Literal::Operator(Operator::LeftParen) {
+    if *self.peek(0) != Operator::LeftParen {
       self.add_error("Expect '(' after 'for'".to_string());
       panic!() // workaound
     } else {
@@ -658,9 +635,9 @@ impl Parser {
                   .to_string(),
               );
             }
-            Some(Statement::Declaration(Declaration::Variable(vardef)))
+            Some(Statement::Declaration(vardef.into()))
           },
-          Statement::Expression(expr) => Some(Statement::Expression(expr)),
+          Statement::Expression(expr) => Some(expr.into()),
           _ => {
             self.add_error(
               "Expect variable declaration or expression in for initializer"
@@ -715,7 +692,7 @@ impl Parser {
     self.recoverable_get::<{ Operator::LeftBrace }>();
     let mut cases = Vec::new();
     let mut default: Option<Default> = None;
-    while *self.peek(0) != Literal::Operator(Operator::RightBrace) {
+    while *self.peek(0) != Operator::RightBrace {
       match self.peek(0) {
         Literal::Keyword(Keyword::Case) => {
           let case = self.parse_case();
@@ -758,19 +735,15 @@ impl Parser {
 
   fn next_statement(&mut self) -> Statement {
     match *self.peek(0) {
-      Literal::Keyword(Keyword::If) => Statement::If(self.next_if()),
-      Literal::Keyword(Keyword::For) => Statement::For(self.next_for()),
-      Literal::Keyword(Keyword::Return) =>
-        Statement::Return(self.next_return()),
-      Literal::Keyword(Keyword::While) => Statement::While(self.next_while()),
-      Literal::Keyword(Keyword::Do) => Statement::DoWhile(self.next_dowhile()),
-      Literal::Keyword(Keyword::Break) => Statement::Break(self.next_break()),
-      Literal::Keyword(Keyword::Continue) =>
-        Statement::Continue(self.next_continue()),
-      Literal::Keyword(Keyword::Switch) =>
-        Statement::Switch(self.next_switch()),
-      Literal::Operator(Operator::LeftBrace) =>
-        Statement::Compound(self.next_block()),
+      Literal::Keyword(Keyword::If) => self.next_if().into(),
+      Literal::Keyword(Keyword::For) => self.next_for().into(),
+      Literal::Keyword(Keyword::Return) => self.next_return().into(),
+      Literal::Keyword(Keyword::While) => self.next_while().into(),
+      Literal::Keyword(Keyword::Do) => self.next_dowhile().into(),
+      Literal::Keyword(Keyword::Break) => self.next_break().into(),
+      Literal::Keyword(Keyword::Continue) => self.next_continue().into(),
+      Literal::Keyword(Keyword::Switch) => self.next_switch().into(),
+      Literal::Operator(Operator::LeftBrace) => self.next_block().into(),
       Literal::Operator(Operator::Semicolon) => self.next_emptystmt(),
       Literal::Keyword(Keyword::Case) => {
         self.add_error("Case label not within switch statement".to_string());
@@ -785,14 +758,13 @@ impl Parser {
         Statement::Empty()
       },
       Literal::Keyword(Keyword::Goto) => self.next_gotostmt(),
-      Literal::Keyword(_) => Statement::Declaration(self.next_declaration()),
+      Literal::Keyword(_) => self.next_declaration().into(),
       Literal::Identifier(ref ident) if self.typedefs.contains(ident) =>
-        Statement::Declaration(self.next_declaration()),
-      Literal::Identifier(ref ident)
-        if self.peek(1) == &Literal::Operator(Operator::Colon) =>
+        self.next_declaration().into(),
+      Literal::Identifier(ref ident) if self.peek(1) == Operator::Colon =>
         self.next_labelstmt(ident.to_string()),
 
-      _ => Statement::Expression(self.next_exprstmt()),
+      _ => self.next_exprstmt().into(),
     }
   }
 
@@ -809,7 +781,7 @@ impl Parser {
       let statement = self.next_statement();
       self.ios_c_strict_check_for_decl(&statement);
       // todo: label validity check, here or in semantic analysis?
-      Statement::Label(Label::new(ident, statement))
+      Label::new(ident, statement).into()
     }
   }
 
@@ -819,7 +791,7 @@ impl Parser {
       let name = ident.to_string();
       self.get(); // consume ident
       self.recoverable_get::<{ Operator::Semicolon }>();
-      Statement::Goto(Goto::new(name))
+      Goto::new(name).into()
     } else {
       self.add_error("Expect label identifier after 'goto'".to_string());
       // assume the label is missing, continue parsing
@@ -883,15 +855,11 @@ impl Parser {
     // rust forces me to clone, but here it's guranteed not UB. :(
     ;
     match literal {
-      Literal::Number(num) => Expression::Constant(num.clone()),
-      Literal::String(str) =>
-        Expression::Constant(Constant::String(str.to_string())),
+      Literal::Number(num) => num.clone().into(),
+      Literal::String(str) => Constant::String(str.to_string()).into(),
       Literal::Operator(op) =>
         if op.unary() {
-          Expression::Unary(Unary::new(
-            op.clone(),
-            self.next_expression(Operator::DEFAULT),
-          ))
+          Unary::new(op.clone(), self.next_expression(Operator::DEFAULT)).into()
         } else if *op == Operator::LeftParen {
           let expr = self.next_expression(Operator::DEFAULT);
           if *self.peek(0) == Literal::Operator(Operator::RightParen) {
@@ -905,13 +873,13 @@ impl Parser {
             "Unexpected operator {op} in factor, assuming int",
           ));
           self.get();
-          Expression::Constant(Constant::Int(0))
+          Constant::Int(0).into()
         },
       Literal::Identifier(ident) => {
-        let ident_expr = Expression::Variable(Variable::new(ident.to_string()));
+        let ident_expr = Variable::new(ident.to_string()).into();
         if *self.peek(0) == Literal::Operator(Operator::LeftParen) {
           let arguments = self.parse_argument_list();
-          Expression::Call(Call::new(ident_expr, arguments))
+          Call::new(ident_expr, arguments).into()
         } else {
           ident_expr
         }
@@ -926,7 +894,7 @@ impl Parser {
             "Unexpected keyword {} in factor, assuming int",
             keyword,
           ));
-          Expression::Constant(Constant::Int(0))
+          Constant::Int(0).into()
         },
       },
     }
@@ -937,28 +905,28 @@ impl Parser {
     // maybe type or expression, assume expression for now
     // let expr = self.parse_paren_expression();
     // Expression::SizeOf(SizeOf::Expression(Box::new(expr)))
-    if self.peek(0) == &Literal::Operator(Operator::LeftParen) {
+    self.cursor -= 1;
+    if self.peek(0) == Operator::LeftParen {
+      self.must_get_op::<{ Operator::LeftParen }>();
       match self.parse_type_specifier() {
         Some(_) => {
           // type
-          self.must_get_op::<{ Operator::LeftParen }>();
           let declspecs = self.parse_declspecs();
           let declarator =
             self.parse_declarator::<{ DeclaratorType::Abstract }, false>();
           self.recoverable_get::<{ Operator::RightParen }>();
-          Expression::SizeOf(SizeOf::Type(UnprocessedType::new(
-            declspecs, declarator,
-          )))
+          SizeOf::Type(UnprocessedType::new(declspecs, declarator)).into()
         },
         None => {
           // expression
-          let expr = self.parse_paren_expression::<{ Operator::DEFAULT }>();
-          Expression::SizeOf(SizeOf::Expression(Box::new(expr)))
+          let expr = self.next_expression(Operator::DEFAULT);
+          self.recoverable_get::<{ Operator::RightParen }>();
+          SizeOf::Expression(expr.into()).into()
         },
       }
     } else {
       let expr = self.next_expression(Operator::DEFAULT);
-      Expression::SizeOf(SizeOf::Expression(Box::new(expr)))
+      SizeOf::Expression(expr.into()).into()
     }
   }
 
@@ -967,28 +935,24 @@ impl Parser {
     loop {
       if let Literal::Operator(op) = self.peek(0) {
         if op.binary() && op.precedence() >= lmin_precedence {
-          let op = op.clone();
+          let operator = op.clone();
           self.get(); // operator
-          let right =
-            self.next_expression(if op.category() == Category::Assignment {
-              op.precedence()
+          let right = self.next_expression(
+            if operator.category() == Category::Assignment {
+              operator.precedence()
             } else {
-              op.precedence() + 1
-            });
-          current = Expression::Binary(
-            Binary::from_operator(op, current, right).unwrap(),
+              operator.precedence() + 1
+            },
           );
+          current =
+            Binary::from_operator_unchecked(operator, current, right).into();
           continue;
         } else if op == &Operator::Question {
           self.must_get_op::<{ Operator::Question }>();
           let then_branch = self.next_expression(Operator::DEFAULT);
           self.recoverable_get::<{ Operator::Colon }>();
           let else_branch = self.next_expression(Operator::TERNARY);
-          current = Expression::Ternary(Ternary::new(
-            current,
-            then_branch,
-            else_branch,
-          ));
+          current = Ternary::new(current, then_branch, else_branch).into();
           continue;
         }
       }

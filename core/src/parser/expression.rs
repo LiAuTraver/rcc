@@ -1,3 +1,5 @@
+use ::rc_utils::interconvert;
+
 use crate::{
   parser::declaration::{DeclSpecs, Declarator},
   type_alias_expr,
@@ -41,28 +43,49 @@ impl UnprocessedType {
 pub struct Variable {
   pub name: String,
 }
+interconvert!(Variable, Expression);
+interconvert!(Constant, Expression);
+interconvert!(Unary, Expression);
+interconvert!(Binary, Expression);
+interconvert!(Call, Expression);
+interconvert!(MemberAccess, Expression);
+interconvert!(Ternary, Expression);
+interconvert!(SizeOf, Expression);
+interconvert!(CStyleCast, Expression);
+interconvert!(ArraySubscript, Expression);
+interconvert!(CompoundLiteral, Expression);
+
 mod fmt {
   use ::std::fmt::Display;
 
-  use super::{Binary, Call, Constant, Expression, Ternary, Unary, Variable};
+  use super::{
+    Binary, Call, Constant, Expression, Expression::*, SizeOf, Ternary, Unary,
+    UnprocessedType, Variable,
+  };
 
   impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       match self {
-        Expression::Constant(c) => <Constant as Display>::fmt(c, f),
-        Expression::Unary(u) => <Unary as Display>::fmt(u, f),
-        Expression::Binary(b) => <Binary as Display>::fmt(b, f),
-        Expression::Variable(v) => <Variable as Display>::fmt(v, f),
-        Expression::Ternary(t) => <Ternary as Display>::fmt(t, f),
-        Expression::Call(call) => <Call as Display>::fmt(call, f),
-        Expression::Empty => write!(f, "<noop>"),
-        _ => todo!(),
+        Constant(c) => <Constant as Display>::fmt(c, f),
+        Unary(u) => <Unary as Display>::fmt(u, f),
+        Binary(b) => <Binary as Display>::fmt(b, f),
+        Variable(v) => <Variable as Display>::fmt(v, f),
+        Ternary(t) => <Ternary as Display>::fmt(t, f),
+        Call(call) => <Call as Display>::fmt(call, f),
+        SizeOf(s) => <SizeOf as Display>::fmt(s, f),
+        Empty => write!(f, "<noop>"),
+        _ => todo!("{:#?}", self),
       }
     }
   }
   impl Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}", self.name)
+    }
+  }
+  impl Display for UnprocessedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{} {}", self.declspecs, self.declarator)
     }
   }
 }

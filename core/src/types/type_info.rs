@@ -1,6 +1,6 @@
 use super::{
-  Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, QualifiedType,
-  Record, Type, Union,
+  Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, Primitive::*,
+  QualifiedType, Record, Type, Union,
 };
 #[allow(unused)]
 pub trait TypeInfo {
@@ -43,31 +43,31 @@ impl TypeInfo for Primitive {
   fn size(&self) -> usize {
     // x86_64 sizes
     match self {
-      Primitive::Nullptr => Primitive::ULongLong.size(),
-      Primitive::Void => 0,
-      Primitive::Bool => 1,
-      Primitive::Char => 1,
-      Primitive::SChar => 1,
-      Primitive::Short => 2,
-      Primitive::Int => 4,
-      Primitive::Long => 4, // LLP64 Windows
-      Primitive::LongLong => 8,
-      Primitive::UChar => 1,
-      Primitive::UShort => 2,
-      Primitive::UInt => 4,
-      Primitive::ULong => 4,
-      Primitive::ULongLong => 8,
-      Primitive::Float => 4,
-      Primitive::Double => 8,
-      Primitive::LongDouble => 8,
-      Primitive::ComplexFloat => 8,
-      Primitive::ComplexDouble => 16,
-      Primitive::ComplexLongDouble => 16,
+      Nullptr => ULongLong.size(),
+      Void => 0,
+      Bool => 1,
+      Char => 1,
+      SChar => 1,
+      Short => 2,
+      Int => 4,
+      Long => 4, // LLP64 Windows
+      LongLong => 8,
+      UChar => 1,
+      UShort => 2,
+      UInt => 4,
+      ULong => 4,
+      ULongLong => 8,
+      Float => 4,
+      Double => 8,
+      LongDouble => 8,
+      ComplexFloat => 8,
+      ComplexDouble => 16,
+      ComplexLongDouble => 16,
     }
   }
 
   fn is_scalar(&self) -> bool {
-    !matches!(self, Primitive::Void)
+    !matches!(self, Void)
   }
 }
 
@@ -118,12 +118,12 @@ impl TypeInfo for Union {
 impl TypeInfo for Pointer {
   #[inline]
   fn size(&self) -> usize {
-    Primitive::ULongLong.size() // x86_64 LLP64 Windows
+    ULongLong.size() // x86_64 LLP64 Windows
   }
 
   #[inline]
   fn is_scalar(&self) -> bool {
-    Primitive::ULongLong.is_scalar() // shall always be true
+    ULongLong.is_scalar() // shall always be true
   }
 }
 

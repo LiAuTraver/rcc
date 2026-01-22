@@ -174,22 +174,22 @@ impl QualifiedType {
     }
   }
 
-  pub fn new_unqualified(unqualified_type: Type) -> Self {
+  pub const fn new_unqualified(unqualified_type: Type) -> Self {
     Self {
       qualifiers: Qualifiers::empty(),
       unqualified_type,
     }
   }
 
-  pub fn void() -> Self {
+  pub const fn void() -> Self {
     Self::new_unqualified(Type::void())
   }
 
-  pub fn bool() -> Self {
+  pub const fn bool() -> Self {
     Self::new_unqualified(Type::bool())
   }
 
-  pub fn int() -> Self {
+  pub const fn int() -> Self {
     Self::new_unqualified(Type::int())
   }
 }
@@ -337,16 +337,20 @@ impl Type {
     }
   }
 
-  pub fn void() -> Self {
+  pub const fn void() -> Self {
     Type::Primitive(Primitive::Void)
   }
 
-  pub fn bool() -> Self {
+  pub const fn bool() -> Self {
     Type::Primitive(Primitive::Bool)
   }
 
-  pub fn int() -> Self {
+  pub const fn int() -> Self {
     Type::Primitive(Primitive::Int)
+  }
+
+  pub const fn nullptr() -> Self {
+    Type::Primitive(Primitive::Nullptr)
   }
 }
 impl QualifiedType {

@@ -182,32 +182,30 @@ impl Constant {
   }
 
   pub fn unqualified_type(&self) -> Type {
-    use super::{Array, ArraySize, Primitive, Qualifiers};
+    use super::{Array, ArraySize, Primitive::*, Qualifiers};
 
     match self {
-      Self::Char(_) => Type::Primitive(Primitive::Char),
-      Self::Short(_) => Type::Primitive(Primitive::Short),
-      Self::Int(_) => Type::Primitive(Primitive::Int),
-      Self::LongLong(_) => Type::Primitive(Primitive::LongLong),
-      Self::UChar(_) => Type::Primitive(Primitive::UChar),
-      Self::UShort(_) => Type::Primitive(Primitive::UShort),
-      Self::UInt(_) => Type::Primitive(Primitive::UInt),
-      Self::ULongLong(_) => Type::Primitive(Primitive::ULongLong),
-      Self::Float(_) => Type::Primitive(Primitive::Float),
-      Self::Double(_) => Type::Primitive(Primitive::Double),
-      Self::Bool(_) => Type::Primitive(Primitive::Bool),
-      Self::Nullptr => Type::Primitive(Primitive::Nullptr),
+      Self::Char(_) => Char.into(),
+      Self::Short(_) => Short.into(),
+      Self::Int(_) => Int.into(),
+      Self::LongLong(_) => LongLong.into(),
+      Self::UChar(_) => UChar.into(),
+      Self::UShort(_) => UShort.into(),
+      Self::UInt(_) => UInt.into(),
+      Self::ULongLong(_) => ULongLong.into(),
+      Self::Float(_) => Float.into(),
+      Self::Double(_) => Double.into(),
+      Self::Bool(_) => Bool.into(),
+      Self::Nullptr => Nullptr.into(),
       // in C, char[N] is the type of string literal - although it's stored in read-only memory
       // in C++ it's const char[N]
       // ^^^ verified by clangd's AST
-      Self::String(str) => Type::Array(Array::new(
-        Box::new(QualifiedType::new(
-          Qualifiers::empty(),
-          Type::Primitive(Primitive::Char),
-        )),
+      Self::String(str) => Array::new(
+        QualifiedType::new(Qualifiers::empty(), Char.into()).into(),
         // this is wrong for multi-byte characters, but let's ignore that for now
         ArraySize::Constant(str.len() + 1 /* null terminator */),
-      )),
+      )
+      .into(),
     }
   }
 

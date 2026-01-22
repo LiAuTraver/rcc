@@ -1,8 +1,8 @@
 use ::std::fmt::Display;
 
 use super::{
-  Array, ArraySize, Constant, Enum, FunctionProto, Pointer, QualifiedType,
-  Qualifiers, Record, Type, Union,
+  Array, ArraySize, Constant, Enum, FunctionProto, FunctionSpecifier, Pointer,
+  QualifiedType, Qualifiers, Record, Type, Union,
 };
 
 impl Display for Qualifiers {
@@ -20,7 +20,18 @@ impl Display for Qualifiers {
     write!(f, "{}", qualifiers.join(" "))
   }
 }
-
+impl Display for FunctionSpecifier {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut specifiers = Vec::new();
+    if self.contains(FunctionSpecifier::Inline) {
+      specifiers.push("inline");
+    }
+    if self.contains(FunctionSpecifier::Noreturn) {
+      specifiers.push("_Noreturn");
+    }
+    write!(f, "{}", specifiers.join(" "))
+  }
+}
 impl Display for QualifiedType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     if self.qualifiers().is_empty() {
@@ -95,20 +106,21 @@ impl Display for Union {
 
 impl Display for Constant {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use Constant::*;
     match self {
-      Constant::Char(i) => write!(f, "{}", i),
-      Constant::Short(i) => write!(f, "{}", i),
-      Constant::Int(i) => write!(f, "{}", i),
-      Constant::LongLong(i) => write!(f, "{}", i),
-      Constant::UChar(u) => write!(f, "{}", u),
-      Constant::UShort(u) => write!(f, "{}", u),
-      Constant::UInt(u) => write!(f, "{}", u),
-      Constant::ULongLong(u) => write!(f, "{}", u),
-      Constant::Float(fl) => write!(f, "{}", fl),
-      Constant::Double(fl) => write!(f, "{}", fl),
-      Constant::Bool(b) => write!(f, "{}", b),
-      Constant::String(s) => write!(f, "\"{}\"", s),
-      Constant::Nullptr => write!(f, "nullptr"),
+      Char(i) => write!(f, "{}", i),
+      Short(i) => write!(f, "{}", i),
+      Int(i) => write!(f, "{}", i),
+      LongLong(i) => write!(f, "{}", i),
+      UChar(u) => write!(f, "{}", u),
+      UShort(u) => write!(f, "{}", u),
+      UInt(u) => write!(f, "{}", u),
+      ULongLong(u) => write!(f, "{}", u),
+      Float(fl) => write!(f, "{}", fl),
+      Double(fl) => write!(f, "{}", fl),
+      Bool(b) => write!(f, "{}", b),
+      String(s) => write!(f, "\"{}\"", s),
+      Nullptr => write!(f, "nullptr"),
     }
   }
 }
