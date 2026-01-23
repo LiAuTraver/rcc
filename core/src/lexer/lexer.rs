@@ -22,7 +22,7 @@ pub struct Lexer<'a> {
   chars: Peekable<Chars<'a>>,
 
   /// track position manually for Spans
-  byte_cursor: usize,
+  cursor: usize,
 
   /// report line/col errors *during* lexing
   coords: Coordinate,
@@ -34,9 +34,9 @@ impl<'a> Lexer<'a> {
     Self {
       source,
       chars: source.chars().peekable(),
-      byte_cursor: 0,
+      cursor: usize::default(),
       coords: Default::default(),
-      errors: Vec::new(),
+      errors: Default::default(),
     }
   }
 
@@ -95,7 +95,7 @@ impl<'a> Lexer<'a> {
   fn advance(&mut self) -> char {
     match self.chars.next() {
       Some(c) => {
-        self.byte_cursor += c.len_utf8();
+        self.cursor += c.len_utf8();
 
         if c == '\n' {
           self.coords.line += 1;
@@ -120,11 +120,11 @@ impl<'a> Lexer<'a> {
   // }
 
   fn span(&self, start: usize) -> SourceSpan {
-    debug_assert!(start != self.byte_cursor, "{start}");
+    debug_assert!(start != self.cursor, "{start}");
     SourceSpan {
       file_index: 0,
       start: start as u32,
-      end: self.byte_cursor as u32,
+      end: self.cursor as u32,
     }
   }
 
@@ -140,12 +140,12 @@ impl<'a> Lexer<'a> {
       }
     }
     // add 1 to form [a,a+1)
-    tokens.push(Token::operator(EOF, self.span(self.byte_cursor + 1)));
+    tokens.push(Token::operator(EOF, self.span(self.cursor + 1)));
     tokens
   }
 
   fn next_token(&mut self) -> Option<Token> {
-    let start = self.byte_cursor;
+    let start = self.cursor;
 
     match self.advance() {
       // whitespace or EOF
@@ -269,7 +269,7 @@ impl<'a> Lexer<'a> {
       self.advance();
     }
 
-    let text = self.slice(start, self.byte_cursor);
+    let text = self.slice(start, self.cursor);
 
     match Keyword::from_str(text) {
       Ok(keyword) => Token::keyword(keyword, self.span(start)),
@@ -278,7 +278,7 @@ impl<'a> Lexer<'a> {
   }
 
   fn lex_number(&mut self, start: usize, started_with_dot: bool) -> Token {
-    let base = if !started_with_dot && self.byte_cursor > 0 {
+    let base = if !started_with_dot && self.cursor > 0 {
       match (self.recall(), self.peek()) {
         ('0', 'x' | 'X') => {
           self.advance();
@@ -371,14 +371,14 @@ impl<'a> Lexer<'a> {
       }
     }
 
-    let head = self.byte_cursor;
+    let head = self.cursor;
     let num = self.slice(start, head).to_string();
 
     let suffix = if matches!(self.peek(), c if Self::is_ident_start(c)) {
       while matches!(self.peek(), c if Self::is_ident_start(c)) {
         self.advance();
       }
-      let s = self.slice(head, self.byte_cursor);
+      let s = self.slice(head, self.cursor);
       match is_floating {
         true =>
           if NumberConstant::FLOATING_SUFFIXES.contains(&s) {
@@ -442,11 +442,11 @@ impl<'a> Lexer<'a> {
         self.span(start),
         ErrorData::UnterminatedString,
       ));
-      let text = self.slice(start, self.byte_cursor);
+      let text = self.slice(start, self.cursor);
       return Token::string(text.to_string(), self.span(start));
     }
 
-    let end = self.byte_cursor;
+    let end = self.cursor;
     self.advance(); // consume closing quote
 
     let text = self.slice(start, end);

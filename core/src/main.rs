@@ -4,7 +4,10 @@
 #![allow(unused_imports)]
 
 use ::rc_core::{
-  analyzer::Analyzer, common::SourceManager, lexer::Lexer, parser::Parser,
+  analyzer::Analyzer,
+  common::{SourceDisplay, SourceManager},
+  lexer::Lexer,
+  parser::Parser,
 };
 use ::std::{env::args, fs::File, io::Read, path::PathBuf, process::exit};
 // use rcns::preprocessor;
@@ -22,11 +25,11 @@ fn main() {
       exit(1);
     },
   };
-  let mut sourcemanager = SourceManager::default();
+  let mut source_manager = SourceManager::default();
 
-  let _id = sourcemanager.try_add_file(filename.into());
+  let _id = source_manager.try_add_file(filename.into());
 
-  let mut lexer = Lexer::new(&sourcemanager.files[0].source);
+  let mut lexer = Lexer::new(&source_manager.files[0].source);
   let tokens = lexer.lex_all();
   let errors = lexer.errors();
   tokens
@@ -37,14 +40,14 @@ fn main() {
     eprintln!("Lex errors:");
     errors
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&sourcemanager)));
+      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
     exit(1);
   }
   if kind == "--lex" || kind == "lex" {
     println!("Lex succeeded.");
     return;
   }
-  let mut parser = Parser::new(tokens);
+  let mut parser = Parser::new(tokens, &source_manager);
   let program = parser.parse();
   println!("{:}", program);
 

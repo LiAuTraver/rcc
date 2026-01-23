@@ -12,12 +12,12 @@ mod token;
 
 pub use self::{
   environment::{Environment, Symbol, SymbolRef, UnitScope, VarDeclKind},
-  error::{Data as ErrorData, Error, ErrorV2},
+  error::{Data as ErrorData, Error, ErrorDisplay, ErrorV2},
   keyword::Keyword,
   operator::{Category as OperatorCategory, Operator},
   source_info::{
-    Coordinate, File as SourceFile, Location as SourceLocation,
-    Manager as SourceManager, Span as SourceSpan,
+    Coordinate, Display as SourceDisplay, File as SourceFile,
+    Location as SourceLocation, Manager as SourceManager, Span as SourceSpan,
   },
   storage::Storage,
   token::{Literal, Token},

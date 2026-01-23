@@ -6,7 +6,7 @@ use ::std::{
 #[macro_export]
 macro_rules! interconvert {
   ($inner:ident, $outer:ident) => {
-    ::rc_utils::interconvert!($inner, $outer, $inner);
+    $crate::interconvert!($inner, $outer, $inner);
   };
 
   ($inner:ident, $outer:ident, $variant:ident) => {
@@ -57,7 +57,7 @@ macro_rules! make_trio_for {
                 match self {
                     Self::$variant(v) => v,
                     _ => {
-                        ::rc_utils::breakpoint!();
+                        $crate::breakpoint!();
                         unreachable!()
                     }
                 }
@@ -78,7 +78,7 @@ macro_rules! make_trio_for {
 #[macro_export]
 macro_rules! breakpoint {
   () => {
-    ::rc_utils::breakpoint!("");
+    $crate::breakpoint!("");
   };
   ($($arg:tt)*) => {{
     use ::std::io::{Write, stderr, stdout};

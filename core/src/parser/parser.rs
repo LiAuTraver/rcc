@@ -2,7 +2,8 @@ use rc_utils::breakpoint;
 
 use crate::{
   common::{
-    Keyword, Literal, Operator, OperatorCategory, Storage, Token, UnitScope,
+    Keyword, Literal, Operator, OperatorCategory, SourceDisplay, SourceManager,
+    Storage, Token, UnitScope,
   },
   parser::{
     declaration::{
@@ -21,8 +22,8 @@ use crate::{
   },
   types::{FunctionSpecifier, Qualifiers},
 };
-#[derive(Debug, Default)]
-pub struct Parser {
+#[derive(Debug)]
+pub struct Parser<'a> {
   tokens: Vec<Token>,
   cursor: usize,
   errors: Vec<String>,
@@ -30,17 +31,23 @@ pub struct Parser {
   loop_labels: Vec<String>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
+  source_manager: &'a SourceManager,
 }
 /// utility functions
-impl Parser {
-  pub fn new(tokens: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+  pub fn new(tokens: Vec<Token>, source_manager: &'a SourceManager) -> Self {
     assert_eq!(
       tokens.last().map(|t| &t.literal),
       Some(&Literal::Operator(Operator::EOF))
     );
     Self {
       tokens,
-      ..Parser::default()
+      source_manager,
+      cursor: usize::default(),
+      errors: Vec::default(),
+      warnings: Vec::default(),
+      loop_labels: Vec::default(),
+      typedefs: UnitScope::default(),
     }
   }
 
@@ -124,7 +131,7 @@ impl Parser {
   }
 }
 /// diagnostic functions
-impl Parser {
+impl<'a> Parser<'a> {
   pub fn errors(&self) -> &[String] {
     &self.errors
   }
@@ -134,33 +141,25 @@ impl Parser {
   }
 
   fn add_error(&mut self, message: String) {
-    // let token = &self.tokens[self.cursor];
-    // self.errors.push(format!(
-    //   "In file {}:{}:{}: {}",
-    //   "todo",
-    //   // token.location.file.to_str().unwrap_or("<invalid utf8>"),
-    //   token.location.line,
-    //   token.location.column,
-    //   message
-    // ));
-    todo!()
+    let token = &self.tokens[self.cursor];
+    self.errors.push(format!(
+      "In file {}: {}",
+      token.location.display_with(self.source_manager),
+      message
+    ));
   }
 
   fn add_warning(&mut self, message: String) {
-    // let token = &self.tokens[self.cursor];
-    // self.warnings.push(format!(
-    //   "In file {}:{}:{}: {}",
-    //   "todo",
-    //   // token.location.file.to_str().unwrap_or("<invalid utf8>"),
-    //   token.location.line,
-    //   token.location.column,
-    //   message
-    // ));
-    todo!()
+    let token = &self.tokens[self.cursor];
+    self.warnings.push(format!(
+      "In file {}: {}",
+      token.location.display_with(self.source_manager),
+      message
+    ));
   }
 }
 /// opt checks
-impl Parser {
+impl<'a> Parser<'a> {
   fn ios_c_strict_check_for_decl(&mut self, statement: &Statement) {
     if matches!(statement, Statement::Declaration(_)) {
       self.add_error(
@@ -171,7 +170,7 @@ impl Parser {
   }
 }
 /// meta
-impl Parser {
+impl<'a> Parser<'a> {
   fn parse_type_specifier(&mut self) -> Option<TypeSpecifier> {
     match self.peek(0) {
       Literal::Keyword(Keyword::Struct) => todo!(),
@@ -426,7 +425,7 @@ impl Parser {
   }
 }
 /// declarations
-impl Parser {
+impl<'a> Parser<'a> {
   fn next_vardef(
     &mut self,
     declspecs: DeclSpecs,
@@ -518,7 +517,7 @@ impl Parser {
   }
 }
 /// statements
-impl Parser {
+impl<'a> Parser<'a> {
   fn next_function_body(
     &mut self,
     declspecs: DeclSpecs,
@@ -675,8 +674,12 @@ impl Parser {
         initializer.map(Box::new),
         condition,
         increment,
-        Box::new(body),
-        self.loop_labels.last().unwrap().clone(),
+        body.into(),
+        self
+          .loop_labels
+          .last()
+          .expect("invariant: loop_labels should not be empty")
+          .clone(),
       );
       self.loop_labels.pop();
       for_stmt
@@ -727,7 +730,11 @@ impl Parser {
       condition,
       cases,
       default,
-      self.loop_labels.last().unwrap().clone(),
+      self
+        .loop_labels
+        .last()
+        .expect("invariant: loop_labels should not be empty")
+        .clone(),
     );
     self.loop_labels.pop();
     switch_stmt
@@ -846,7 +853,7 @@ impl Parser {
   }
 }
 /// expressions
-impl Parser {
+impl<'a> Parser<'a> {
   fn next_factor(&mut self) -> Expression {
     self.get();
     let literal = &self

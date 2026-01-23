@@ -97,3 +97,8 @@ impl Manager {
     &file.source[span.start as usize..span.end as usize]
   }
 }
+
+pub trait Display<'a> {
+  type ReturnType;
+  fn display_with(&'a self, source_manager: &'a Manager) -> Self::ReturnType;
+}
