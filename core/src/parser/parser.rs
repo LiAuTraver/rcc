@@ -598,6 +598,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_block(&mut self) -> Compound {
+    let location = *self.peek_loc(0);
     self.must_get_op::<{ Operator::LeftBrace }>();
     self.typedefs.push_scope();
     let mut block = Compound::default();
@@ -607,7 +608,13 @@ impl<'a> Parser<'a> {
     }
     self.typedefs.pop_scope();
     self.must_get_op::<{ Operator::RightBrace }>();
-    block
+    Compound::new(
+      block.statements,
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
+    )
   }
 
   fn next_return(&mut self) -> Return {

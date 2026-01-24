@@ -4,7 +4,10 @@ use super::{Operator, SourceManager, SourceSpan, Storage};
 
 /// im focusing the ast right now, so left error handling as a placeholder
 pub type Error = ();
+/// Custom message. would be printed as-is.
 type CustomMessage = String;
+/// Element, like `expect ')' after <elem>`
+type Elem = String;
 /// Error `Version 2`. Will replace the old `Error` type (which is just ()) soon.
 #[derive(Debug)]
 pub struct ErrorV2 {
@@ -26,8 +29,8 @@ pub enum Data {
   VoidVariableDecl(CustomMessage),
   ExtraneousStorageSpecs(Storage),
   UnclosedParameterList(CustomMessage),
-  MissingOpenParen(String),
-  MissingCloseParen(String),
+  MissingOpenParen(Elem),
+  MissingCloseParen(Elem),
   ExpressionNotConstant(CustomMessage),
   VarDeclUnclosed(CustomMessage),
   InvalidBlockItem,
@@ -42,6 +45,7 @@ pub enum Data {
   MissingLabelAfterGoto,
   InvalidBreakStmt,
   InvalidContinueStmt,
+  // placeholder for future errors
   Placeholder(String),
 }
 impl ErrorV2 {

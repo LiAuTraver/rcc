@@ -83,6 +83,6 @@ fn main() {
     analyze_errors.iter().for_each(|e| eprintln!("{e}"));
     exit(1);
   }
-  println!("{:}", translation_unit.unwrap());
+  println!("{:#?}", translation_unit.unwrap());
   println!("Analyze succeeded.");
 }
