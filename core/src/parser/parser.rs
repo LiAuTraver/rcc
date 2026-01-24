@@ -1,9 +1,9 @@
-use ::rc_utils::{DisplayWith, breakpoint};
+use ::rc_utils::{DisplayWith, Dummy, breakpoint};
 
 use crate::{
   common::{
-    Keyword, Literal, Operator, OperatorCategory, SourceManager, Storage,
-    Token, UnitScope,
+    Keyword, Literal, Operator, OperatorCategory, SourceManager, SourceSpan,
+    Storage, Token, UnitScope, Warning, WarningData,
   },
   parser::{
     declaration::{
@@ -27,7 +27,7 @@ pub struct Parser<'a> {
   tokens: Vec<Token>,
   cursor: usize,
   errors: Vec<String>,
-  warnings: Vec<String>,
+  warnings: Vec<Warning>,
   loop_labels: Vec<String>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
@@ -72,6 +72,14 @@ impl<'a> Parser<'a> {
       &self.tokens[self.cursor].literal
     } else {
       &self.tokens[self.cursor + offset].literal
+    }
+  }
+
+  fn peek_loc(&self, offset: usize) -> &SourceSpan {
+    if self.is_at_end() {
+      &self.tokens[self.cursor].location
+    } else {
+      &self.tokens[self.cursor + offset].location
     }
   }
 
@@ -136,7 +144,7 @@ impl<'a> Parser<'a> {
     &self.errors
   }
 
-  pub fn warnings(&self) -> &[String] {
+  pub fn warnings(&self) -> &[Warning] {
     &self.warnings
   }
 
@@ -149,13 +157,8 @@ impl<'a> Parser<'a> {
     ));
   }
 
-  fn add_warning(&mut self, message: String) {
-    let token = &self.tokens[self.cursor];
-    self.warnings.push(format!(
-      "In file {}: {}",
-      token.location.display_with(self.source_manager),
-      message
-    ));
+  fn add_warning(&mut self, warning: Warning) {
+    self.warnings.push(warning);
   }
 }
 /// opt checks
@@ -202,7 +205,10 @@ impl<'a> Parser<'a> {
         let qualifier = Qualifiers::from(self.peek(0));
         // qualifiers is a bitfield
         if declspecs.qualifiers & qualifier != Qualifiers::empty() {
-          self.add_warning(format!("Redundant qualifier '{}'.", qualifier));
+          self.add_warning(Warning::new(
+            *self.peek_loc(0),
+            WarningData::RedundantQualifier(qualifier),
+          ));
         } else {
           declspecs.qualifiers |= qualifier;
         }
@@ -211,9 +217,9 @@ impl<'a> Parser<'a> {
         let storage_class = Storage::from(self.peek(0));
         match declspecs.storage_class {
           Some(ref existing_storage) if existing_storage == &storage_class => {
-            self.add_warning(format!(
-              "Redundant storage class specifier '{}'.",
-              storage_class
+            self.add_warning(Warning::new(
+              *self.peek_loc(0),
+              WarningData::RedundantStorageSpecs(storage_class),
             ));
           },
           Some(ref existing_storage) => {
@@ -257,6 +263,8 @@ impl<'a> Parser<'a> {
   fn parse_declarator<const TYPE: DeclaratorType, const AGGRESSIVE: bool>(
     &mut self,
   ) -> Declarator {
+    let location = *self.peek_loc(0);
+
     let name = if TYPE != DeclaratorType::Abstract {
       if let Literal::Identifier(_) = self.peek(0) {
         let name_idx = self.get(); // consume the ident
@@ -273,7 +281,7 @@ impl<'a> Parser<'a> {
     } else {
       None
     };
-    let mut declarator = Declarator::new(name);
+    let mut declarator = Declarator::new(name, SourceSpan::dummy());
     // if the next token is '(', it's a function declarator
     if *self.peek(0) == Literal::Operator(Operator::LeftParen) {
       self.must_get_op::<{ Operator::LeftParen }>();
@@ -281,6 +289,10 @@ impl<'a> Parser<'a> {
       self.recoverable_get::<{ Operator::RightParen }>();
       declarator.modifiers.push(Modifier::Function(parameters));
     }
+    declarator.span = SourceSpan {
+      end: self.peek_loc(0).end,
+      ..location
+    };
     declarator
   }
 
@@ -326,6 +338,7 @@ impl<'a> Parser<'a> {
     } else {
       let mut parameters = Vec::new();
       loop {
+        let location = *self.peek_loc(0);
         let mut declspecs = self.parse_declspecs();
         let declarator =
           self.parse_declarator::<{ DeclaratorType::Maybe }, false>();
@@ -336,7 +349,14 @@ impl<'a> Parser<'a> {
           );
           declspecs.storage_class = None;
         }
-        parameters.push(Parameter::new(declspecs, declarator));
+        parameters.push(Parameter::new(
+          declspecs,
+          declarator,
+          SourceSpan {
+            end: self.peek_loc(0).end,
+            ..location
+          },
+        ));
 
         match self.peek(0) {
           Literal::Operator(Operator::RightParen) => break,
@@ -401,6 +421,7 @@ impl<'a> Parser<'a> {
   }
 
   fn parse_case(&mut self) -> Case {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Case }>();
     let expression = if self.peek(0) == Operator::Colon {
       self.add_error("Expect constant expression after 'case'".to_string());
@@ -414,14 +435,28 @@ impl<'a> Parser<'a> {
     // if it's a compound statement, we need to extract all statements until the next case/default or right brace
     // else, multiple statements until next case/default
     let body = self.parse_case_and_default_body();
-    Case::new(expression, body)
+    Case::new(
+      expression,
+      body,
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
+    )
   }
 
   fn parse_default(&mut self) -> Default {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Default }>();
     self.recoverable_get::<{ Operator::Colon }>();
     let body = self.parse_case_and_default_body();
-    Default::new(body)
+    Default::new(
+      body,
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
+    )
   }
 }
 /// declarations
@@ -431,6 +466,7 @@ impl<'a> Parser<'a> {
     declspecs: DeclSpecs,
     declarator: Declarator,
   ) -> VarDef {
+    let location = *self.peek_loc(0);
     let initializer = match self.peek(0) {
       Literal::Operator(Operator::Semicolon) => {
         self.must_get_op::<{ Operator::Semicolon }>();
@@ -453,6 +489,10 @@ impl<'a> Parser<'a> {
       declspecs,
       declarator,
       initializer.map(|init_expr| Initializer::Expression(init_expr.into())),
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
     )
   }
 
@@ -475,7 +515,7 @@ impl<'a> Parser<'a> {
         // }
       }
     }
-
+    let location = *self.peek_loc(0);
     let mut recovery = false;
     // block definition is not allowed in top
     if *self.peek(0) == Operator::LeftBrace {
@@ -491,10 +531,22 @@ impl<'a> Parser<'a> {
       if let Some(name) = &declarator.name {
         self.typedefs.declare(name.clone());
       } else {
-        self.add_warning("Typedef defines nothing.".to_string());
+        self.add_warning(Warning::new(
+          declarator.span,
+          WarningData::EmptyTypedef,
+        ));
       }
       self.must_get_op::<{ Operator::Semicolon }>();
-      return VarDef::new(declspecs, declarator, None).into();
+      return VarDef::new(
+        declspecs,
+        declarator,
+        None,
+        SourceSpan {
+          end: self.peek_loc(0).end,
+          ..location
+        },
+      )
+      .into();
     }
     let declaration = if declarator
       .modifiers
@@ -505,7 +557,18 @@ impl<'a> Parser<'a> {
       if declarator.name.is_none() {
         self.add_error("Expect a function name.".to_string());
       }
-      self.next_function_body(declspecs, declarator).into()
+      let (declspecs, declarator, body) =
+        self.next_function_body(declspecs, declarator);
+      Function::new(
+        declspecs,
+        declarator,
+        body,
+        SourceSpan {
+          end: self.peek_loc(0).end,
+          ..location
+        },
+      )
+      .into()
     } else {
       // `int;` is allowed although useless
       self.next_vardef(declspecs, declarator).into()
@@ -522,7 +585,7 @@ impl<'a> Parser<'a> {
     &mut self,
     declspecs: DeclSpecs,
     declarator: Declarator,
-  ) -> Function {
+  ) -> (DeclSpecs, Declarator, Option<Compound>) {
     let body = match self.tokens[self.cursor].literal {
       Literal::Operator(Operator::LeftBrace) => Some(self.next_block()),
       _ => {
@@ -531,7 +594,7 @@ impl<'a> Parser<'a> {
       },
     };
 
-    Function::new(declspecs, declarator, body)
+    (declspecs, declarator, body)
   }
 
   fn next_block(&mut self) -> Compound {
@@ -548,6 +611,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_return(&mut self) -> Return {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Return }>();
     let expression = if *self.peek(0) == Operator::Semicolon {
       None
@@ -557,10 +621,17 @@ impl<'a> Parser<'a> {
 
     assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
     self.must_get_op::<{ Operator::Semicolon }>();
-    Return::new(expression)
+    Return::new(
+      expression,
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
+    )
   }
 
   fn next_if(&mut self) -> If {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::If }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
     let then_branch = self.next_statement();
@@ -573,10 +644,19 @@ impl<'a> Parser<'a> {
     } else {
       None
     };
-    If::new(condition, then_branch.into(), else_branch.map(Box::new))
+    If::new(
+      condition,
+      then_branch.into(),
+      else_branch.map(Box::new),
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
+    )
   }
 
   fn next_while(&mut self) -> While {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::While }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
     self
@@ -588,12 +668,17 @@ impl<'a> Parser<'a> {
       condition,
       body.into(),
       self.loop_labels.last().unwrap().clone(),
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
     );
     self.loop_labels.pop();
     while_stmt
   }
 
   fn next_dowhile(&mut self) -> DoWhile {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Do }>();
     self
       .loop_labels
@@ -608,12 +693,17 @@ impl<'a> Parser<'a> {
       Box::new(body),
       condition,
       self.loop_labels.last().unwrap().clone(),
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
     );
     self.loop_labels.pop();
     dowhile_stmt
   }
 
   fn next_for(&mut self) -> For {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::For }>();
     if *self.peek(0) != Operator::LeftParen {
       self.add_error("Expect '(' after 'for'".to_string());
@@ -628,12 +718,12 @@ impl<'a> Parser<'a> {
         },
         _ => match self.next_statement() {
           Statement::Declaration(Declaration::Variable(vardef)) => {
-            if let None = vardef.initializer {
-              self.add_warning(
-                "Expect initializer in for loop variable declaration"
-                  .to_string(),
-              );
-            }
+            // if let None = vardef.initializer {
+            //   self.add_warning(
+            //     "Expect initializer in for loop variable declaration"
+            //       .to_string(),
+            //   );
+            // }
             Some(Statement::Declaration(vardef.into()))
           },
           Statement::Expression(expr) => Some(expr.into()),
@@ -680,6 +770,10 @@ impl<'a> Parser<'a> {
           .last()
           .expect("invariant: loop_labels should not be empty")
           .clone(),
+        SourceSpan {
+          end: self.peek_loc(0).end,
+          ..location
+        },
       );
       self.loop_labels.pop();
       for_stmt
@@ -687,6 +781,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_switch(&mut self) -> Switch {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Switch }>();
     let condition = self.parse_paren_expression::<{ Operator::EXCOMMA }>();
     self
@@ -735,6 +830,10 @@ impl<'a> Parser<'a> {
         .last()
         .expect("invariant: loop_labels should not be empty")
         .clone(),
+      SourceSpan {
+        end: self.peek_loc(0).end,
+        ..location
+      },
     );
     self.loop_labels.pop();
     switch_stmt
@@ -776,6 +875,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_labelstmt(&mut self, ident: String) -> Statement {
+    let location = *self.peek_loc(0);
     // 1. label at end of compound statement is not allowed until C23
     // 2. label can only jump to statements within the same function, not to mention cross file.
     if self.typedefs.is_top_level() {
@@ -788,17 +888,33 @@ impl<'a> Parser<'a> {
       let statement = self.next_statement();
       self.ios_c_strict_check_for_decl(&statement);
       // todo: label validity check, here or in semantic analysis?
-      Label::new(ident, statement).into()
+      Label::new(
+        ident,
+        statement,
+        SourceSpan {
+          end: self.peek_loc(0).end,
+          ..location
+        },
+      )
+      .into()
     }
   }
 
   fn next_gotostmt(&mut self) -> Statement {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Goto }>();
     if let Literal::Identifier(ident) = self.peek(0) {
       let name = ident.to_string();
       self.get(); // consume ident
       self.recoverable_get::<{ Operator::Semicolon }>();
-      Goto::new(name).into()
+      Goto::new(
+        name,
+        SourceSpan {
+          end: self.peek_loc(0).end,
+          ..location
+        },
+      )
+      .into()
     } else {
       self.add_error("Expect label identifier after 'goto'".to_string());
       // assume the label is missing, continue parsing
@@ -819,18 +935,25 @@ impl<'a> Parser<'a> {
   }
 
   fn next_break(&mut self) -> Break {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Break }>();
     self.recoverable_get::<{ Operator::Semicolon }>();
+    let newloc = SourceSpan {
+      end: self.peek_loc(0).end,
+      ..location
+    };
+
     match self.loop_labels.last() {
-      Some(label) => Break::new(label.to_string()),
+      Some(label) => Break::new(label.to_string(), newloc),
       None => {
         self.add_error("Break statement not within a loop".to_string());
-        Break::new("invalid_loop".to_string())
+        Break::new("invalid_loop".to_string(), newloc)
       },
     }
   }
 
   fn next_continue(&mut self) -> Continue {
+    let location = *self.peek_loc(0);
     self.must_get_key::<{ Keyword::Continue }>();
 
     self.recoverable_get::<{ Operator::Semicolon }>();
@@ -843,11 +966,15 @@ impl<'a> Parser<'a> {
         break;
       }
     }
+    let newloc = SourceSpan {
+      end: self.peek_loc(0).end,
+      ..location
+    };
     match found_label {
-      Some(label) => Continue::new(label),
+      Some(label) => Continue::new(label, newloc),
       None => {
         self.add_error("Continue statement not within a loop".to_string());
-        Continue::new("invalid_loop".to_string())
+        Continue::new("invalid_loop".to_string(), newloc)
       },
     }
   }
@@ -855,18 +982,23 @@ impl<'a> Parser<'a> {
 /// expressions
 impl<'a> Parser<'a> {
   fn next_factor(&mut self) -> Expression {
+    let location = *self.peek_loc(0);
     self.get();
-    let literal = &self
-      .tokens[self.cursor - 1]
-      .literal
-    // rust forces me to clone, but here it's guranteed not UB. :(
-    ;
+    let literal = &self.tokens[self.cursor - 1].literal;
     match literal {
       Literal::Number(num) => num.clone().into(),
       Literal::String(str) => Constant::String(str.to_string()).into(),
       Literal::Operator(op) =>
         if op.unary() {
-          Unary::new(op.clone(), self.next_expression(Operator::DEFAULT)).into()
+          Unary::new(
+            op.clone(),
+            self.next_expression(Operator::DEFAULT),
+            SourceSpan {
+              end: self.peek_loc(0).end,
+              ..location
+            },
+          )
+          .into()
         } else if *op == Operator::LeftParen {
           let expr = self.next_expression(Operator::DEFAULT);
           if *self.peek(0) == Literal::Operator(Operator::RightParen) {
@@ -874,7 +1006,14 @@ impl<'a> Parser<'a> {
           } else {
             self.add_error("Expect ')'".to_string());
           }
-          Paren::new(expr).into()
+          Paren::new(
+            expr,
+            SourceSpan {
+              end: self.peek_loc(0).end,
+              ..location
+            },
+          )
+          .into()
         } else {
           self.add_error(format!(
             "Unexpected operator {op} in factor, assuming int",
@@ -886,7 +1025,15 @@ impl<'a> Parser<'a> {
         let ident_expr = Variable::new(ident.to_string()).into();
         if *self.peek(0) == Literal::Operator(Operator::LeftParen) {
           let arguments = self.parse_argument_list();
-          Call::new(ident_expr, arguments).into()
+          Call::new(
+            ident_expr,
+            arguments,
+            SourceSpan {
+              end: self.peek_loc(0).end,
+              ..location
+            },
+          )
+          .into()
         } else {
           ident_expr
         }
@@ -938,6 +1085,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_expression(&mut self, lmin_precedence: u8) -> Expression {
+    let location = *self.peek_loc(0);
     let mut current = self.next_factor();
     loop {
       if let Literal::Operator(op) = self.peek(0) {
@@ -951,15 +1099,32 @@ impl<'a> Parser<'a> {
               operator.precedence() + 1
             },
           );
-          current =
-            Binary::from_operator_unchecked(operator, current, right).into();
+          current = Binary::from_operator_unchecked(
+            operator,
+            current,
+            right,
+            SourceSpan {
+              end: self.peek_loc(0).end,
+              ..location
+            },
+          )
+          .into();
           continue;
         } else if op == Operator::Question {
           self.must_get_op::<{ Operator::Question }>();
           let then_branch = self.next_expression(Operator::DEFAULT);
           self.recoverable_get::<{ Operator::Colon }>();
           let else_branch = self.next_expression(Operator::TERNARY);
-          current = Ternary::new(current, then_branch, else_branch).into();
+          current = Ternary::new(
+            current,
+            then_branch,
+            else_branch,
+            SourceSpan {
+              end: self.peek_loc(0).end,
+              ..location
+            },
+          )
+          .into();
           continue;
         }
       }

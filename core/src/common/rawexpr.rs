@@ -1,5 +1,5 @@
 use super::Operator;
-use crate::types::QualifiedType;
+use crate::{common::SourceSpan, types::QualifiedType};
 
 #[macro_export(local_inner_macros)]
 macro_rules! type_alias_expr {
@@ -83,32 +83,38 @@ macro_rules! type_alias_expr {
 pub struct RawUnary<ExprTy> {
   pub operator: Operator,
   pub oprand: Box<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawBinary<ExprTy> {
   pub operator: Operator,
   pub left: Box<ExprTy>,
   pub right: Box<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawCall<ExprTy> {
   pub callee: Box<ExprTy>,
   pub arguments: Vec<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawParen<ExprTy> {
   pub expr: Box<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawMemberAccess<ExprTy> {
   pub object: Box<ExprTy>,
   pub member: String,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawTernary<ExprTy> {
   pub condition: Box<ExprTy>,
   pub then_expr: Box<ExprTy>,
   pub else_expr: Box<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub enum RawSizeOf<ExprTy, TypeTy> {
@@ -120,31 +126,39 @@ pub enum RawSizeOf<ExprTy, TypeTy> {
 pub struct RawCStyleCast<ExprTy> {
   pub target_type: QualifiedType,
   pub expr: Box<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawArraySubscript<ExprTy> {
   pub array: Box<ExprTy>,
   pub index: Box<ExprTy>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawCompoundLiteral {
   pub target_type: QualifiedType,
   // pub initializer: Initializer,
+  pub span: SourceSpan,
 }
 
 impl<ExprTy> RawUnary<ExprTy> {
-  pub fn from_operator(operator: Operator, oprand: ExprTy) -> Option<Self> {
+  pub fn from_operator(
+    operator: Operator,
+    oprand: ExprTy,
+    span: SourceSpan,
+  ) -> Option<Self> {
     match operator.unary() {
       true => Some(Self {
         operator,
         oprand: oprand.into(),
+        span,
       }),
       false => None,
     }
   }
 
-  pub fn new(operator: Operator, oprand: ExprTy) -> Self {
-    Self::from_operator(operator, oprand).unwrap()
+  pub fn new(operator: Operator, oprand: ExprTy, span: SourceSpan) -> Self {
+    Self::from_operator(operator, oprand, span).unwrap()
   }
 }
 
@@ -153,12 +167,14 @@ impl<ExprTy> RawBinary<ExprTy> {
     operator: Operator,
     left: ExprTy,
     right: ExprTy,
+    span: SourceSpan,
   ) -> Option<Self> {
     match operator.binary() {
       true => Some(Self {
         operator,
         left: left.into(),
         right: right.into(),
+        span,
       }),
       false => None,
     }
@@ -168,40 +184,57 @@ impl<ExprTy> RawBinary<ExprTy> {
     operator: Operator,
     left: ExprTy,
     right: ExprTy,
+    span: SourceSpan,
   ) -> Self {
     debug_assert!(operator.binary());
     Self {
       operator,
       left: left.into(),
       right: right.into(),
+      span,
     }
   }
 
-  pub fn new(operator: Operator, left: ExprTy, right: ExprTy) -> Self {
-    Self::from_operator(operator, left, right).unwrap()
+  pub fn new(
+    operator: Operator,
+    left: ExprTy,
+    right: ExprTy,
+    span: SourceSpan,
+  ) -> Self {
+    Self::from_operator(operator, left, right, span).unwrap()
   }
 }
 impl<ExprTy> RawTernary<ExprTy> {
-  pub fn new(condition: ExprTy, then_expr: ExprTy, else_expr: ExprTy) -> Self {
+  pub fn new(
+    condition: ExprTy,
+    then_expr: ExprTy,
+    else_expr: ExprTy,
+    span: SourceSpan,
+  ) -> Self {
     Self {
       condition: condition.into(),
       then_expr: then_expr.into(),
       else_expr: else_expr.into(),
+      span,
     }
   }
 }
 
 impl<ExprTy> RawCall<ExprTy> {
-  pub fn new(callee: ExprTy, arguments: Vec<ExprTy>) -> Self {
+  pub fn new(callee: ExprTy, arguments: Vec<ExprTy>, span: SourceSpan) -> Self {
     Self {
       callee: callee.into(),
       arguments,
+      span,
     }
   }
 }
 impl<ExprTy> RawParen<ExprTy> {
-  pub fn new(expr: ExprTy) -> Self {
-    Self { expr: expr.into() }
+  pub fn new(expr: ExprTy, span: SourceSpan) -> Self {
+    Self {
+      expr: expr.into(),
+      span,
+    }
   }
 }
 mod fmt {

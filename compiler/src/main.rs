@@ -11,7 +11,6 @@ use ::rc_core::{
 };
 use ::rc_utils::DisplayWith;
 use ::std::{env::args, fs::File, io::Read, path::PathBuf, process::exit};
-// use rcns::preprocessor;
 
 fn main() {
   let args = args().collect::<Vec<String>>();
@@ -55,7 +54,9 @@ fn main() {
   let parse_warnings = parser.warnings();
   if !parse_warnings.is_empty() {
     eprintln!("Parse warnings:");
-    parse_warnings.iter().for_each(|e| eprintln!("{e}"));
+    parse_warnings
+      .iter()
+      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
   }
 
   let parse_errors = parser.errors();

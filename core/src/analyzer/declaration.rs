@@ -2,7 +2,7 @@ use ::std::{cell::Ref, collections::HashSet};
 
 use crate::{
   analyzer::{expression::Expression, statement::Compound},
-  common::SymbolRef,
+  common::{SourceSpan, SymbolRef},
   types::{FunctionSpecifier, QualifiedType, Type},
 };
 
@@ -25,18 +25,21 @@ pub struct Function {
   pub body: Option<Compound>,
   pub labels: HashSet<String>, // just holds a name
   pub gotos: HashSet<String>,  // just holds a name
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct VarDef {
   pub symbol: SymbolRef,
   pub initializer: Option<Initializer>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct Parameter {
   /// If the parameter is named, point to the symbol; otherwise None (abstract/unnamed parameter).
   pub symbol: Option<SymbolRef>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
@@ -58,6 +61,7 @@ impl Function {
     parameters: Vec<Parameter>,
     specifier: FunctionSpecifier,
     body: Option<Compound>,
+    span: SourceSpan,
   ) -> Self {
     Self {
       symbol,
@@ -66,6 +70,7 @@ impl Function {
       body,
       labels: HashSet::new(),
       gotos: HashSet::new(),
+      span,
     }
   }
 
@@ -90,17 +95,22 @@ impl Function {
   }
 }
 impl VarDef {
-  pub fn new(symbol: SymbolRef, initializer: Option<Initializer>) -> Self {
+  pub fn new(
+    symbol: SymbolRef,
+    initializer: Option<Initializer>,
+    span: SourceSpan,
+  ) -> Self {
     Self {
       symbol,
       initializer,
+      span,
     }
   }
 }
 
 impl Parameter {
-  pub fn new(symbol: Option<SymbolRef>) -> Self {
-    Self { symbol }
+  pub fn new(symbol: Option<SymbolRef>, span: SourceSpan) -> Self {
+    Self { symbol, span }
   }
 }
 

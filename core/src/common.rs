@@ -9,6 +9,7 @@ mod operator;
 mod source_info;
 mod storage;
 mod token;
+mod warning;
 
 pub use self::{
   environment::{Environment, Symbol, SymbolRef, UnitScope, VarDeclKind},
@@ -22,4 +23,5 @@ pub use self::{
   },
   storage::Storage,
   token::{Literal, Token},
+  warning::{Data as WarningData, Warning, WarningDisplay},
 };

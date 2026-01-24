@@ -3,8 +3,8 @@ use rc_utils::breakpoint;
 use crate::{
   analyzer::{declaration as ad, expression as ae, statement as astmt},
   common::{
-    Environment, Error, Operator, OperatorCategory, Storage, Symbol,
-    VarDeclKind,
+    Environment, Error, Operator, OperatorCategory, SourceSpan, Storage,
+    Symbol, VarDeclKind,
   },
   parser::{declaration as pd, expression as pe, statement as ps},
   types::{
@@ -154,12 +154,17 @@ impl Analyzer {
       let pd::Parameter {
         declarator,
         declspecs,
+        span,
       } = parameter;
       let (_, storage, qualified_type) = self.parse_declspecs(declspecs)?;
       if storage.is_some() {
         return err_or_debugbreak!(); // error: parameter cannot have storage class
       }
-      let pd::Declarator { modifiers, name } = declarator;
+      let pd::Declarator {
+        modifiers,
+        name,
+        span: _,
+      } = declarator;
       let qualified_type =
         Self::apply_modifiers_for_varty(qualified_type, modifiers);
       let symbol = name.map(|name| {
@@ -170,7 +175,7 @@ impl Analyzer {
           VarDeclKind::Declaration,
         ))
       });
-      analyzed_parameters.push(ad::Parameter::new(symbol));
+      analyzed_parameters.push(ad::Parameter::new(symbol, span));
     }
     Ok(analyzed_parameters)
   }
@@ -325,6 +330,7 @@ impl Analyzer {
       body,
       declarator,
       declspecs,
+      span,
     } = function;
     let (function_specifier, storage, return_type) =
       self.parse_declspecs(declspecs)?;
@@ -332,7 +338,11 @@ impl Analyzer {
       Some(s) => s,
       None => Storage::Extern,
     };
-    let pd::Declarator { modifiers, name } = declarator;
+    let pd::Declarator {
+      modifiers,
+      name,
+      span: _,
+    } = declarator;
     let name = name.expect("function must have a name");
     let (qualified_type, parameters) =
       self.apply_modifiers_for_functiondecl(return_type, modifiers)?;
@@ -350,7 +360,7 @@ impl Analyzer {
     self.environment.declare_symbol(name, symbol.clone());
 
     let function =
-      ad::Function::new(symbol, parameters, function_specifier, None);
+      ad::Function::new(symbol, parameters, function_specifier, None, span);
 
     match body {
       Some(body) => match self.current_function {
@@ -378,14 +388,13 @@ impl Analyzer {
         );
       }
     }
-
     let result = (|| {
       let mut statements = Vec::new();
       for stmt in body.statements {
         let analyzed_stmt = self.statement(stmt)?;
         statements.push(analyzed_stmt);
       }
-      Ok(astmt::Compound::new(statements))
+      Ok(astmt::Compound::new(statements, body.span))
     })();
 
     self.environment.exit();
@@ -408,13 +417,18 @@ impl Analyzer {
       declarator,
       declspecs,
       initializer,
+      span,
     } = vardef;
     let (function_specifier, storage, qualified_type) =
       self.parse_declspecs(declspecs)?;
     if !function_specifier.is_empty() {
       return err_or_debugbreak!(); // var cannot have inline and noreturn
     }
-    let pd::Declarator { modifiers, name } = declarator;
+    let pd::Declarator {
+      modifiers,
+      name,
+      span: _,
+    } = declarator;
     let name = name.expect("variable must have a name");
     let qualified_type =
       Self::apply_modifiers_for_varty(qualified_type, modifiers);
@@ -432,13 +446,19 @@ impl Analyzer {
     // todo: check initializer type compatibility
 
     let vardef = match self.environment.is_global() {
-      true =>
-        self.global_vardef(storage, qualified_type, name.clone(), initializer),
+      true => self.global_vardef(
+        storage,
+        qualified_type,
+        name.clone(),
+        initializer,
+        span,
+      ),
       false => self.local_vardef(
         storage.unwrap_or(Storage::Automatic),
         qualified_type,
         name.clone(),
         initializer,
+        span,
       ),
     }?;
     // no prev - just insert
@@ -512,26 +532,27 @@ impl Analyzer {
     qualified_type: QualifiedType,
     name: String,
     initializer: Option<ad::Initializer>,
+    span: SourceSpan,
   ) -> DeclRes<ad::VarDef> {
     Ok(match (storage, initializer) {
       (None, None) => {
         let symbol = Symbol::tentative(qualified_type, Storage::Extern, name);
-        ad::VarDef::new(symbol, None)
+        ad::VarDef::new(symbol, None, span)
       },
       (None, Some(initializer)) => {
         let symbol = Symbol::def(qualified_type, Storage::Extern, name);
-        ad::VarDef::new(symbol, Some(initializer))
+        ad::VarDef::new(symbol, Some(initializer), span)
       },
       (Some(storage), None) => {
         let symbol = Symbol::decl(qualified_type, storage, name);
-        ad::VarDef::new(symbol, None)
+        ad::VarDef::new(symbol, None, span)
       },
       (Some(storage), Some(initializer)) => {
         if storage == Storage::Extern {
           return err_or_debugbreak!(); // warning, extern vardef should not have initializer
         }
         let symbol = Symbol::def(qualified_type, storage, name);
-        ad::VarDef::new(symbol, Some(initializer))
+        ad::VarDef::new(symbol, Some(initializer), span)
       },
     })
   }
@@ -542,12 +563,13 @@ impl Analyzer {
     qualified_type: QualifiedType,
     name: String,
     initializer: Option<ad::Initializer>,
+    span: SourceSpan,
   ) -> DeclRes<ad::VarDef> {
     if storage == Storage::Extern && initializer.is_some() {
       return err_or_debugbreak!(); // error: local extern vardef cannot have initializer
     }
     let symbol = Symbol::decl(qualified_type, storage, name);
-    Ok(ad::VarDef::new(symbol, initializer))
+    Ok(ad::VarDef::new(symbol, initializer, span))
   }
 }
 
@@ -600,7 +622,11 @@ impl Analyzer {
   }
 
   fn call(&mut self, call: pe::Call) -> ExprRes {
-    let pe::Call { arguments, callee } = call;
+    let pe::Call {
+      arguments,
+      callee,
+      span,
+    } = call;
     let analyzed_callee = self.expression(*callee)?;
 
     let function_proto = match analyzed_callee.unqualified_type() {
@@ -626,17 +652,17 @@ impl Analyzer {
     let expr_type = function_proto.return_type.as_ref().clone();
     // todo: type promotion, currently just match the exact/compatible types
     Ok(ae::Expression::new_rvalue(
-      ae::Call::new(analyzed_callee, analyzed_arguments).into(),
+      ae::Call::new(analyzed_callee, analyzed_arguments, span).into(),
       expr_type,
     ))
   }
 
   fn paren(&mut self, paren: pe::Paren) -> ExprRes {
-    let pe::Paren { expr } = paren;
+    let pe::Paren { expr, span } = paren;
     let analyzed_expr = self.expression(*expr)?;
     let expr_type = analyzed_expr.qualified_type().clone();
     Ok(ae::Expression::new_rvalue(
-      ae::Paren::new(analyzed_expr).into(),
+      ae::Paren::new(analyzed_expr, span).into(),
       expr_type,
     ))
   }
@@ -675,15 +701,16 @@ impl Analyzer {
     let pe::Unary {
       operator,
       oprand: pe_expr,
+      span,
     } = unary;
     let operand = self.expression(*pe_expr)?;
     match operator {
-      Operator::Ampersand => self.addressof(operator, operand),
-      Operator::Star => self.indirect(operator, operand),
-      Operator::Not => self.logical_not(operator, operand),
-      Operator::Tilde => self.tilde(operator, operand),
+      Operator::Ampersand => self.addressof(operator, operand, span),
+      Operator::Star => self.indirect(operator, operand, span),
+      Operator::Not => self.logical_not(operator, operand, span),
+      Operator::Tilde => self.tilde(operator, operand, span),
       Operator::Plus | Operator::Minus =>
-        self.unary_arithmetic(operator, operand),
+        self.unary_arithmetic(operator, operand, span),
       Operator::PlusPlus | Operator::MinusMinus => todo!(),
       _ => unreachable!("operator is not unary: {:#?}", operator),
     }
@@ -694,17 +721,21 @@ impl Analyzer {
       left: pe_left,
       operator,
       right: pe_right,
+      span,
     } = binary;
     let left = self.expression(*pe_left)?;
     let right = self.expression(*pe_right)?;
     match operator.category() {
-      OperatorCategory::Assignment => self.assignment(operator, left, right),
-      OperatorCategory::Logical => self.logical(operator, left, right),
-      OperatorCategory::Relational => self.relational(operator, left, right),
-      OperatorCategory::Arithmetic => self.arithmetic(operator, left, right),
-      OperatorCategory::Bitwise => self.bitwise(operator, left, right),
-      OperatorCategory::BitShift => self.bitshift(operator, left, right),
-      OperatorCategory::Comma => self.comma(operator, left, right),
+      OperatorCategory::Assignment =>
+        self.assignment(operator, left, right, span),
+      OperatorCategory::Logical => self.logical(operator, left, right, span),
+      OperatorCategory::Relational =>
+        self.relational(operator, left, right, span),
+      OperatorCategory::Arithmetic =>
+        self.arithmetic(operator, left, right, span),
+      OperatorCategory::Bitwise => self.bitwise(operator, left, right, span),
+      OperatorCategory::BitShift => self.bitshift(operator, left, right, span),
+      OperatorCategory::Comma => self.comma(operator, left, right, span),
     }
   }
 
@@ -713,6 +744,7 @@ impl Analyzer {
       condition: pe_condition,
       then_expr: pe_then_expr,
       else_expr: pe_else_expr,
+      span,
     } = ternary;
     let condition = self.expression(*pe_condition)?;
     let then_expr = self.expression(*pe_then_expr)?;
@@ -721,7 +753,7 @@ impl Analyzer {
     match (then_expr.unqualified_type(), else_expr.unqualified_type()) {
       (Type::Primitive(Primitive::Void), Type::Primitive(Primitive::Void)) =>
         Ok(ae::Expression::new_rvalue(
-          ae::Ternary::new(condition, then_expr, else_expr).into(),
+          ae::Ternary::new(condition, then_expr, else_expr, span).into(),
           QualifiedType::void(),
         )),
       (Type::Primitive(Primitive::Void), _) => Ok(ae::Expression::new_rvalue(
@@ -729,6 +761,7 @@ impl Analyzer {
           condition,
           then_expr,
           ae::Expression::void_conversion(else_expr),
+          span,
         )
         .into(),
         QualifiedType::void(),
@@ -738,6 +771,7 @@ impl Analyzer {
           condition,
           ae::Expression::void_conversion(then_expr),
           else_expr,
+          span,
         )
         .into(),
         QualifiedType::void(),
@@ -749,7 +783,8 @@ impl Analyzer {
         let (then_converted, else_converted, result_type) =
           ae::Expression::usual_arithmetic_conversion(then_expr, else_expr)?;
         Ok(ae::Expression::new_rvalue(
-          ae::Ternary::new(condition, then_converted, else_converted).into(),
+          ae::Ternary::new(condition, then_converted, else_converted, span)
+            .into(),
           result_type,
         ))
       },
@@ -764,7 +799,7 @@ impl Analyzer {
             Pointer::new(Box::new(qualified_type)).into(),
           );
           Ok(ae::Expression::new_rvalue(
-            ae::Ternary::new(condition, then_expr, else_expr).into(),
+            ae::Ternary::new(condition, then_expr, else_expr, span).into(),
             result_type,
           ))
         } else {
@@ -781,6 +816,7 @@ impl Analyzer {
     &mut self,
     operator: Operator,
     operand: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     assert!(matches!(operator, Operator::Plus | Operator::Minus));
     let operand = operand.lvalue_conversion().decay();
@@ -788,7 +824,12 @@ impl Analyzer {
     if !operand.unqualified_type().is_arithmetic() {
       err_or_debugbreak!() // error: operand of unary arithmetic operator must be arithmetic type
     } else {
-      Ok(operand.usual_arithmetic_conversion_unary()?)
+      let converted_operand = operand.usual_arithmetic_conversion_unary()?;
+      let expr_type = converted_operand.qualified_type().clone();
+      Ok(ae::Expression::new_rvalue(
+        ae::Unary::new(operator, converted_operand, span).into(),
+        expr_type,
+      ))
     }
   }
 
@@ -796,14 +837,25 @@ impl Analyzer {
   ///
   /// 6.5.4.3.4: The result of the ~ operator is the bitwise complement of its (promoted) operand.
   ///     The integer promotions are performed on the operand, and the result has the promoted type.
-  fn tilde(&mut self, operator: Operator, operand: ae::Expression) -> ExprRes {
+  fn tilde(
+    &mut self,
+    operator: Operator,
+    operand: ae::Expression,
+    span: SourceSpan,
+  ) -> ExprRes {
     assert_eq!(operator, Operator::Tilde);
     let operand = operand.lvalue_conversion().decay();
 
     if !operand.unqualified_type().is_integer() {
       err_or_debugbreak!() // error: operand of bitwise NOT operator must be an integer
     } else {
-      Ok(operand.usual_arithmetic_conversion_unary()?)
+      // Ok(operand.usual_arithmetic_conversion_unary()?)
+      let converted_operand = operand.usual_arithmetic_conversion_unary()?;
+      let expr_type = converted_operand.qualified_type().clone();
+      Ok(ae::Expression::new_rvalue(
+        ae::Unary::new(operator, converted_operand, span).into(),
+        expr_type,
+      ))
     }
   }
 
@@ -812,13 +864,14 @@ impl Analyzer {
     &mut self,
     operator: Operator,
     operand: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     assert_eq!(operator, Operator::Not);
     let operand = operand.lvalue_conversion().decay();
 
     let converted_operand = operand.conditional_conversion()?;
     Ok(ae::Expression::new_rvalue(
-      ae::Unary::new(operator, converted_operand).into(),
+      ae::Unary::new(operator, converted_operand, span).into(),
       QualifiedType::new_unqualified(Primitive::Bool.into()),
     ))
   }
@@ -832,6 +885,7 @@ impl Analyzer {
     &mut self,
     operator: Operator,
     operand: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     assert_eq!(operator, Operator::Ampersand);
     if !operand.is_lvalue() {
@@ -840,7 +894,7 @@ impl Analyzer {
       let pointer_type =
         Pointer::new(operand.qualified_type().clone().into()).into();
       Ok(ae::Expression::new_rvalue(
-        ae::Unary::new(operator, operand).into(),
+        ae::Unary::new(operator, operand, span).into(),
         QualifiedType::new_unqualified(pointer_type),
       ))
     }
@@ -854,6 +908,7 @@ impl Analyzer {
     &mut self,
     operator: Operator,
     operand: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     assert_eq!(operator, Operator::Star);
 
@@ -874,7 +929,7 @@ impl Analyzer {
       // If an invalid value has been assigned to the pointer, the behavior is undefined.
       let expr_type = pointee_type.as_ref().clone();
       Ok(ae::Expression::new_lvalue(
-        ae::Unary::new(operator, operand).into(),
+        ae::Unary::new(operator, operand, span).into(),
         expr_type,
       ))
     }
@@ -887,6 +942,7 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     assert!(
       operator == Operator::Assign,
@@ -901,7 +957,7 @@ impl Analyzer {
       .assignment_conversion(left.qualified_type())?;
     let expr_type = left.qualified_type().clone();
     Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, left, assigned_expr).into(),
+      ae::Binary::new(operator, left, assigned_expr, span).into(),
       expr_type,
     ))
   }
@@ -916,6 +972,7 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     let left = left.lvalue_conversion().decay();
     let right = right.lvalue_conversion().decay();
@@ -923,7 +980,7 @@ impl Analyzer {
     let lhs = left.conditional_conversion()?;
     let rhs = right.conditional_conversion()?;
     Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs).into(),
+      ae::Binary::new(operator, lhs, rhs, span).into(),
       QualifiedType::new_unqualified(Primitive::Bool.into()),
     ))
   }
@@ -936,6 +993,7 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     let left = left.lvalue_conversion().decay();
     let right = right.lvalue_conversion().decay();
@@ -948,7 +1006,7 @@ impl Analyzer {
         ae::Expression::usual_arithmetic_conversion(left, right)?;
 
       return Ok(ae::Expression::new_rvalue(
-        ae::Binary::new(operator, lhs, rhs).into(),
+        ae::Binary::new(operator, lhs, rhs, span).into(),
         QualifiedType::new_unqualified(Primitive::Bool.into()),
       ));
     }
@@ -966,6 +1024,7 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     let left = left.lvalue_conversion().decay();
     let right = right.lvalue_conversion().decay();
@@ -973,7 +1032,7 @@ impl Analyzer {
     let (lhs, rhs, result_type) =
       ae::Expression::usual_arithmetic_conversion(left, right)?;
     Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs).into(),
+      ae::Binary::new(operator, lhs, rhs, span).into(),
       result_type,
     ))
   }
@@ -986,6 +1045,7 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     let left = left.lvalue_conversion().decay();
     let right = right.lvalue_conversion().decay();
@@ -1000,7 +1060,7 @@ impl Analyzer {
       ae::Expression::usual_arithmetic_conversion(left, right)?;
 
     Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs).into(),
+      ae::Binary::new(operator, lhs, rhs, span).into(),
       result_type,
     ))
   }
@@ -1013,6 +1073,7 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     let lhs = left.lvalue_conversion().decay().promote();
     let rhs = right.lvalue_conversion().decay().promote();
@@ -1025,7 +1086,7 @@ impl Analyzer {
 
     let expr_type = lhs.qualified_type().clone();
     Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs).into(),
+      ae::Binary::new(operator, lhs, rhs, span).into(),
       expr_type,
     ))
   }
@@ -1038,11 +1099,12 @@ impl Analyzer {
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
+    span: SourceSpan,
   ) -> ExprRes {
     // the result is the right expression, and the left is void converted, that's it. done.
     let expr_type = right.qualified_type().clone();
     Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, left.void_conversion(), right).into(),
+      ae::Binary::new(operator, left.void_conversion(), right, span).into(),
       expr_type,
     ))
   }
@@ -1104,7 +1166,7 @@ impl Analyzer {
       for statement in compound.statements {
         statements.push(self.statement(statement)?);
       }
-      Ok(astmt::Compound::new(statements))
+      Ok(astmt::Compound::new(statements, compound.span))
     })();
 
     self.environment.exit();
@@ -1121,7 +1183,7 @@ impl Analyzer {
   }
 
   fn returnstmt(&mut self, return_stmt: ps::Return) -> StmtRes<astmt::Return> {
-    let ps::Return { expression } = return_stmt;
+    let ps::Return { expression, span } = return_stmt;
     let analyzed_expr = match expression {
       Some(expr) => Some(self.expression(expr)?),
       None => None,
@@ -1143,7 +1205,8 @@ impl Analyzer {
       },
     };
     match (&analyzed_expr, return_type.unqualified_type()) {
-      (None, Type::Primitive(Primitive::Void)) => Ok(astmt::Return::new(None)),
+      (None, Type::Primitive(Primitive::Void)) =>
+        Ok(astmt::Return::new(None, span)),
       (None, _) => {
         err_or_debugbreak!() // error: non-void function must return a value
       },
@@ -1158,7 +1221,7 @@ impl Analyzer {
         .lvalue_conversion()
         .decay()
         .assignment_conversion(&return_type)?;
-        Ok(astmt::Return::new(Some(a)))
+        Ok(astmt::Return::new(Some(a), span))
       },
     }
   }
@@ -1168,6 +1231,7 @@ impl Analyzer {
       condition,
       then_branch,
       else_branch,
+      span,
     } = if_stmt;
     let analyzed_condition = self.expression(condition)?;
     let analyzed_then_branch = Box::new(self.statement(*then_branch)?);
@@ -1179,6 +1243,7 @@ impl Analyzer {
       analyzed_condition,
       analyzed_then_branch,
       analyzed_else_branch,
+      span,
     ))
   }
 
@@ -1187,10 +1252,16 @@ impl Analyzer {
       condition,
       body,
       tag: label,
+      span,
     } = while_stmt;
     let analyzed_condition = self.expression(condition)?;
     let analyzed_body = Box::new(self.statement(*body)?);
-    Ok(astmt::While::new(analyzed_condition, analyzed_body, label))
+    Ok(astmt::While::new(
+      analyzed_condition,
+      analyzed_body,
+      label,
+      span,
+    ))
   }
 
   fn dowhilestmt(&mut self, do_while: ps::DoWhile) -> StmtRes<astmt::DoWhile> {
@@ -1198,6 +1269,7 @@ impl Analyzer {
       body,
       condition,
       tag: label,
+      span,
     } = do_while;
     let analyzed_body = Box::new(self.statement(*body)?);
     let analyzed_condition = self.expression(condition)?;
@@ -1205,6 +1277,7 @@ impl Analyzer {
       analyzed_body,
       analyzed_condition,
       label,
+      span,
     ))
   }
 
@@ -1215,6 +1288,7 @@ impl Analyzer {
       increment,
       body,
       tag: label,
+      span,
     } = for_stmt;
     let analyzed_initializer = initializer
       .map(|init| self.statement(*init))
@@ -1231,6 +1305,7 @@ impl Analyzer {
       analyzed_increment,
       analyzed_body,
       label,
+      span,
     ))
   }
 
@@ -1240,6 +1315,7 @@ impl Analyzer {
       condition,
       default,
       tag,
+      span,
     } = switch;
     let analyzed_condition = self.expression(condition)?;
     let mut analyzed_cases = Vec::new();
@@ -1255,11 +1331,12 @@ impl Analyzer {
       analyzed_cases,
       analyzed_default,
       tag,
+      span,
     ))
   }
 
   fn casestmt(&mut self, case: ps::Case) -> StmtRes<astmt::Case> {
-    let ps::Case { body, value } = case;
+    let ps::Case { body, value, span } = case;
     let analyzed_value = self.expression(value)?;
     if !analyzed_value.is_integer_constant() {
       Err(()) // error: case value must be an integer constant
@@ -1268,24 +1345,28 @@ impl Analyzer {
       for stmt in body {
         analyzed_body.push(self.statement(stmt)?);
       }
-      Ok(astmt::Case::new(analyzed_value, analyzed_body))
+      Ok(astmt::Case::new(analyzed_value, analyzed_body, span))
     }
   }
 
   fn defaultstmt(&mut self, default: ps::Default) -> StmtRes<astmt::Default> {
-    let ps::Default { body } = default;
+    let ps::Default { body, span } = default;
     let mut analyzed_body = vec![];
     for stmt in body {
       analyzed_body.push(self.statement(stmt)?);
     }
-    Ok(astmt::Default::new(analyzed_body))
+    Ok(astmt::Default::new(analyzed_body, span))
   }
 
   fn labelstmt(&mut self, label: ps::Label) -> StmtRes<astmt::Label> {
     match self.environment.is_global() {
       true => err_or_debugbreak!(), // error: label cannot be declared in global scope
       false => {
-        let ps::Label { name, statement } = label;
+        let ps::Label {
+          name,
+          statement,
+          span,
+        } = label;
         match self
           .current_function
           .as_mut()
@@ -1293,7 +1374,8 @@ impl Analyzer {
           .labels
           .insert(name.clone())
         {
-          true => Ok(astmt::Label::new(name, self.statement(*statement)?)),
+          true =>
+            Ok(astmt::Label::new(name, self.statement(*statement)?, span)),
           false => err_or_debugbreak!(), // error: duplicate label in function
         }
       },
@@ -1310,7 +1392,9 @@ impl Analyzer {
           .unwrap()
           .gotos
           .insert(goto.label.clone());
-        Ok(astmt::Statement::Goto(astmt::Goto::new(goto.label)))
+        Ok(astmt::Statement::Goto(astmt::Goto::new(
+          goto.label, goto.span,
+        )))
       },
     }
   }
@@ -1318,7 +1402,10 @@ impl Analyzer {
   fn breakstmt(&mut self, break_stmt: ps::Break) -> StmtRes<astmt::Statement> {
     match self.environment.is_global() {
       true => err_or_debugbreak!(), // error: should be handled in parser
-      false => Ok(astmt::Statement::Break(astmt::Break::new(break_stmt.tag))),
+      false => Ok(astmt::Statement::Break(astmt::Break::new(
+        break_stmt.tag,
+        break_stmt.span,
+      ))),
     }
   }
 
@@ -1330,6 +1417,7 @@ impl Analyzer {
       true => err_or_debugbreak!(), // error: should be handled in parser
       false => Ok(astmt::Statement::Continue(astmt::Continue::new(
         continue_stmt.tag,
+        continue_stmt.span,
       ))),
     }
   }

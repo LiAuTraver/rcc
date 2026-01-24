@@ -1,3 +1,7 @@
+use ::rc_utils::Dummy;
+
+use crate::common::SourceSpan;
+
 #[derive(Debug)]
 pub enum RawStmt<StmtTy, DeclTy, ExprTy> {
   Empty,
@@ -42,6 +46,7 @@ macro_rules! type_alias_stmt {
 #[derive(Debug)]
 pub struct RawReturn<ExprTy> {
   pub expression: Option<ExprTy>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
@@ -49,6 +54,7 @@ pub struct RawIf<StmtTy, ExprTy> {
   pub condition: ExprTy,
   pub then_branch: Box<StmtTy>,
   pub else_branch: Option<Box<StmtTy>>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
@@ -56,6 +62,7 @@ pub struct RawWhile<StmtTy, ExprTy> {
   pub condition: ExprTy,
   pub body: Box<StmtTy>,
   pub tag: String,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
@@ -63,6 +70,7 @@ pub struct RawDoWhile<StmtTy, ExprTy> {
   pub body: Box<StmtTy>,
   pub condition: ExprTy,
   pub tag: String,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
@@ -72,6 +80,7 @@ pub struct RawFor<StmtTy, ExprTy> {
   pub increment: Option<ExprTy>,
   pub body: Box<StmtTy>,
   pub tag: String,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
@@ -80,59 +89,68 @@ pub struct RawSwitch<StmtTy, ExprTy> {
   pub cases: Vec<RawCase<StmtTy, ExprTy>>,
   pub default: Option<RawDefault<StmtTy>>,
   pub tag: String,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct RawCase<StmtTy, ExprTy> {
   pub value: ExprTy, // Must be constant integer expression
   pub body: Vec<StmtTy>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawDefault<StmtTy> {
   pub body: Vec<StmtTy>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawLabel<StmtTy> {
   pub name: String,
   pub statement: Box<StmtTy>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawGoto {
   pub label: String,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawCompound<StmtTy> {
   pub statements: Vec<StmtTy>,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawBreak {
   pub tag: String,
+  pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawContinue {
   pub tag: String,
+  pub span: SourceSpan,
 }
 
 impl RawGoto {
-  pub fn new(label: String) -> Self {
-    Self { label }
+  pub fn new(label: String, span: SourceSpan) -> Self {
+    Self { label, span }
   }
 }
 
 impl<StmtTy> RawCompound<StmtTy> {
-  pub fn new(statements: Vec<StmtTy>) -> Self {
-    Self { statements }
+  pub fn new(statements: Vec<StmtTy>, span: SourceSpan) -> Self {
+    Self { statements, span }
   }
 }
 impl<StmtTy> ::core::default::Default for RawCompound<StmtTy> {
   fn default() -> Self {
     Self {
       statements: Vec::default(),
+      span: SourceSpan::dummy(),
     }
   }
 }
@@ -143,28 +161,31 @@ impl<StmtTy, ExprTy> RawSwitch<StmtTy, ExprTy> {
     cases: Vec<RawCase<StmtTy, ExprTy>>,
     default: Option<RawDefault<StmtTy>>,
     tag: String,
+    span: SourceSpan,
   ) -> Self {
     Self {
       condition,
       cases,
       default,
       tag,
+      span,
     }
   }
 }
 
 impl<StmtTy> RawLabel<StmtTy> {
-  pub fn new(name: String, statement: StmtTy) -> Self {
+  pub fn new(name: String, statement: StmtTy, span: SourceSpan) -> Self {
     Self {
       name,
       statement: Box::new(statement),
+      span,
     }
   }
 }
 
 impl<StmtTy, ExprTy> RawCase<StmtTy, ExprTy> {
-  pub fn new(value: ExprTy, body: Vec<StmtTy>) -> Self {
-    Self { value, body }
+  pub fn new(value: ExprTy, body: Vec<StmtTy>, span: SourceSpan) -> Self {
+    Self { value, body, span }
   }
 }
 
@@ -173,37 +194,51 @@ impl<StmtTy, ExprTy> RawIf<StmtTy, ExprTy> {
     condition: ExprTy,
     then_branch: Box<StmtTy>,
     else_branch: Option<Box<StmtTy>>,
+    span: SourceSpan,
   ) -> Self {
     Self {
       condition,
       then_branch,
       else_branch,
+      span,
     }
   }
 }
 
 impl<ExprTy> RawReturn<ExprTy> {
-  pub fn new(expression: Option<ExprTy>) -> Self {
-    Self { expression }
+  pub fn new(expression: Option<ExprTy>, span: SourceSpan) -> Self {
+    Self { expression, span }
   }
 }
 
 impl<StmtTy, ExprTy> RawWhile<StmtTy, ExprTy> {
-  pub fn new(condition: ExprTy, body: Box<StmtTy>, tag: String) -> Self {
+  pub fn new(
+    condition: ExprTy,
+    body: Box<StmtTy>,
+    tag: String,
+    span: SourceSpan,
+  ) -> Self {
     Self {
       condition,
       body,
       tag,
+      span,
     }
   }
 }
 
 impl<StmtTy, ExprTy> RawDoWhile<StmtTy, ExprTy> {
-  pub fn new(body: Box<StmtTy>, condition: ExprTy, tag: String) -> Self {
+  pub fn new(
+    body: Box<StmtTy>,
+    condition: ExprTy,
+    tag: String,
+    span: SourceSpan,
+  ) -> Self {
     Self {
       body,
       condition,
       tag,
+      span,
     }
   }
 }
@@ -215,6 +250,7 @@ impl<StmtTy, ExprTy> RawFor<StmtTy, ExprTy> {
     increment: Option<ExprTy>,
     body: Box<StmtTy>,
     tag: String,
+    span: SourceSpan,
   ) -> Self {
     Self {
       initializer,
@@ -222,25 +258,26 @@ impl<StmtTy, ExprTy> RawFor<StmtTy, ExprTy> {
       increment,
       body,
       tag,
+      span,
     }
   }
 }
 
 impl<StmtTy> RawDefault<StmtTy> {
-  pub fn new(body: Vec<StmtTy>) -> Self {
-    Self { body }
+  pub fn new(body: Vec<StmtTy>, span: SourceSpan) -> Self {
+    Self { body, span }
   }
 }
 
 impl RawBreak {
-  pub fn new(tag: String) -> Self {
-    Self { tag }
+  pub fn new(tag: String, span: SourceSpan) -> Self {
+    Self { tag, span }
   }
 }
 
 impl RawContinue {
-  pub fn new(tag: String) -> Self {
-    Self { tag }
+  pub fn new(tag: String, span: SourceSpan) -> Self {
+    Self { tag, span }
   }
 }
 

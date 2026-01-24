@@ -1,7 +1,7 @@
-use ::rc_utils::interconvert;
+use ::rc_utils::{Dummy, interconvert};
 
 use crate::{
-  common::{Keyword, Literal, Storage},
+  common::{Keyword, Literal, SourceSpan, Storage},
   parser::{expression::Expression, statement::Compound},
   types::{FunctionSpecifier, Qualifiers},
 };
@@ -24,21 +24,6 @@ pub enum Declaration {
 interconvert!(Function, Declaration);
 interconvert!(VarDef, Declaration, Variable);
 
-impl From<&Literal> for Qualifiers {
-  fn from(literal: &Literal) -> Self {
-    match literal {
-      Literal::Keyword(kw) => match kw {
-        Keyword::Const => Qualifiers::Const,
-        Keyword::Volatile => Qualifiers::Volatile,
-        Keyword::Restrict => Qualifiers::Restrict,
-        Keyword::Atomic => Qualifiers::Atomic,
-        _ => panic!("cannot convert {:?} to Qualifier", kw),
-      },
-      _ => panic!("cannot convert {:?} to Qualifier", literal),
-    }
-  }
-}
-
 /// abstract declarator: no variable name/identifier
 ///
 /// used in parsing
@@ -57,6 +42,7 @@ pub enum DeclaratorType {
 pub struct Declarator {
   pub name: Option<String>,
   pub modifiers: Vec<Modifier>, // pointer, array, function
+  pub span: SourceSpan,
 }
 /// direct-declarator:
 ///     - ( declarator )
@@ -89,6 +75,7 @@ pub struct Member {
 pub struct Parameter {
   pub declspecs: DeclSpecs,
   pub declarator: Declarator,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct Struct {
@@ -139,58 +126,6 @@ impl TypeSpecifier {
     }
   }
 }
-impl TryFrom<&Keyword> for FunctionSpecifier {
-  type Error = ();
-
-  fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
-    match kw {
-      Keyword::Inline => Ok(FunctionSpecifier::Inline),
-      Keyword::Noreturn => Ok(FunctionSpecifier::Noreturn),
-      _ => Err(()),
-    }
-  }
-}
-
-impl TryFrom<&Literal> for FunctionSpecifier {
-  type Error = ();
-
-  fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
-    match literal {
-      Literal::Keyword(kw) => FunctionSpecifier::try_from(kw),
-      _ => Err(()),
-    }
-  }
-}
-
-impl TryFrom<&Keyword> for TypeSpecifier {
-  type Error = ();
-
-  fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
-    match kw {
-      Keyword::Void => Ok(TypeSpecifier::Void),
-      Keyword::Char => Ok(TypeSpecifier::Char),
-      Keyword::Short => Ok(TypeSpecifier::Short),
-      Keyword::Int => Ok(TypeSpecifier::Int),
-      Keyword::Long => Ok(TypeSpecifier::Long),
-      Keyword::Float => Ok(TypeSpecifier::Float),
-      Keyword::Double => Ok(TypeSpecifier::Double),
-      Keyword::Signed => Ok(TypeSpecifier::Signed),
-      Keyword::Unsigned => Ok(TypeSpecifier::Unsigned),
-      Keyword::Bool => Ok(TypeSpecifier::Bool),
-      _ => Err(()),
-    }
-  }
-}
-impl TryFrom<&Literal> for TypeSpecifier {
-  type Error = ();
-
-  fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
-    match literal {
-      Literal::Keyword(kw) => TypeSpecifier::try_from(kw),
-      _ => Err(()),
-    }
-  }
-}
 /// declaration-specifiers:
 ///    - declaration-specifier attribute-specifier-sequence_opt (don't care)
 ///    - declaration-specifier declaration-specifiers
@@ -205,18 +140,21 @@ pub struct DeclSpecs {
   pub storage_class: Option<Storage>,
   pub qualifiers: Qualifiers,
   pub type_specifiers: Vec<TypeSpecifier>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct Function {
   pub declspecs: DeclSpecs,
   pub declarator: Declarator,
   pub body: Option<Compound>,
+  pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct VarDef {
   pub declspecs: DeclSpecs,
   pub declarator: Declarator,
   pub initializer: Option<Initializer>,
+  pub span: SourceSpan,
 }
 /// array-declarator:
 ///     - direct-declarator \[ type-qualifier-list_opt assignment-expression_opt \]
@@ -282,11 +220,13 @@ impl Function {
     declspecs: DeclSpecs,
     declarator: Declarator,
     body: Option<Compound>,
+    span: SourceSpan,
   ) -> Self {
     Self {
       declspecs,
       declarator,
       body,
+      span,
     }
   }
 }
@@ -307,10 +247,15 @@ impl ::core::default::Default for FunctionSignature {
   }
 }
 impl Parameter {
-  pub fn new(declspecs: DeclSpecs, declarator: Declarator) -> Self {
+  pub fn new(
+    declspecs: DeclSpecs,
+    declarator: Declarator,
+    span: SourceSpan,
+  ) -> Self {
     Self {
       declspecs,
       declarator,
+      span,
     }
   }
 }
@@ -322,10 +267,11 @@ impl Program {
   }
 }
 impl Declarator {
-  pub fn new(name: Option<String>) -> Self {
+  pub fn new(name: Option<String>, span: SourceSpan) -> Self {
     Self {
       name,
       modifiers: Vec::default(),
+      span,
     }
   }
 
@@ -343,6 +289,7 @@ impl ::core::default::Default for DeclSpecs {
       storage_class: None,
       qualifiers: Qualifiers::empty(),
       type_specifiers: Vec::default(),
+      span: SourceSpan::dummy(),
     }
   }
 }
@@ -351,11 +298,13 @@ impl VarDef {
     declspecs: DeclSpecs,
     declarator: Declarator,
     initializer: Option<Initializer>,
+    span: SourceSpan,
   ) -> Self {
     Self {
       declspecs,
       declarator,
       initializer,
+      span,
     }
   }
 
@@ -372,6 +321,75 @@ impl VarDef {
 
   pub fn is_vardef(&self) -> bool {
     !self.is_typedef()
+  }
+}
+mod cvt {
+  use super::*;
+  impl From<&Literal> for Qualifiers {
+    fn from(literal: &Literal) -> Self {
+      match literal {
+        Literal::Keyword(kw) => match kw {
+          Keyword::Const => Qualifiers::Const,
+          Keyword::Volatile => Qualifiers::Volatile,
+          Keyword::Restrict => Qualifiers::Restrict,
+          Keyword::Atomic => Qualifiers::Atomic,
+          _ => panic!("cannot convert {:?} to Qualifier", kw),
+        },
+        _ => panic!("cannot convert {:?} to Qualifier", literal),
+      }
+    }
+  }
+  impl TryFrom<&Keyword> for FunctionSpecifier {
+    type Error = ();
+
+    fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
+      match kw {
+        Keyword::Inline => Ok(FunctionSpecifier::Inline),
+        Keyword::Noreturn => Ok(FunctionSpecifier::Noreturn),
+        _ => Err(()),
+      }
+    }
+  }
+
+  impl TryFrom<&Literal> for FunctionSpecifier {
+    type Error = ();
+
+    fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
+      match literal {
+        Literal::Keyword(kw) => FunctionSpecifier::try_from(kw),
+        _ => Err(()),
+      }
+    }
+  }
+
+  impl TryFrom<&Keyword> for TypeSpecifier {
+    type Error = ();
+
+    fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
+      match kw {
+        Keyword::Void => Ok(TypeSpecifier::Void),
+        Keyword::Char => Ok(TypeSpecifier::Char),
+        Keyword::Short => Ok(TypeSpecifier::Short),
+        Keyword::Int => Ok(TypeSpecifier::Int),
+        Keyword::Long => Ok(TypeSpecifier::Long),
+        Keyword::Float => Ok(TypeSpecifier::Float),
+        Keyword::Double => Ok(TypeSpecifier::Double),
+        Keyword::Signed => Ok(TypeSpecifier::Signed),
+        Keyword::Unsigned => Ok(TypeSpecifier::Unsigned),
+        Keyword::Bool => Ok(TypeSpecifier::Bool),
+        _ => Err(()),
+      }
+    }
+  }
+  impl TryFrom<&Literal> for TypeSpecifier {
+    type Error = ();
+
+    fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
+      match literal {
+        Literal::Keyword(kw) => TypeSpecifier::try_from(kw),
+        _ => Err(()),
+      }
+    }
   }
 }
 mod fmt {

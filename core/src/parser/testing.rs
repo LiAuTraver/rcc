@@ -1,5 +1,7 @@
+use ::rc_utils::Dummy;
+
 use crate::{
-  common::Operator,
+  common::{Operator, SourceSpan},
   parser::expression::{Binary, Constant, Expression},
 };
 
@@ -9,6 +11,7 @@ impl Expression {
       operator: Operator::Plus,
       left: Self::Constant(Constant::Int(1).into()).into(),
       right: Self::Constant(Constant::Int(1)).into(),
+      span: SourceSpan::dummy(),
     })
   }
 }

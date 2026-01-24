@@ -80,6 +80,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rc"
+version = "0.1.0"
+dependencies = [
+ "rc-core",
+ "rc-utils",
+]
+
+[[package]]
 name = "rc-core"
 version = "0.1.0"
 dependencies = [

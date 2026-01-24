@@ -1,6 +1,8 @@
+use ::rc_utils::Dummy;
+
 use crate::{
   analyzer::expression::{Binary, Constant, Expression},
-  common::Operator,
+  common::{Operator, SourceSpan},
   types::QualifiedType,
 };
 
@@ -11,6 +13,7 @@ impl Expression {
         Operator::Plus,
         Self::new_rvalue(Constant::Int(1).into(), QualifiedType::int()),
         Self::new_rvalue(Constant::Int(1).into(), QualifiedType::int()),
+        SourceSpan::dummy(),
       )
       .into(),
       QualifiedType::int(),

@@ -9,7 +9,8 @@ int j;
 // int k[];
 // extern int k[10];
 typedef int INT;
-inline static int foo(int a) { return a + 1; }
+typedef int const CONST_INT;
+inline static static int foo(int a) { return a + 1; }
 int main(void) { //
   goto label;
   {
@@ -17,8 +18,8 @@ int main(void) { //
     int k = foo(0);
   }
   int f(int, int);
-  INT x = sizeof(char);
   typedef int const CONST_INT;
+  INT x = sizeof(char);
   typedef int const CONST_INT;
   int foo;
   CONST_INT INT = (10);
@@ -31,6 +32,10 @@ int main(void) { //
     break;
   default:
     y = y + 2;
+  }
+  for (int i = 0; i < 10; i = i + 1) { // my parser can't handle += and ++ yet
+    y = y + i;
+    continue;
   }
   return f(2, 3);
 }
