@@ -1,7 +1,7 @@
 use ::rc_utils::{DisplayWith, IntoWith};
 
 use super::{Operator, SourceManager, SourceSpan, Storage};
-use crate::types::Qualifiers;
+use crate::types::{QualifiedType, Qualifiers};
 
 /// Custom message. would be printed as-is.
 type CustomMessage = String;
@@ -30,7 +30,7 @@ pub enum Data {
   UnclosedParameterList(CustomMessage),
   MissingOpenParen(Elem),
   MissingCloseParen(Elem),
-  ExpressionNotConstant(CustomMessage),
+  ExprNotConstant(CustomMessage),
   VarDeclUnclosed(CustomMessage),
   InvalidBlockItem,
   MissingFunctionName,
@@ -38,12 +38,10 @@ pub enum Data {
   CaseLabelAfterDefault,
   MultipleDefaultLabels,
   MissingLabelInSwitch,
-  CaseLabelNotWithinSwitch,
-  DefaultLabelNotWithinSwitch,
+  LabelNotWithinSwitch(Elem),
   TopLevelLabel,
   MissingLabelAfterGoto,
-  InvalidBreakStmt,
-  InvalidContinueStmt,
+  InvalidControlFlowStmt(CustomMessage),
   UnsupportedFeature(CustomMessage),
   LabelNotFound(Elem),
   FunctionSpecsInVariableDecl(Elem),
@@ -64,6 +62,7 @@ pub enum Data {
   ExprNotAssignable(Elem),
   ReturnTypeMismatch(CustomMessage),
   DuplicateLabel(Elem),
+  IncompatibleType(Elem, QualifiedType, QualifiedType),
   IncompatiblePointerTypes(Elem, Elem),
 
   // storage.rs
@@ -107,126 +106,121 @@ impl<'a> ::std::fmt::Display for ErrorDisplay<'a> {
   fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
     write!(f, "{}: ", self.error.span.display_with(self.source_manager))?;
 
+    use Data::*;
+
     match &self.error.data {
-      Data::UnexpectedCharacter(c) => write!(f, "Unexpected character '{}'", c),
-      Data::UnterminatedString => write!(f, "Unterminated string literal"),
-      Data::InvalidNumberFormat(s) =>
-        write!(f, "Invalid number format '{}'", s),
-      Data::MissingOperator(operator) => write!(f, "Expect '{}'", operator),
-      Data::MultipleStorageSpecs(l, r) =>
+      UnexpectedCharacter(c) => write!(f, "Unexpected character '{}'", c),
+      UnterminatedString => write!(f, "Unterminated string literal"),
+      InvalidNumberFormat(s) => write!(f, "Invalid number format '{}'", s),
+      MissingOperator(operator) => write!(f, "Expect '{}'", operator),
+      MultipleStorageSpecs(l, r) =>
         write!(f, "Cannot combine storage classes '{}' and '{}'", l, r),
-      Data::MissingTypeSpecifier(_) => write!(
+      MissingTypeSpecifier(_) => write!(
         f,
         "Expect a type specifier in declaration, default to 'int'"
       ),
-      Data::MissingIdentifier(_) =>
-        write!(f, "Expect identifier in declarator"),
-      Data::ExtraneousComma(msg) => write!(f, "{msg}"),
-      Data::VoidVariableDecl(msg) => write!(f, "{msg}"),
-      Data::ExtraneousStorageSpecs(storage) =>
+      MissingIdentifier(_) => write!(f, "Expect identifier in declarator"),
+      ExtraneousComma(msg) => write!(f, "{msg}"),
+      VoidVariableDecl(msg) => write!(f, "{msg}"),
+      ExtraneousStorageSpecs(storage) =>
         write!(f, "Storage class specifier '{storage}' is not allowed here"),
-      Data::UnclosedParameterList(msg) => write!(f, "{msg}"),
-      Data::MissingOpenParen(msg) => write!(f, "Expect '(' after {msg}"),
-      Data::MissingCloseParen(msg) => write!(f, "Expect ')' after {msg}"),
-      Data::ExpressionNotConstant(msg) =>
-        write!(f, "Expression '{msg}' is not a constant"),
-      Data::VarDeclUnclosed(msg) => write!(f, "{msg}"),
-      Data::InvalidBlockItem =>
-        write!(f, "Block definition is not allowed here"),
-      Data::MissingFunctionName => write!(f, "Expect function name"),
-      Data::InvalidStmt(msg) => write!(f, "{msg}"),
-      Data::CaseLabelAfterDefault =>
+      UnclosedParameterList(msg) => write!(f, "{msg}"),
+      MissingOpenParen(msg) => write!(f, "Expect '(' after {msg}"),
+      MissingCloseParen(msg) => write!(f, "Expect ')' after {msg}"),
+      ExprNotConstant(msg) => write!(f, "{msg}"),
+      VarDeclUnclosed(msg) => write!(f, "{msg}"),
+      InvalidBlockItem => write!(f, "Block definition is not allowed here"),
+      MissingFunctionName => write!(f, "Expect function name"),
+      InvalidStmt(msg) => write!(f, "{msg}"),
+      CaseLabelAfterDefault =>
         write!(f, "Case label cannot appear after default label"),
-      Data::MultipleDefaultLabels => write!(
+      MultipleDefaultLabels => write!(
         f,
         "Multiple default labels in one switchl ignoring the latter"
       ),
-      Data::MissingLabelInSwitch =>
+      MissingLabelInSwitch =>
         write!(f, "Expect at least one case or default label in switch"),
-      Data::CaseLabelNotWithinSwitch =>
-        write!(f, "Case label not within switch"),
-      Data::DefaultLabelNotWithinSwitch =>
-        write!(f, "Default label not within switch"),
-      Data::TopLevelLabel => write!(f, "Label cannot appear at top level"),
-      Data::MissingLabelAfterGoto =>
-        write!(f, "Expect label identifier after goto"),
-      Data::InvalidBreakStmt =>
-        write!(f, "Break statement not within loop or switch"),
-      Data::InvalidContinueStmt =>
-        write!(f, "Continue statement not within loop"),
-      Data::UnsupportedFeature(msg) => write!(f, "{msg}"),
-      Data::LabelNotFound(label) => write!(f, "Label '{}' not found", label),
-      Data::FunctionSpecsInVariableDecl(name) =>
+      LabelNotWithinSwitch(elem) => write!(f, "{elem} label not within switch"),
+      TopLevelLabel => write!(f, "Label cannot appear at top level"),
+      MissingLabelAfterGoto => write!(f, "Expect label identifier after goto"),
+      InvalidControlFlowStmt(msg) => write!(f, "{msg}"),
+      UnsupportedFeature(msg) => write!(f, "{msg}"),
+      LabelNotFound(label) => write!(f, "Label '{}' not found", label),
+      FunctionSpecsInVariableDecl(name) =>
         write!(f, "Variable '{}' cannot have function specifiers", name),
-      Data::VariableAlreadyDefined(name) =>
+      VariableAlreadyDefined(name) =>
         write!(f, "Variable '{}' already defined", name),
-      Data::LocalExternVarWithInitializer(name) => write!(
+      LocalExternVarWithInitializer(name) => write!(
         f,
         "Local extern variable '{}' cannot have initializer",
         name
       ),
-      Data::InvalidCallee(name) =>
-        write!(f, "expression '{}' is not callable", name),
-      Data::NotVariable(name) => write!(f, "'{}' is not a variable", name),
-      Data::UndefinedVariable(name) =>
+      InvalidCallee(name) => write!(f, "expression '{}' is not callable", name),
+      NotVariable(name) => write!(f, "'{}' is not a variable", name),
+      UndefinedVariable(name) =>
         write!(f, "Variable '{}' is not defined", name),
-      Data::TenaryTypeIncompatible(l, r) => write!(
+      TenaryTypeIncompatible(l, r) => write!(
         f,
         "Incompatible types '{}' and '{}' in ternary expression",
         l, r
       ),
-      Data::NonArithmeticInUnaryOp(operator, type_name) => write!(
+      NonArithmeticInUnaryOp(operator, type_name) => write!(
         f,
         "Operand of unary operator '{}' must be arithmetic type, got '{}'",
         operator, type_name
       ),
-      Data::NonArithmeticInBinaryOp(l, r, operator) => write!(
+      NonArithmeticInBinaryOp(l, r, operator) => write!(
         f,
         "Operands of binary operator '{}' must be arithmetic types, got '{}' and '{}'",
         operator, l, r
       ),
-      Data::NonIntegerInBitwiseUnaryOp(operator, type_name) => write!(
+      NonIntegerInBitwiseUnaryOp(operator, type_name) => write!(
         f,
         "Operand of bitwise operator '{}' must be integer type, got '{}'",
         operator, type_name
       ),
-      Data::NonIntegerInBitwiseBinaryOp(l, r, operator) => write!(
+      NonIntegerInBitwiseBinaryOp(l, r, operator) => write!(
         f,
         "Operands of bitwise operator '{}' must be integer types, got '{}' and '{}'",
         operator, l, r
       ),
-      Data::NonIntegerInBitshiftOp(l, r, operator) => write!(
+      NonIntegerInBitshiftOp(l, r, operator) => write!(
         f,
         "Operands of bitshift operator '{}' must be integer types, got '{}' and '{}'",
         operator, l, r
       ),
-      Data::AddressofOperandNotLvalue(type_name) => write!(
+      AddressofOperandNotLvalue(type_name) => write!(
         f,
         "Operand of address-of operator must be lvalue, got '{}'",
         type_name
       ),
-      Data::IndirectionOperandNotPointer(type_name) => write!(
+      IndirectionOperandNotPointer(type_name) => write!(
         f,
         "Operand of indirection operator must be pointer type, got '{}'",
         type_name
       ),
-      Data::DereferenceOfVoidPointer(type_name) =>
+      DereferenceOfVoidPointer(type_name) =>
         write!(f, "Cannot dereference void pointer of type '{}'", type_name),
-      Data::ExprNotAssignable(type_name) =>
+      ExprNotAssignable(type_name) =>
         write!(f, "Expression of type '{}' is not assignable", type_name),
-      Data::ReturnTypeMismatch(msg) => write!(f, "Return type mismatch: {msg}"),
-      Data::DuplicateLabel(label) => write!(f, "Duplicate label '{}'", label),
-      Data::IncompatiblePointerTypes(l, r) =>
+      ReturnTypeMismatch(msg) => write!(f, "Return type mismatch: {msg}"),
+      DuplicateLabel(label) => write!(f, "Duplicate label '{}'", label),
+      IncompatiblePointerTypes(l, r) =>
         write!(f, "Incompatible pointer types '{}' and '{}'", l, r),
-      Data::StorageSpecsUnmergeable(l, r) =>
+      StorageSpecsUnmergeable(l, r) =>
         write!(f, "Cannot merge storage classes '{}' and '{}'", l, r),
-      Data::MainFunctionProtoMismatch(msg) => write!(f, "{msg}"),
-      Data::DiscardingQualifiers(qualifiers) => write!(
+      MainFunctionProtoMismatch(msg) => write!(f, "{msg}"),
+      DiscardingQualifiers(qualifiers) => write!(
         f,
         "Discarding qualifiers '{qualifiers}' during conversion is not allowed",
       ),
-      Data::InvalidConversion(msg) => write!(f, "{msg}"),
-      Data::Placeholder(msg) => write!(
+      InvalidConversion(msg) => write!(f, "{msg}"),
+      IncompatibleType(name, l, r) => write!(
+        f,
+        "Incompatible types in declaration of '{}': '{}' is not compatible with '{}'",
+        name, l, r
+      ),
+      Placeholder(msg) => write!(
         f,
         "An error occurred: {msg}. This error was not categorized yet; consider create a error category for it at {}",
         file!()

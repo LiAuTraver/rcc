@@ -90,3 +90,19 @@ fn main() {
   println!("{:}", translation_unit);
   println!("Analyze succeeded.");
 }
+
+#[cfg(test)]
+mod test {
+  use ::std::{backtrace::Backtrace, panic::Location};
+
+  use super::*;
+  #[test]
+  fn caller() {
+    dummy();
+  }
+  #[track_caller]
+  fn dummy() {
+    println!("{}", Location::caller());
+    println!("{}", Backtrace::capture())
+  }
+}

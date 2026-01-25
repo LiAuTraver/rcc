@@ -1,3 +1,4 @@
+use ::rc_utils::IntoWith;
 use ::std::{
   iter::Peekable,
   str::{Chars, FromStr},
@@ -5,7 +6,9 @@ use ::std::{
 
 use crate::{
   common::{
-    Coordinate, Error, ErrorData, Keyword,
+    Coordinate, Error,
+    ErrorData::*,
+    Keyword,
     Operator::{self, *},
     SourceSpan, Token,
   },
@@ -334,12 +337,12 @@ impl<'a> Lexer<'a> {
       // exponent digits, required
       if !self.peek().is_ascii_digit() {
         // self.add_error("Expected digits after exponent marker".to_string());
-        self.add_error(Error::new(
-          self.span(start),
-          ErrorData::InvalidNumberFormat(
+        self.add_error(
+          InvalidNumberFormat(
             "Expected digits after exponent marker".to_string(),
-          ),
-        ));
+          )
+          .into_with(self.span(start)),
+        );
       } else {
         while self.peek().is_ascii_digit() {
           self.advance();
@@ -358,12 +361,12 @@ impl<'a> Lexer<'a> {
       }
 
       if !self.peek().is_ascii_digit() {
-        self.add_error(Error::new(
-          self.span(start),
-          ErrorData::InvalidNumberFormat(
+        self.add_error(
+          InvalidNumberFormat(
             "Expected digits after hexadecimal exponent marker".to_string(),
-          ),
-        ));
+          )
+          .into_with(self.span(start)),
+        );
       } else {
         while self.peek().is_ascii_digit() {
           self.advance();
@@ -384,26 +387,26 @@ impl<'a> Lexer<'a> {
           if NumberConstant::FLOATING_SUFFIXES.contains(&s) {
             Some(s)
           } else {
-            self.add_error(Error::new(
-              self.span(start),
-              ErrorData::InvalidNumberFormat(format!(
+            self.add_error(
+              InvalidNumberFormat(format!(
                 "Invalid floating point literal suffix '{}', ignoring",
                 s
-              )),
-            ));
+              ))
+              .into_with(self.span(start)),
+            );
             None
           },
         false =>
           if NumberConstant::INTEGER_SUFFIXES.contains(&s) {
             Some(s)
           } else {
-            self.add_error(Error::new(
-              self.span(start),
-              ErrorData::InvalidNumberFormat(format!(
+            self.add_error(
+              InvalidNumberFormat(format!(
                 "Invalid integer literal suffix '{}', ignoring",
                 s
-              )),
-            ));
+              ))
+              .into_with(self.span(start)),
+            );
             None
           },
       }
@@ -413,10 +416,7 @@ impl<'a> Lexer<'a> {
 
     let (constant, error) = NumberConstant::parse(&num, suffix, is_floating);
     if let Some(e) = error {
-      self.add_error(Error::new(
-        self.span(start),
-        ErrorData::InvalidNumberFormat(e),
-      ));
+      self.add_error(InvalidNumberFormat(e).into_with(self.span(start)));
     }
 
     Token::number(constant, self.span(start))
@@ -438,10 +438,7 @@ impl<'a> Lexer<'a> {
     }
 
     if self.is_at_end() {
-      self.add_error(Error::new(
-        self.span(start),
-        ErrorData::UnterminatedString,
-      ));
+      self.add_error(UnterminatedString.into_with(self.span(start)));
       let text = self.slice(start, self.cursor);
       return Token::string(text.to_string(), self.span(start));
     }

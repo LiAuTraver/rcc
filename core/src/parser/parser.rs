@@ -164,12 +164,13 @@ impl<'a> Parser<'a> {
 /// opt checks
 impl<'a> Parser<'a> {
   fn ios_c_strict_check_for_decl(&mut self, statement: &Statement) {
-    if matches!(statement, Statement::Declaration(_)) {
-      self.add_error(
-        "C standard pre C23 does not allow declaration in 'if', 'while', 'for' statements. If it's intended, please use surrounding braces '{}' to form a block."
-          .to_string(),
-      );
-    }
+    // if matches!(statement, Statement::Declaration(_)) {
+    //   self.add_error(
+    //     "C standard pre C23 does not allow declaration in 'if', 'while', 'for' statements. If it's intended, please use surrounding braces '{}' to form a block."
+    //       .to_string(),
+    //   );
+    // }
+    _ = statement; // temporary workaround
   }
 }
 /// meta
