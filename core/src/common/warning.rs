@@ -1,4 +1,4 @@
-use ::rc_utils::DisplayWith;
+use ::rc_utils::{DisplayWith, IntoWith};
 
 use super::{SourceManager, SourceSpan, Storage};
 use crate::types::Qualifiers;
@@ -15,10 +15,10 @@ pub struct Warning {
 #[derive(Debug)]
 pub enum Data {
   UnusedVariable(Elem),
-  DeprecatedFunction(Elem),
   RedundantStorageSpecs(Storage),
   RedundantQualifier(Qualifiers),
   ExternVariableWithInitializer(Elem),
+  VariableUninitialized(CustomMessage),
   EmptyTypedef,
   EmptyStatement,
 }
@@ -26,6 +26,11 @@ pub enum Data {
 impl Warning {
   pub fn new(span: SourceSpan, data: Data) -> Self {
     Self { span, data }
+  }
+}
+impl IntoWith<SourceSpan, Warning> for Data {
+  fn into_with(self, span: SourceSpan) -> Warning {
+    Warning::new(span, self)
   }
 }
 pub struct WarningDisplay<'a> {
@@ -53,8 +58,6 @@ impl<'a> ::std::fmt::Display for WarningDisplay<'a> {
 
     match &self.warning.data {
       Data::UnusedVariable(name) => write!(f, "Unused variable '{}'", name),
-      Data::DeprecatedFunction(name) =>
-        write!(f, "Deprecated function '{}'", name),
       Data::EmptyStatement => write!(f, "Empty statement"),
       Data::RedundantStorageSpecs(storage) =>
         write!(f, "Redundant storage specifiers '{storage}'"),
@@ -66,6 +69,7 @@ impl<'a> ::std::fmt::Display for WarningDisplay<'a> {
         "Extern global variable '{}' should not have an initializer",
         name
       ),
+      Data::VariableUninitialized(msg) => write!(f, "{}", msg),
     }
   }
 }

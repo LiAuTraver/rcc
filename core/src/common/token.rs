@@ -1,3 +1,4 @@
+use ::rc_utils::interconvert;
 use ::std::fmt::Debug;
 
 use super::{
@@ -121,6 +122,12 @@ impl Keyword {
     )
   }
 }
+
+interconvert!(Keyword, Literal);
+interconvert!(Operator, Literal);
+interconvert!(Constant, Literal, Number);
+interconvert!(String, Literal, Identifier);
+// interconvert!(String, Literal, String); // this one conflicts with the above
 mod cmp {
   use super::{Keyword, Literal, Operator};
 
@@ -179,6 +186,13 @@ mod cmp {
       }
     }
   }
+
+  impl PartialEq<Literal> for &Literal {
+    #[inline]
+    fn eq(&self, other: &Literal) -> bool {
+      PartialEq::eq(*self, other)
+    }
+  }
 }
 mod fmt {
   use ::std::fmt::Display;
@@ -187,20 +201,23 @@ mod fmt {
 
   impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      match &self.literal {
+      write!(
+        f,
+        "{} at loc {} {}",
+        self.literal, self.location.start, self.location.end
+      )
+    }
+  }
+
+  impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
         Literal::Number(n) => write!(f, "Number({})", n),
         Literal::Identifier(id) => write!(f, "Identifier({})", id),
         Literal::String(s) => write!(f, "String({})", s),
         Literal::Keyword(kw) => write!(f, "Keyword({})", kw),
         Literal::Operator(op) => write!(f, "Operator({})", op),
       }
-      .and_then(|_| {
-        write!(
-          f,
-          " at beg {}, end {}",
-          self.location.start, self.location.end
-        )
-      })
     }
   }
 }

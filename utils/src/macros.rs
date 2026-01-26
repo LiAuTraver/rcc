@@ -65,6 +65,25 @@ macro_rules! make_trio_for {
                     _ => None,
                 }
             }
+
+            #[inline]
+            pub fn [<into_ $variant:lower _unchecked>](self) -> $inner {
+                match self {
+                    Self::$variant(v) => v,
+                    _ => {
+                        $crate::breakpoint!();
+                        unreachable!()
+                    }
+                }
+            }
+
+            #[inline]
+            pub fn [<try_into_ $variant:lower>](self) -> Result<$inner, Self> {
+                match self {
+                    Self::$variant(v) => Ok(v),
+                    _ => Err(self),
+                }
+            }
         }
     }
   };
@@ -101,4 +120,72 @@ macro_rules! static_assert {
       assert!($condition, $($arg)+);
     };
   };
+}
+
+/// This macro acts like `assert!`,
+/// but with more clarification that it's the program's error, not the user's.
+#[macro_export]
+macro_rules! contract_assert {
+  ($condition:expr) => {{
+    if !$condition {
+      eprintln!(
+        "invariant at {}.
+        This is a program internal error, please fix it!",
+        ::std::panic::Location::caller()
+      );
+      panic!();
+    }
+  }};
+  ($condition:expr, $($arg:tt)+) => {{
+    if !$condition {
+      eprintln!(
+        "invariant: {} at {}.
+        This is a program internal error, please fix it!",
+        format!($($arg)+),
+        ::std::panic::Location::caller()
+      );
+      panic!();
+    }
+  }};
+}
+/// This macro unconditionally signals a contract violation.
+/// It acts like `panic!`,
+/// but with more clarification that it's the program's error, not the user's.
+#[macro_export]
+macro_rules! contract_violation {
+  () => {{
+    eprintln!(
+      "invariant at {}.
+      This is a program internal error, please fix it!",
+      ::std::panic::Location::caller()
+    );
+    panic!();
+  }};
+  ($($arg:tt)+) => {{
+    eprintln!(
+      "invariant at {}: {}.
+      This is a program internal error, please fix it!",
+      ::std::panic::Location::caller(),
+      format!($($arg)+)
+    );
+    panic!();
+  }};
+}
+
+/// like `todo!` or `unimplemented!`, but indicates a not implemented feature.
+#[macro_export]
+macro_rules! not_implemented_feature {
+  () => {{
+    panic!(
+      "not implemented feature at {}",
+      ::std::panic::Location::caller(),
+    );
+  }};
+  ($($arg:tt)+) => {{
+    panic!(
+      "not implemented feature '{}' at {}",
+      format!($($arg)+),
+      ::std::panic::Location::caller(),
+    );
+  }};
 }

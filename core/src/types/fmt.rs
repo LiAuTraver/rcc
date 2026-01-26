@@ -119,7 +119,7 @@ impl Display for Constant {
       Float(fl) => write!(f, "{}", fl),
       Double(fl) => write!(f, "{}", fl),
       Bool(b) => write!(f, "{}", b),
-      String(s) => write!(f, "\"{}\"", s),
+      StringLiteral(s) => write!(f, "\"{}\"", s),
       Nullptr => write!(f, "nullptr"),
     }
   }

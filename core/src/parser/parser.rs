@@ -1,9 +1,13 @@
-use ::rc_utils::{DisplayWith, Dummy, IntoWith, breakpoint};
+use ::rc_utils::{Dummy, IntoWith, contract_assert};
 
 use crate::{
   common::{
-    Keyword, Literal, Operator, OperatorCategory, SourceManager, SourceSpan,
-    Storage, Token, UnitScope, Warning, WarningData,
+    Error,
+    ErrorData::*,
+    Keyword, Literal,
+    Operator::{self, *},
+    OperatorCategory, SourceSpan, Storage, Token, UnitScope, Warning,
+    WarningData::*,
   },
   parser::{
     declaration::{
@@ -22,32 +26,28 @@ use crate::{
   },
   types::{FunctionSpecifier, Qualifiers},
 };
-#[derive(Debug)]
-pub struct Parser<'a> {
+#[derive(Debug, Default)]
+pub struct Parser {
   tokens: Vec<Token>,
   cursor: usize,
-  errors: Vec<String>,
+  errors: Vec<Error>,
   warnings: Vec<Warning>,
   loop_labels: Vec<String>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
-  source_manager: &'a SourceManager,
 }
-/// utility functions
-impl<'a> Parser<'a> {
-  pub fn new(tokens: Vec<Token>, source_manager: &'a SourceManager) -> Self {
+
+/// utility functions -- allow unused to suppress those annoying warnings.
+#[allow(unused)]
+impl Parser {
+  pub fn new(tokens: Vec<Token>) -> Self {
     assert_eq!(
       tokens.last().map(|t| &t.literal),
-      Some(&Literal::Operator(Operator::EOF))
+      Some(&Literal::Operator(EOF))
     );
     Self {
       tokens,
-      source_manager,
-      cursor: usize::default(),
-      errors: Vec::default(),
-      warnings: Vec::default(),
-      loop_labels: Vec::default(),
-      typedefs: UnitScope::default(),
+      ..::std::default::Default::default()
     }
   }
 
@@ -60,6 +60,12 @@ impl<'a> Parser<'a> {
     }
     self.typedefs.pop_scope();
 
+    contract_assert!(
+      self.peek_lit() == EOF,
+      "expected EOF token, found: {:?}",
+      self.peek_lit()
+    );
+
     program
   }
 
@@ -67,15 +73,19 @@ impl<'a> Parser<'a> {
     self.tokens.len() <= self.cursor + 1
   }
 
-  fn peek(&self, offset: usize) -> &Literal {
-    if self.is_at_end() {
-      &self.tokens[self.cursor].literal
-    } else {
-      &self.tokens[self.cursor + offset].literal
-    }
+  fn peek_lit(&self) -> &Literal {
+    &self.tokens[self.cursor].literal
   }
 
-  fn peek_loc(&self, offset: usize) -> &SourceSpan {
+  fn peek_lit_with_offset(&self, offset: usize) -> &Literal {
+    &self.tokens[self.cursor + offset].literal
+  }
+
+  fn peek_loc(&self) -> &SourceSpan {
+    &self.tokens[self.cursor].location
+  }
+
+  fn peek_loc_with_offset(&self, offset: usize) -> &SourceSpan {
     if self.is_at_end() {
       &self.tokens[self.cursor].location
     } else {
@@ -83,32 +93,58 @@ impl<'a> Parser<'a> {
     }
   }
 
+  fn peek_prev_lit(&self) -> &Literal {
+    &self.tokens[self.cursor - 1].literal
+  }
+
+  fn peek_prev_loc(&self) -> &SourceSpan {
+    &self.tokens[self.cursor - 1].location
+  }
+
+  fn peek_backward_loc(&self, offset: isize) -> &SourceSpan {
+    contract_assert!(
+      (offset as isize) < (self.cursor as isize),
+      "peek_backward_loc: offset out of bounds"
+    );
+    contract_assert!(
+      offset.is_negative(),
+      "peek_backward_loc: offset must be negative"
+    );
+    &self.tokens[(self.cursor as isize + offset) as usize].location
+  }
+
+  fn peek_backward_lit_with_offset(&self, offset: isize) -> &Literal {
+    contract_assert!(
+      (offset as isize) < (self.cursor as isize),
+      "peek_backward_lit: offset out of bounds"
+    );
+    contract_assert!(
+      offset.is_negative(),
+      "peek_backward_lit: offset must be negative"
+    );
+    &self.tokens[(self.cursor as isize + offset) as usize].literal
+  }
+
   fn must_get_key<const KEY: Keyword>(&mut self) -> usize {
     let index = self.get();
-    if matches!(&self.tokens[index].literal, Literal::Keyword(kw) if kw != &KEY)
-    {
-      breakpoint!(
-        "check your code! expected: {:?}, found: {:?}",
-        KEY,
-        self.tokens[index].literal
-      );
-      panic!()
-    }
+    contract_assert!(
+      !matches!(&self.tokens[index].literal, Literal::Keyword(kw) if kw != KEY),
+      "expected: {:?}, found: {:?}",
+      KEY,
+      self.tokens[index].literal
+    );
     index
   }
 
   /// consume and return the index of the token if it's OP; else, panic.
   fn must_get_op<const OP: Operator>(&mut self) -> usize {
     let index = self.get();
-    if matches!(&self.tokens[index].literal, Literal::Operator(op) if *op != OP)
-    {
-      breakpoint!(
-        "check your code! expected: {:?}, found: {:?}",
-        OP,
-        self.tokens[index].literal
-      );
-      panic!()
-    }
+    contract_assert!(
+      !matches!(&self.tokens[index].literal, Literal::Operator(op) if op != OP),
+      "expected: {:?}, found: {:?}",
+      OP,
+      self.tokens[index].literal
+    );
     index
   }
 
@@ -125,22 +161,25 @@ impl<'a> Parser<'a> {
 
   /// if the next token is OP, consume it; else, report an error - but does not consume it.
   fn recoverable_get<const OP: Operator>(&mut self) {
-    if *self.peek(0) != Literal::Operator(OP) {
-      self.add_error(format!("Expect '{}' ", OP));
+    if self.peek_lit() != OP {
+      self.add_error(
+        UnexpectedCharacter(self.peek_lit().clone(), Some(OP.into()))
+          .into_with(*self.peek_loc()),
+      );
     } else {
       self.must_get_op::<OP>();
     }
   }
 
   fn silent_get_if<const OP: Operator>(&mut self) {
-    if *self.peek(0) == Literal::Operator(OP) {
+    if self.peek_lit() == OP {
       self.must_get_op::<OP>();
     }
   }
 }
 /// diagnostic functions
-impl<'a> Parser<'a> {
-  pub fn errors(&self) -> &[String] {
+impl Parser {
+  pub fn errors(&self) -> &[Error] {
     &self.errors
   }
 
@@ -148,13 +187,8 @@ impl<'a> Parser<'a> {
     &self.warnings
   }
 
-  fn add_error(&mut self, message: String) {
-    let token = &self.tokens[self.cursor];
-    self.errors.push(format!(
-      "In file {}: {}",
-      token.location.display_with(self.source_manager),
-      message
-    ));
+  fn add_error(&mut self, error: Error) {
+    self.errors.push(error);
   }
 
   fn add_warning(&mut self, warning: Warning) {
@@ -162,7 +196,7 @@ impl<'a> Parser<'a> {
   }
 }
 /// opt checks
-impl<'a> Parser<'a> {
+impl Parser {
   fn ios_c_strict_check_for_decl(&mut self, statement: &Statement) {
     // if matches!(statement, Statement::Declaration(_)) {
     //   self.add_error(
@@ -174,9 +208,9 @@ impl<'a> Parser<'a> {
   }
 }
 /// meta
-impl<'a> Parser<'a> {
+impl Parser {
   fn parse_type_specifier(&mut self) -> Option<TypeSpecifier> {
-    match self.peek(0) {
+    match self.peek_lit() {
       Literal::Keyword(Keyword::Struct) => todo!(),
       Literal::Keyword(Keyword::Union) => todo!(),
       Literal::Keyword(Keyword::Enum) => todo!(),
@@ -192,42 +226,50 @@ impl<'a> Parser<'a> {
   }
 
   fn parse_function_specifier(&mut self) -> Option<FunctionSpecifier> {
-    match self.peek(0) {
+    match self.peek_lit() {
       Literal::Keyword(kw) => FunctionSpecifier::try_from(kw).ok(),
       _ => None,
     }
   }
 
   fn parse_declspecs(&mut self) -> DeclSpecs {
+    let location = *self.peek_loc();
     let mut declspecs = DeclSpecs::default();
 
     loop {
-      if self.peek(0).is_qualifier() {
-        let qualifier = Qualifiers::from(self.peek(0));
+      if self.peek_lit().is_qualifier() {
+        let qualifier = Qualifiers::from(self.peek_lit());
         // qualifiers is a bitfield
         if declspecs.qualifiers & qualifier != Qualifiers::empty() {
-          self.add_warning(Warning::new(
-            *self.peek_loc(0),
-            WarningData::RedundantQualifier(qualifier),
+          self.add_warning(RedundantQualifier(qualifier).into_with(
+            SourceSpan {
+              end: self.peek_loc().end,
+              ..location
+            },
           ));
         } else {
           declspecs.qualifiers |= qualifier;
         }
         self.get(); // get the qualifier
-      } else if self.peek(0).is_storage_class() {
-        let storage_class = Storage::from(self.peek(0));
+      } else if self.peek_lit().is_storage_class() {
+        let storage_class = Storage::from(self.peek_lit());
         match declspecs.storage_class {
           Some(ref existing_storage) if existing_storage == &storage_class => {
-            self.add_warning(Warning::new(
-              *self.peek_loc(0),
-              WarningData::RedundantStorageSpecs(storage_class),
+            self.add_warning(RedundantStorageSpecs(storage_class).into_with(
+              SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              },
             ));
           },
           Some(ref existing_storage) => {
-            self.add_error(format!(
-              "Cannot combine '{}' with '{}'.",
-              storage_class, existing_storage
-            ));
+            self.add_error(
+              StorageSpecsUnmergeable(existing_storage.clone(), storage_class)
+                .into_with(SourceSpan {
+                  end: self.peek_loc().end,
+                  ..location
+                }),
+            );
           },
           None => {
             declspecs.storage_class = Some(storage_class);
@@ -252,9 +294,10 @@ impl<'a> Parser<'a> {
     }
 
     if declspecs.type_specifiers.is_empty() {
-      self.add_error(
-        "Expect type specifier in declaration, default to int".to_string(),
-      );
+      self.add_error(MissingTypeSpecifier.into_with(SourceSpan {
+        end: self.peek_loc().end,
+        ..location
+      }));
       declspecs.type_specifiers.push(TypeSpecifier::Int);
     }
 
@@ -264,15 +307,21 @@ impl<'a> Parser<'a> {
   fn parse_declarator<const TYPE: DeclaratorType, const AGGRESSIVE: bool>(
     &mut self,
   ) -> Declarator {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
 
     let name = if TYPE != DeclaratorType::Abstract {
-      if let Literal::Identifier(_) = self.peek(0) {
+      if let Literal::Identifier(_) = self.peek_lit() {
         let name_idx = self.get(); // consume the ident
         Some(self.tokens[name_idx].to_owned_string())
       } else {
         if TYPE == DeclaratorType::Named {
-          self.add_error("Expect identifier in declarator".to_string());
+          self.add_error(
+            MissingIdentifier("Expect identifier in declarator".to_string())
+              .into_with(SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              }),
+          );
           if AGGRESSIVE {
             self.get();
           }
@@ -284,39 +333,46 @@ impl<'a> Parser<'a> {
     };
     let mut declarator = Declarator::new(name, SourceSpan::dummy());
     // if the next token is '(', it's a function declarator
-    if *self.peek(0) == Literal::Operator(Operator::LeftParen) {
-      self.must_get_op::<{ Operator::LeftParen }>();
+    if self.peek_lit() == LeftParen {
+      self.must_get_op::<{ LeftParen }>();
       let parameters = self.parse_function_params();
-      self.recoverable_get::<{ Operator::RightParen }>();
+      self.recoverable_get::<{ RightParen }>();
       declarator.modifiers.push(Modifier::Function(parameters));
     }
     declarator.span = SourceSpan {
-      end: self.peek_loc(0).end,
+      end: self.peek_loc().end,
       ..location
     };
     declarator
   }
 
   fn parse_argument_list(&mut self) -> Vec<Expression> {
-    self.must_get_op::<{ Operator::LeftParen }>();
+    let location = *self.peek_loc();
+    self.must_get_op::<{ LeftParen }>();
     let mut arguments = Vec::new();
 
-    while *self.peek(0) != Literal::Operator(Operator::RightParen) {
+    while self.peek_lit() != RightParen {
       // parse expression
       let expr = self.next_expression(Operator::EXCOMMA);
       arguments.push(expr);
-      if *self.peek(0) == Literal::Operator(Operator::RightParen) {
+      if self.peek_lit() == RightParen {
         break;
       }
-      self.recoverable_get::<{ Operator::Comma }>();
-      if *self.peek(0) == Literal::Operator(Operator::RightParen) {
+      self.recoverable_get::<{ Comma }>();
+      if self.peek_lit() == RightParen {
         self.add_error(
-          "Trailing comma in argument list is not allowed in C.".to_string(),
+          ExtraneousComma(
+            "Trailing comma in argument list is not allowed in C.".to_string(),
+          )
+          .into_with(SourceSpan {
+            end: self.peek_loc().end,
+            ..location
+          }),
         );
         break;
       }
     }
-    self.must_get_op::<{ Operator::RightParen }>();
+    self.must_get_op::<{ RightParen }>();
     arguments
   }
 
@@ -327,11 +383,14 @@ impl<'a> Parser<'a> {
     if let Literal::Keyword(Keyword::Void) = self.tokens[self.cursor].literal {
       // single void parameter
       self.must_get_key::<{ Keyword::Void }>();
-      if *self.peek(0) != Literal::Operator(Operator::RightParen) {
+      if self.peek_lit() != RightParen {
         self.add_error(
-          "Unexpected token after 'void' in parameter list".to_string(),
+          VoidVariableDecl(
+            "Unexpected token after 'void' in parameter list".to_string(),
+          )
+          .into_with(*self.peek_loc()),
         );
-        while *self.peek(0) != Literal::Operator(Operator::RightParen) {
+        while self.peek_lit() != RightParen {
           self.get();
         }
       }
@@ -339,34 +398,41 @@ impl<'a> Parser<'a> {
     } else {
       let mut parameters = Vec::new();
       loop {
-        let location = *self.peek_loc(0);
+        let location = *self.peek_loc();
         let mut declspecs = self.parse_declspecs();
         let declarator =
           self.parse_declarator::<{ DeclaratorType::Maybe }, false>();
-        if declspecs.storage_class.is_some() {
-          self.add_error(
-            "Storage class specifier is not allowed in parameter declaration"
-              .to_string(),
-          );
+        if let Some(storage) = &declspecs.storage_class
+          && storage != Storage::Register
+        {
+          self.add_error(ExtraneousStorageSpecs(*storage).into_with(
+            SourceSpan {
+              end: self.peek_loc().end,
+              ..location
+            },
+          ));
           declspecs.storage_class = None;
         }
         parameters.push(Parameter::new(
           declspecs,
           declarator,
           SourceSpan {
-            end: self.peek_loc(0).end,
+            end: self.peek_loc().end,
             ..location
           },
         ));
 
-        match self.peek(0) {
-          Literal::Operator(Operator::RightParen) => break,
-          Literal::Operator(Operator::Comma) => {
-            self.must_get_op::<{ Operator::Comma }>();
-            if self.peek(0) == &Literal::Operator(Operator::RightParen) {
+        match self.peek_lit() {
+          Literal::Operator(RightParen) => break,
+          Literal::Operator(Comma) => {
+            self.must_get_op::<{ Comma }>();
+            if self.peek_lit() == RightParen {
               self.add_error(
-                "Trailing comma in parameter list is not allowed in C."
-                  .to_string(),
+                ExtraneousComma(
+                  "Trailing comma in parameter list is not allowed in C."
+                    .to_string(),
+                )
+                .into_with(*self.peek_loc()),
               );
               break;
             }
@@ -374,8 +440,11 @@ impl<'a> Parser<'a> {
           _ => {
             if self.parse_type_specifier().is_none() {
               self.add_error(
-                "Expect ',', ')', or type specifier in parameter list"
-                  .to_string(),
+                UnclosedParameterList(
+                  "Expect ',', ')' or type specifier in parameter list"
+                    .to_string(),
+                )
+                .into_with(*self.peek_loc()),
               );
               break;
             }
@@ -391,30 +460,31 @@ impl<'a> Parser<'a> {
   fn parse_paren_expression<const LMIN_PRECEDENCE: u8>(
     &mut self,
   ) -> Expression {
-    if self.peek(0) != &Literal::Operator(Operator::LeftParen) {
-      self.add_error(format!(
-        "Expcet '(' after {}",
-        self.tokens[self.cursor - 1]
-      ));
+    if self.peek_lit() != LeftParen {
+      self.add_error(
+        MissingOpenParen(self.peek_lit().clone()).into_with(*self.peek_loc()),
+      );
       // assume the left paren is missing, continue parsing
     } else {
-      self.must_get_op::<{ Operator::LeftParen }>();
+      self.must_get_op::<{ LeftParen }>();
     }
     let expr = self.next_expression(LMIN_PRECEDENCE);
-    if self.peek(0) != &Literal::Operator(Operator::RightParen) {
-      self.add_error("Expect ')'".to_string());
+    if self.peek_lit() != RightParen {
+      self.add_error(
+        MissingCloseParen(self.peek_lit().clone()).into_with(*self.peek_loc()),
+      );
       self.get(); // get it otherwise infinite loop
     } else {
-      self.must_get_op::<{ Operator::RightParen }>();
+      self.must_get_op::<{ RightParen }>();
     }
     expr
   }
 
   fn parse_case_and_default_body(&mut self) -> Vec<Statement> {
     let mut body = Vec::new();
-    while self.peek(0) != Keyword::Case
-      && self.peek(0) != Keyword::Default
-      && self.peek(0) != Operator::RightBrace
+    while self.peek_lit() != Keyword::Case
+      && self.peek_lit() != Keyword::Default
+      && self.peek_lit() != RightBrace
     {
       body.push(self.next_statement());
     }
@@ -422,15 +492,23 @@ impl<'a> Parser<'a> {
   }
 
   fn parse_case(&mut self) -> Case {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Case }>();
-    let expression = if self.peek(0) == Operator::Colon {
-      self.add_error("Expect constant expression after 'case'".to_string());
-      self.must_get_op::<{ Operator::Colon }>();
+    let expression = if self.peek_lit() == Colon {
+      self.add_error(
+        ExprNotConstant(
+          "Case label must have a constant expression".to_string(),
+        )
+        .into_with(SourceSpan {
+          end: self.peek_loc().end,
+          ..location
+        }),
+      );
+      self.must_get_op::<{ Colon }>();
       Expression::Empty
     } else {
       let expr = self.next_expression(Operator::DEFAULT);
-      self.recoverable_get::<{ Operator::Colon }>();
+      self.recoverable_get::<{ Colon }>();
       expr
     };
     // if it's a compound statement, we need to extract all statements until the next case/default or right brace
@@ -440,48 +518,51 @@ impl<'a> Parser<'a> {
       expression,
       body,
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     )
   }
 
   fn parse_default(&mut self) -> Default {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Default }>();
-    self.recoverable_get::<{ Operator::Colon }>();
+    self.recoverable_get::<{ Colon }>();
     let body = self.parse_case_and_default_body();
     Default::new(
       body,
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     )
   }
 }
 /// declarations
-impl<'a> Parser<'a> {
+impl Parser {
   fn next_vardef(
     &mut self,
     declspecs: DeclSpecs,
     declarator: Declarator,
   ) -> VarDef {
-    let location = *self.peek_loc(0);
-    let initializer = match self.peek(0) {
-      Literal::Operator(Operator::Semicolon) => {
-        self.must_get_op::<{ Operator::Semicolon }>();
+    let location = *self.peek_loc();
+    let initializer = match self.peek_lit() {
+      Literal::Operator(Semicolon) => {
+        self.must_get_op::<{ Semicolon }>();
         None
       },
-      Literal::Operator(Operator::Assign) => {
-        self.must_get_op::<{ Operator::Assign }>();
+      Literal::Operator(Assign) => {
+        self.must_get_op::<{ Assign }>();
         let initializer = self.next_expression(Operator::DEFAULT);
-        assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
-        self.must_get_op::<{ Operator::Semicolon }>();
+        assert_eq!(*self.peek_lit(), Literal::Operator(Semicolon));
+        self.must_get_op::<{ Semicolon }>();
         Some(initializer)
       },
       _ => {
-        self.add_error("Expect ';' or '=' after variable name".to_string());
+        self.add_error(
+          VarDeclUnclosed("Expect ';' or '=' after variable name".to_string())
+            .into_with(*self.peek_loc()),
+        );
         self.get();
         None
       },
@@ -491,7 +572,7 @@ impl<'a> Parser<'a> {
       declarator,
       initializer.map(|init_expr| Initializer::Expression(init_expr.into())),
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     )
@@ -499,13 +580,12 @@ impl<'a> Parser<'a> {
 
   fn next_declaration(&mut self) -> Declaration {
     while matches!(
-      self.peek(0),
-      Literal::Operator(Operator::Semicolon)
-        | Literal::Operator(Operator::Hash)
+      self.peek_lit(),
+      Literal::Operator(Semicolon) | Literal::Operator(Hash)
     ) {
-      if *self.peek(0) == Operator::Semicolon {
-        // self.add_warning("Redundant ';'".to_string());
-        self.must_get_op::<{ Operator::Semicolon }>();
+      if self.peek_lit() == Semicolon {
+        // Redundant ';', maybe a warning?
+        self.must_get_op::<{ Semicolon }>();
       } else {
         // // skip preprocessor directive
         // let line = self.tokens[self.cursor].location.line;
@@ -516,12 +596,12 @@ impl<'a> Parser<'a> {
         // }
       }
     }
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     let mut recovery = false;
     // block definition is not allowed in top
-    if *self.peek(0) == Operator::LeftBrace {
-      self.add_error("Block definition is not allowed here.".to_string());
-      self.must_get_op::<{ Operator::LeftBrace }>();
+    if self.peek_lit() == LeftBrace {
+      self.add_error(InvalidBlockItem.into_with(*self.peek_loc()));
+      self.must_get_op::<{ LeftBrace }>();
       recovery = true;
     }
 
@@ -532,18 +612,15 @@ impl<'a> Parser<'a> {
       if let Some(name) = &declarator.name {
         self.typedefs.declare(name.clone());
       } else {
-        self.add_warning(Warning::new(
-          declarator.span,
-          WarningData::EmptyTypedef,
-        ));
+        self.add_warning(EmptyTypedef.into_with(declarator.span));
       }
-      self.must_get_op::<{ Operator::Semicolon }>();
+      self.must_get_op::<{ Semicolon }>();
       return VarDef::new(
         declspecs,
         declarator,
         None,
         SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         },
       )
@@ -556,7 +633,7 @@ impl<'a> Parser<'a> {
     {
       // int(void) is not allowed
       if declarator.name.is_none() {
-        self.add_error("Expect a function name.".to_string());
+        self.add_error(MissingFunctionName.into_with(*self.peek_loc()));
       }
       let (declspecs, declarator, body) =
         self.next_function_body(declspecs, declarator);
@@ -565,7 +642,7 @@ impl<'a> Parser<'a> {
         declarator,
         body,
         SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         },
       )
@@ -575,22 +652,22 @@ impl<'a> Parser<'a> {
       self.next_vardef(declspecs, declarator).into()
     };
     if recovery {
-      self.recoverable_get::<{ Operator::RightBrace }>();
+      self.recoverable_get::<{ RightBrace }>();
     }
     declaration
   }
 }
 /// statements
-impl<'a> Parser<'a> {
+impl Parser {
   fn next_function_body(
     &mut self,
     declspecs: DeclSpecs,
     declarator: Declarator,
   ) -> (DeclSpecs, Declarator, Option<Compound>) {
     let body = match self.tokens[self.cursor].literal {
-      Literal::Operator(Operator::LeftBrace) => Some(self.next_block()),
+      Literal::Operator(LeftBrace) => Some(self.next_block()),
       _ => {
-        self.recoverable_get::<{ Operator::Semicolon }>();
+        self.recoverable_get::<{ Semicolon }>();
         None
       },
     };
@@ -599,52 +676,52 @@ impl<'a> Parser<'a> {
   }
 
   fn next_block(&mut self) -> Compound {
-    let location = *self.peek_loc(0);
-    self.must_get_op::<{ Operator::LeftBrace }>();
+    let location = *self.peek_loc();
+    self.must_get_op::<{ LeftBrace }>();
     self.typedefs.push_scope();
     let mut block = Compound::default();
 
-    while *self.peek(0) != Operator::RightBrace {
+    while self.peek_lit() != RightBrace {
       block.statements.push(self.next_statement());
     }
     self.typedefs.pop_scope();
-    self.must_get_op::<{ Operator::RightBrace }>();
+    self.must_get_op::<{ RightBrace }>();
     Compound::new(
       block.statements,
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     )
   }
 
   fn next_return(&mut self) -> Return {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Return }>();
-    let expression = if *self.peek(0) == Operator::Semicolon {
+    let expression = if self.peek_lit() == Semicolon {
       None
     } else {
       Some(self.next_expression(Operator::DEFAULT))
     };
 
-    assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
-    self.must_get_op::<{ Operator::Semicolon }>();
+    assert_eq!(*self.peek_lit(), Literal::Operator(Semicolon));
+    self.must_get_op::<{ Semicolon }>();
     Return::new(
       expression,
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     )
   }
 
   fn next_if(&mut self) -> If {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::If }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
     let then_branch = self.next_statement();
     self.ios_c_strict_check_for_decl(&then_branch);
-    let else_branch = if self.peek(0) == Keyword::Else {
+    let else_branch = if self.peek_lit() == Keyword::Else {
       self.must_get_key::<{ Keyword::Else }>();
       let body = self.next_statement();
       self.ios_c_strict_check_for_decl(&body);
@@ -657,14 +734,14 @@ impl<'a> Parser<'a> {
       then_branch.into(),
       else_branch.map(Box::new),
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     )
   }
 
   fn next_while(&mut self) -> While {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::While }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
     self
@@ -677,7 +754,7 @@ impl<'a> Parser<'a> {
       body.into(),
       self.loop_labels.last().unwrap().clone(),
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     );
@@ -686,7 +763,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_dowhile(&mut self) -> DoWhile {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Do }>();
     self
       .loop_labels
@@ -695,14 +772,14 @@ impl<'a> Parser<'a> {
     self.ios_c_strict_check_for_decl(&body);
     self.must_get_key::<{ Keyword::While }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
-    assert_eq!(*self.peek(0), Literal::Operator(Operator::Semicolon));
-    self.must_get_op::<{ Operator::Semicolon }>();
+    assert_eq!(*self.peek_lit(), Literal::Operator(Semicolon));
+    self.must_get_op::<{ Semicolon }>();
     let dowhile_stmt = DoWhile::new(
       Box::new(body),
       condition,
       self.loop_labels.last().unwrap().clone(),
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     );
@@ -711,34 +788,51 @@ impl<'a> Parser<'a> {
   }
 
   fn next_for(&mut self) -> For {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::For }>();
-    if *self.peek(0) != Operator::LeftParen {
-      self.add_error("Expect '(' after 'for'".to_string());
+    if self.peek_lit() != LeftParen {
+      self.add_error(MissingOpenParen(self.peek_prev_lit().clone()).into_with(
+        SourceSpan {
+          end: self.peek_loc().end,
+          ..location
+        },
+      ));
       panic!() // workaound
     } else {
-      self.must_get_op::<{ Operator::LeftParen }>();
+      self.must_get_op::<{ LeftParen }>();
       // initializer
-      let initializer = match self.peek(0) {
-        Literal::Operator(Operator::Semicolon) => {
-          self.must_get_op::<{ Operator::Semicolon }>();
+      let initializer = match self.peek_lit() {
+        Literal::Operator(Semicolon) => {
+          self.must_get_op::<{ Semicolon }>();
           None
         },
         _ => match self.next_statement() {
           Statement::Declaration(Declaration::Variable(vardef)) => {
-            // if let None = vardef.initializer {
-            //   self.add_warning(
-            //     "Expect initializer in for loop variable declaration"
-            //       .to_string(),
-            //   );
-            // }
+            if vardef.initializer.is_none() {
+              self.add_warning(
+                VariableUninitialized(
+                  "Variable declared in for loop without initializer"
+                    .to_string(),
+                )
+                .into_with(SourceSpan {
+                  end: self.peek_loc().end,
+                  ..location
+                }),
+              );
+            }
             Some(Statement::Declaration(vardef.into()))
           },
           Statement::Expression(expr) => Some(expr.into()),
           _ => {
             self.add_error(
-              "Expect variable declaration or expression in for initializer"
-                .to_string(),
+              Custom(
+                "Expect variable declaration or expression in for initializer"
+                  .to_string(),
+              )
+              .into_with(SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              }),
             );
             None
           },
@@ -747,7 +841,7 @@ impl<'a> Parser<'a> {
       fn parse_optional_expression<const OP: Operator>(
         parser: &mut Parser,
       ) -> Option<Expression> {
-        match parser.peek(0) {
+        match parser.peek_lit() {
           Literal::Operator(op) if op == &OP => {
             parser.must_get_op::<OP>();
             None
@@ -759,10 +853,8 @@ impl<'a> Parser<'a> {
           },
         }
       }
-      let condition =
-        parse_optional_expression::<{ Operator::Semicolon }>(self);
-      let increment =
-        parse_optional_expression::<{ Operator::RightParen }>(self);
+      let condition = parse_optional_expression::<{ Semicolon }>(self);
+      let increment = parse_optional_expression::<{ RightParen }>(self);
       self
         .loop_labels
         .push(Statement::new_loop_dummy_identifier("for"));
@@ -779,7 +871,7 @@ impl<'a> Parser<'a> {
           .expect("invariant: loop_labels should not be empty")
           .clone(),
         SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         },
       );
@@ -789,46 +881,39 @@ impl<'a> Parser<'a> {
   }
 
   fn next_switch(&mut self) -> Switch {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Switch }>();
     let condition = self.parse_paren_expression::<{ Operator::EXCOMMA }>();
     self
       .loop_labels
       .push(Statement::new_loop_dummy_identifier("switch"));
-    self.recoverable_get::<{ Operator::LeftBrace }>();
+    self.recoverable_get::<{ LeftBrace }>();
     let mut cases = Vec::new();
     let mut default: Option<Default> = None;
-    while *self.peek(0) != Operator::RightBrace {
-      match self.peek(0) {
+    while self.peek_lit() != RightBrace {
+      match self.peek_lit() {
         Literal::Keyword(Keyword::Case) => {
           let case = self.parse_case();
           if default.is_some() {
-            self.add_error(
-              "Case label after default label in switch; case ignored"
-                .to_string(),
-            );
+            self.add_error(CaseLabelAfterDefault.into_with(*self.peek_loc()));
           } else {
             cases.push(case);
           }
         },
         Literal::Keyword(Keyword::Default) =>
           if default.is_some() {
-            self.add_error(
-              "Multiple default labels in one switch; ignoring latter"
-                .to_string(),
-            );
+            self.add_error(MultipleDefaultLabels.into_with(*self.peek_loc()));
           } else {
             default = Some(self.parse_default());
           },
         _ => {
-          self
-            .add_error("Expect 'case' or 'default' in switch body".to_string());
+          self.add_error(MissingLabelInSwitch.into_with(*self.peek_loc()));
           self.get(); // consume the invalid token
         },
       }
     }
 
-    self.must_get_op::<{ Operator::RightBrace }>();
+    self.must_get_op::<{ RightBrace }>();
     let switch_stmt = Switch::new(
       condition,
       cases,
@@ -839,7 +924,7 @@ impl<'a> Parser<'a> {
         .expect("invariant: loop_labels should not be empty")
         .clone(),
       SourceSpan {
-        end: self.peek_loc(0).end,
+        end: self.peek_loc().end,
         ..location
       },
     );
@@ -848,7 +933,7 @@ impl<'a> Parser<'a> {
   }
 
   fn next_statement(&mut self) -> Statement {
-    match *self.peek(0) {
+    match *self.peek_lit() {
       Literal::Keyword(Keyword::If) => self.next_if().into(),
       Literal::Keyword(Keyword::For) => self.next_for().into(),
       Literal::Keyword(Keyword::Return) => self.next_return().into(),
@@ -857,16 +942,20 @@ impl<'a> Parser<'a> {
       Literal::Keyword(Keyword::Break) => self.next_break().into(),
       Literal::Keyword(Keyword::Continue) => self.next_continue().into(),
       Literal::Keyword(Keyword::Switch) => self.next_switch().into(),
-      Literal::Operator(Operator::LeftBrace) => self.next_block().into(),
-      Literal::Operator(Operator::Semicolon) => self.next_emptystmt(),
+      Literal::Operator(LeftBrace) => self.next_block().into(),
+      Literal::Operator(Semicolon) => self.next_emptystmt(),
       Literal::Keyword(Keyword::Case) => {
-        self.add_error("Case label not within switch statement".to_string());
+        self.add_error(
+          LabelNotWithinSwitch(Keyword::Case).into_with(*self.peek_loc()),
+        );
         // attempt to recover
         _ = self.parse_case();
         Statement::Empty()
       },
       Literal::Keyword(Keyword::Default) => {
-        self.add_error("Default label not within switch statement".to_string());
+        self.add_error(
+          LabelNotWithinSwitch(Keyword::Default).into_with(*self.peek_loc()),
+        );
         // ditto
         _ = self.parse_default();
         Statement::Empty()
@@ -875,7 +964,8 @@ impl<'a> Parser<'a> {
       Literal::Keyword(_) => self.next_declaration().into(),
       Literal::Identifier(ref ident) if self.typedefs.contains(ident) =>
         self.next_declaration().into(),
-      Literal::Identifier(ref ident) if self.peek(1) == Operator::Colon =>
+      Literal::Identifier(ref ident)
+        if self.peek_lit_with_offset(1) == Colon =>
         self.next_labelstmt(ident.to_string()),
 
       _ => self.next_exprstmt().into(),
@@ -883,16 +973,15 @@ impl<'a> Parser<'a> {
   }
 
   fn next_labelstmt(&mut self, ident: String) -> Statement {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     // 1. label at end of compound statement is not allowed until C23
     // 2. label can only jump to statements within the same function, not to mention cross file.
     if self.typedefs.is_top_level() {
-      self
-        .add_error("Label statement is not allowed in top level.".to_string());
+      self.add_error(TopLevelLabel.into_with(location));
       Statement::Empty()
     } else {
       self.get(); // consume ident
-      self.must_get_op::<{ Operator::Colon }>();
+      self.must_get_op::<{ Colon }>();
       let statement = self.next_statement();
       self.ios_c_strict_check_for_decl(&statement);
       // todo: label validity check, here or in semantic analysis?
@@ -900,7 +989,7 @@ impl<'a> Parser<'a> {
         ident,
         statement,
         SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         },
       )
@@ -909,62 +998,69 @@ impl<'a> Parser<'a> {
   }
 
   fn next_gotostmt(&mut self) -> Statement {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Goto }>();
-    if let Literal::Identifier(ident) = self.peek(0) {
+    if let Literal::Identifier(ident) = self.peek_lit() {
       let name = ident.to_string();
       self.get(); // consume ident
-      self.recoverable_get::<{ Operator::Semicolon }>();
+      self.recoverable_get::<{ Semicolon }>();
       Goto::new(
         name,
         SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         },
       )
       .into()
     } else {
-      self.add_error("Expect label identifier after 'goto'".to_string());
+      self.add_error(MissingLabelAfterGoto.into_with(SourceSpan {
+        end: self.peek_loc().end,
+        ..location
+      }));
       // assume the label is missing, continue parsing
-      self.silent_get_if::<{ Operator::Semicolon }>();
+      self.silent_get_if::<{ Semicolon }>();
       Statement::Empty()
     }
   }
 
   fn next_emptystmt(&mut self) -> Statement {
-    self.must_get_op::<{ Operator::Semicolon }>();
+    self.must_get_op::<{ Semicolon }>();
     Statement::Empty()
   }
 
   fn next_exprstmt(&mut self) -> Expression {
     let expr = self.next_expression(Operator::DEFAULT);
-    self.recoverable_get::<{ Operator::Semicolon }>();
+    self.recoverable_get::<{ Semicolon }>();
     expr
   }
 
   fn next_break(&mut self) -> Break {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Break }>();
-    self.recoverable_get::<{ Operator::Semicolon }>();
+    self.recoverable_get::<{ Semicolon }>();
     let newloc = SourceSpan {
-      end: self.peek_loc(0).end,
+      end: self.peek_loc().end,
       ..location
     };
-
     match self.loop_labels.last() {
       Some(label) => Break::new(label.to_string(), newloc),
       None => {
-        self.add_error("Break statement not within a loop".to_string());
+        self.add_error(
+          InvalidControlFlowStmt(
+            "Break statement not within a loop".to_string(),
+          )
+          .into_with(newloc),
+        );
         Break::new("invalid_loop".to_string(), newloc)
       },
     }
   }
 
   fn next_continue(&mut self) -> Continue {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Continue }>();
 
-    self.recoverable_get::<{ Operator::Semicolon }>();
+    self.recoverable_get::<{ Semicolon }>();
     // we need to handle continus differently; since the continue cannot be used to `continue` a switch.
     // search reversely for the nearest loop label which does not start with 'switch_'
     let mut found_label: Option<String> = None;
@@ -975,33 +1071,38 @@ impl<'a> Parser<'a> {
       }
     }
     let newloc = SourceSpan {
-      end: self.peek_loc(0).end,
+      end: self.peek_loc().end,
       ..location
     };
     match found_label {
       Some(label) => Continue::new(label, newloc),
       None => {
-        self.add_error("Continue statement not within a loop".to_string());
+        self.add_error(
+          InvalidControlFlowStmt(
+            "Continue statement not within a loop".to_string(),
+          )
+          .into_with(newloc),
+        );
         Continue::new("invalid_loop".to_string(), newloc)
       },
     }
   }
 }
 /// expressions
-impl<'a> Parser<'a> {
+impl Parser {
   fn next_factor(&mut self) -> Expression {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.get();
-    let literal = &self.tokens[self.cursor - 1].literal;
+    let literal = self.peek_prev_lit();
     match literal {
       Literal::Number(num) =>
         Expression::Constant(num.clone().into_with(SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         })),
       Literal::String(str) => Expression::Constant(
-        ConstantLiteral::String(str.clone()).into_with(SourceSpan {
-          end: self.peek_loc(0).end,
+        ConstantLiteral::StringLiteral(str.clone()).into_with(SourceSpan {
+          end: self.peek_loc().end,
           ..location
         }),
       ),
@@ -1011,33 +1112,45 @@ impl<'a> Parser<'a> {
             op.clone(),
             self.next_expression(Operator::DEFAULT),
             SourceSpan {
-              end: self.peek_loc(0).end,
+              end: self.peek_loc().end,
               ..location
             },
           )
           .into()
-        } else if *op == Operator::LeftParen {
+        } else if op == LeftParen {
           let expr = self.next_expression(Operator::DEFAULT);
-          if *self.peek(0) == Literal::Operator(Operator::RightParen) {
+          if self.peek_lit() == RightParen {
             self.get();
           } else {
-            self.add_error("Expect ')'".to_string());
+            self.add_error(
+              MissingCloseParen(self.peek_lit().clone()).into_with(
+                SourceSpan {
+                  end: self.peek_loc().end,
+                  ..location
+                },
+              ),
+            );
           }
           Paren::new(
             expr,
             SourceSpan {
-              end: self.peek_loc(0).end,
+              end: self.peek_loc().end,
               ..location
             },
           )
           .into()
         } else {
-          self.add_error(format!(
-            "Unexpected operator {op} in factor, assuming int",
-          ));
+          self.add_error(
+            UnexpectedCharacter(op.clone().into(), None).into_with(
+              SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              },
+            ),
+          );
           self.get();
           Expression::Constant(ConstantLiteral::Int(0).into_with(SourceSpan {
-            end: self.peek_loc(0).end,
+            end: self.peek_loc().end,
             ..location
           }))
         },
@@ -1045,18 +1158,18 @@ impl<'a> Parser<'a> {
         let ident_expr = Variable::new(
           ident.to_string(),
           SourceSpan {
-            end: self.peek_loc(0).end,
+            end: self.peek_loc().end,
             ..location
           },
         )
         .into();
-        if *self.peek(0) == Literal::Operator(Operator::LeftParen) {
+        if self.peek_lit() == LeftParen {
           let arguments = self.parse_argument_list();
           Call::new(
             ident_expr,
             arguments,
             SourceSpan {
-              end: self.peek_loc(0).end,
+              end: self.peek_loc().end,
               ..location
             },
           )
@@ -1071,12 +1184,16 @@ impl<'a> Parser<'a> {
         Keyword::Alignas => todo!(),
 
         _ => {
-          self.add_error(format!(
-            "Unexpected keyword {} in factor, assuming int",
-            keyword,
-          ));
+          self.add_error(
+            UnexpectedCharacter(keyword.clone().into(), None).into_with(
+              SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              },
+            ),
+          );
           Expression::Constant(ConstantLiteral::Int(0).into_with(SourceSpan {
-            end: self.peek_loc(0).end,
+            end: self.peek_loc().end,
             ..location
           }))
         },
@@ -1085,25 +1202,25 @@ impl<'a> Parser<'a> {
   }
 
   fn next_sizeof(&mut self) -> Expression {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Sizeof }>();
     // maybe type or expression, assume expression for now
     // let expr = self.parse_paren_expression();
     // Expression::SizeOf(SizeOf::Expression(Box::new(expr)))
     self.cursor -= 1;
-    if self.peek(0) == Operator::LeftParen {
-      self.must_get_op::<{ Operator::LeftParen }>();
+    if self.peek_lit() == LeftParen {
+      self.must_get_op::<{ LeftParen }>();
       match self.parse_type_specifier() {
         Some(_) => {
           // type
           let declspecs = self.parse_declspecs();
           let declarator =
             self.parse_declarator::<{ DeclaratorType::Abstract }, false>();
-          self.recoverable_get::<{ Operator::RightParen }>();
+          self.recoverable_get::<{ RightParen }>();
           Expression::SizeOf(
             SizeOfKind::Type(UnprocessedType::new(declspecs, declarator))
               .into_with(SourceSpan {
-                end: self.peek_loc(0).end,
+                end: self.peek_loc().end,
                 ..location
               }),
           )
@@ -1111,10 +1228,10 @@ impl<'a> Parser<'a> {
         None => {
           // expression
           let expr = self.next_expression(Operator::DEFAULT);
-          self.recoverable_get::<{ Operator::RightParen }>();
+          self.recoverable_get::<{ RightParen }>();
           Expression::SizeOf(SizeOfKind::Expression(expr.into()).into_with(
             SourceSpan {
-              end: self.peek_loc(0).end,
+              end: self.peek_loc().end,
               ..location
             },
           ))
@@ -1124,7 +1241,7 @@ impl<'a> Parser<'a> {
       let expr = self.next_expression(Operator::DEFAULT);
       Expression::SizeOf(SizeOfKind::Expression(expr.into()).into_with(
         SourceSpan {
-          end: self.peek_loc(0).end,
+          end: self.peek_loc().end,
           ..location
         },
       ))
@@ -1132,10 +1249,10 @@ impl<'a> Parser<'a> {
   }
 
   fn next_expression(&mut self, lmin_precedence: u8) -> Expression {
-    let location = *self.peek_loc(0);
+    let location = *self.peek_loc();
     let mut current = self.next_factor();
     loop {
-      if let Literal::Operator(op) = self.peek(0) {
+      if let Literal::Operator(op) = self.peek_lit() {
         if op.binary() && op.precedence() >= lmin_precedence {
           let operator = op.clone();
           self.get(); // operator
@@ -1151,23 +1268,23 @@ impl<'a> Parser<'a> {
             current,
             right,
             SourceSpan {
-              end: self.peek_loc(0).end,
+              end: self.peek_loc().end,
               ..location
             },
           )
           .into();
           continue;
-        } else if op == Operator::Question {
-          self.must_get_op::<{ Operator::Question }>();
+        } else if op == Question {
+          self.must_get_op::<{ Question }>();
           let then_branch = self.next_expression(Operator::DEFAULT);
-          self.recoverable_get::<{ Operator::Colon }>();
+          self.recoverable_get::<{ Colon }>();
           let else_branch = self.next_expression(Operator::TERNARY);
           current = Ternary::new(
             current,
             then_branch,
             else_branch,
             SourceSpan {
-              end: self.peek_loc(0).end,
+              end: self.peek_loc().end,
               ..location
             },
           )

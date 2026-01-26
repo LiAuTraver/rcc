@@ -13,7 +13,7 @@ pub enum Constant {
   Float(f32),
   Double(f64),
   Bool(bool),
-  String(String),
+  StringLiteral(String),
   Nullptr,
 }
 
@@ -200,7 +200,7 @@ impl Constant {
       // in C, char[N] is the type of string literal - although it's stored in read-only memory
       // in C++ it's const char[N]
       // ^^^ verified by clangd's AST
-      Self::String(str) => Array::new(
+      Self::StringLiteral(str) => Array::new(
         QualifiedType::new(Qualifiers::empty(), Char.into()).into(),
         // this is wrong for multi-byte characters, but let's ignore that for now
         ArraySize::Constant(str.len() + 1 /* null terminator */),
@@ -210,7 +210,7 @@ impl Constant {
   }
 
   pub fn is_char_array(&self) -> bool {
-    matches!(self, Self::String(_))
+    matches!(self, Self::StringLiteral(_))
   }
 
   pub fn is_integer(&self) -> bool {
@@ -249,7 +249,7 @@ impl Constant {
       Self::Double(d) => *d == 0.0,
       Self::Bool(b) => !*b,
       Self::Nullptr => true,
-      Self::String(s) => s.is_empty(),
+      Self::StringLiteral(s) => s.is_empty(),
     }
   }
 

@@ -1,9 +1,9 @@
 use strum_macros::Display;
 
-use crate::common::{ErrorData, keyword::Keyword, token::Literal};
+use super::{ErrorData, Keyword, Literal};
 
 /// storage-class-specifier
-#[derive(Debug, Display, PartialEq, Eq, Clone)]
+#[derive(Debug, Display, PartialEq, Eq, Clone, Copy)]
 pub enum Storage {
   /// variables that declared in block scope without any storage-class specifier
   /// are considered to have automatic storage duration.
@@ -137,4 +137,10 @@ impl Storage {
   //     (Some(storage), funcspecs) => Ok((storage, funcspecs)),
   //   }
   // }
+}
+
+impl PartialEq<Storage> for &Storage {
+  fn eq(&self, other: &Storage) -> bool {
+    **self == *other
+  }
 }

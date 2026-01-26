@@ -1,6 +1,6 @@
 use ::rc_utils::{DisplayWith, IntoWith};
 
-use super::{Operator, SourceManager, SourceSpan, Storage};
+use super::{Keyword, Literal, Operator, SourceManager, SourceSpan, Storage};
 use crate::types::{QualifiedType, Qualifiers};
 
 /// Custom message. would be printed as-is.
@@ -16,20 +16,23 @@ pub struct Error {
 #[derive(Debug)]
 pub enum Data {
   // lexing errors
-  UnexpectedCharacter(char),
+  UnexpectedCharacter(
+    Literal,         /* got */
+    Option<Literal>, /* expected */
+  ),
   UnterminatedString,
   InvalidNumberFormat(String),
   // parseing errors
   MissingOperator(Operator),
   MultipleStorageSpecs(Storage, Storage),
-  MissingTypeSpecifier(CustomMessage),
+  MissingTypeSpecifier,
   MissingIdentifier(CustomMessage),
   ExtraneousComma(CustomMessage),
   VoidVariableDecl(CustomMessage),
   ExtraneousStorageSpecs(Storage),
   UnclosedParameterList(CustomMessage),
-  MissingOpenParen(Elem),
-  MissingCloseParen(Elem),
+  MissingOpenParen(Literal),
+  MissingCloseParen(Literal),
   ExprNotConstant(CustomMessage),
   VarDeclUnclosed(CustomMessage),
   InvalidBlockItem,
@@ -38,13 +41,13 @@ pub enum Data {
   CaseLabelAfterDefault,
   MultipleDefaultLabels,
   MissingLabelInSwitch,
-  LabelNotWithinSwitch(Elem),
+  LabelNotWithinSwitch(Keyword),
   TopLevelLabel,
   MissingLabelAfterGoto,
   InvalidControlFlowStmt(CustomMessage),
-  UnsupportedFeature(CustomMessage),
   LabelNotFound(Elem),
   FunctionSpecsInVariableDecl(Elem),
+  // semantic errors
   VariableAlreadyDefined(Elem),
   LocalExternVarWithInitializer(Elem),
   InvalidCallee(Elem),
@@ -73,7 +76,9 @@ pub enum Data {
   DiscardingQualifiers(Qualifiers),
   InvalidConversion(CustomMessage),
   // placeholder for future errors
-  Placeholder(String),
+  Placeholder(CustomMessage),
+  Custom(CustomMessage),
+  UnsupportedFeature(CustomMessage),
 }
 impl Error {
   pub fn new(span: SourceSpan, data: Data) -> Self {
@@ -109,13 +114,21 @@ impl<'a> ::std::fmt::Display for ErrorDisplay<'a> {
     use Data::*;
 
     match &self.error.data {
-      UnexpectedCharacter(c) => write!(f, "Unexpected character '{}'", c),
+      UnexpectedCharacter(got, expected) => write!(
+        f,
+        "Unexpected character '{}'{}",
+        got,
+        match expected {
+          Some(exp) => format!(", expected '{}'", exp),
+          None => "".to_string(),
+        }
+      ),
       UnterminatedString => write!(f, "Unterminated string literal"),
       InvalidNumberFormat(s) => write!(f, "Invalid number format '{}'", s),
       MissingOperator(operator) => write!(f, "Expect '{}'", operator),
       MultipleStorageSpecs(l, r) =>
         write!(f, "Cannot combine storage classes '{}' and '{}'", l, r),
-      MissingTypeSpecifier(_) => write!(
+      MissingTypeSpecifier => write!(
         f,
         "Expect a type specifier in declaration, default to 'int'"
       ),
@@ -220,6 +233,7 @@ impl<'a> ::std::fmt::Display for ErrorDisplay<'a> {
         "Incompatible types in declaration of '{}': '{}' is not compatible with '{}'",
         name, l, r
       ),
+      Custom(msg) => write!(f, "{msg}"),
       Placeholder(msg) => write!(
         f,
         "An error occurred: {msg}. This error was not categorized yet; consider create a error category for it at {}",

@@ -1,19 +1,10 @@
-#![allow(internal_features)]
-#![allow(unstable_features)]
-#![allow(unreachable_code)]
-#![allow(unused_imports)]
-
 use ::rc_core::{
-  analyzer::Analyzer,
-  common::{SourceDisplay, SourceManager},
-  lexer::Lexer,
-  parser::Parser,
+  analyzer::Analyzer, common::SourceManager, lexer::Lexer, parser::Parser,
 };
 use ::rc_utils::DisplayWith;
-use ::std::{env::args, fs::File, io::Read, path::PathBuf, process::exit};
 
 fn main() {
-  let args = args().collect::<Vec<String>>();
+  let args = ::std::env::args().collect::<Vec<String>>();
 
   println!("Args: {:?}", args);
 
@@ -22,7 +13,7 @@ fn main() {
     [_, kind, filename] => (kind.as_str(), filename.as_str()),
     _ => {
       eprintln!("Usage: rcns [all|lex|parse] <filename>");
-      exit(1);
+      ::std::process::exit(1);
     },
   };
   let mut source_manager = SourceManager::default();
@@ -41,13 +32,13 @@ fn main() {
     errors
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
-    exit(1);
+    ::std::process::exit(1);
   }
   if kind == "--lex" || kind == "lex" {
     println!("Lex succeeded.");
     return;
   }
-  let mut parser = Parser::new(tokens, &source_manager);
+  let mut parser = Parser::new(tokens);
   let program = parser.parse();
   println!("{:}", program);
 
@@ -62,8 +53,10 @@ fn main() {
   let parse_errors = parser.errors();
   if !parse_errors.is_empty() {
     eprintln!("Parse errors:");
-    parse_errors.iter().for_each(|e| eprintln!("{e}"));
-    exit(1);
+    parse_errors
+      .iter()
+      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
+    ::std::process::exit(1);
   }
   if kind == "--parse" || kind == "parse" {
     println!("Parse succeeded.");
@@ -85,7 +78,7 @@ fn main() {
     analyze_errors
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
-    exit(1);
+    ::std::process::exit(1);
   }
   println!("{:}", translation_unit);
   println!("Analyze succeeded.");
@@ -95,6 +88,7 @@ fn main() {
 mod test {
   use ::std::{backtrace::Backtrace, panic::Location};
 
+  #[allow(unused_imports)]
   use super::*;
   #[test]
   fn caller() {

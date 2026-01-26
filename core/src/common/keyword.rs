@@ -254,3 +254,9 @@ pub enum Reserved {
   #[strum(serialize = "module")]
   Module,
 }
+
+impl PartialEq<Keyword> for &Keyword {
+  fn eq(&self, other: &Keyword) -> bool {
+    **self == *other
+  }
+}

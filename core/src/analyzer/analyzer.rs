@@ -1,4 +1,6 @@
-use ::rc_utils::IntoWith;
+use ::rc_utils::{
+  IntoWith, contract_assert, contract_violation, not_implemented_feature,
+};
 
 use crate::{
   analyzer::{declaration as ad, expression as ae, statement as astmt},
@@ -60,67 +62,6 @@ impl<T> ImplHelper<T> for Option<T> {
       },
     }
   }
-}
-#[allow(unused_macros)]
-macro_rules! contract_assert {
-  ($condition:expr) => {{
-    if !$condition {
-      eprintln!(
-        "invariant at {}.
-        This is a program internal error, please fix it!",
-        ::std::panic::Location::caller()
-      );
-      panic!();
-    }
-  }};
-  ($condition:expr, $($arg:tt)+) => {{
-    if !$condition {
-      eprintln!(
-        "invariant: {} at {}.
-        This is a program internal error, please fix it!",
-        format!($($arg)+),
-        ::std::panic::Location::caller()
-      );
-      panic!();
-    }
-  }};
-}
-#[allow(unused_macros)]
-macro_rules! contract_violation {
-  () => {{
-    eprintln!(
-      "invariant at {}.
-      This is a program internal error, please fix it!",
-      ::std::panic::Location::caller()
-    );
-    panic!();
-  }};
-  ($($arg:tt)+) => {{
-    eprintln!(
-      "invariant at {}: {}.
-      This is a program internal error, please fix it!",
-      ::std::panic::Location::caller(),
-      format!($($arg)+)
-    );
-    panic!();
-  }};
-}
-
-#[allow(unused_macros)]
-macro_rules! not_implemented_feature {
-  () => {{
-    panic!(
-      "not implemented feature at {}",
-      ::std::panic::Location::caller(),
-    );
-  }};
-  ($($arg:tt)+) => {{
-    panic!(
-      "not implemented feature '{}' at {}",
-      format!($($arg)+),
-      ::std::panic::Location::caller(),
-    );
-  }};
 }
 
 #[derive(Debug, Default)]
