@@ -57,8 +57,8 @@ static_assert!(
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Coordinate {
-  pub line: u32,
-  pub column: u32,
+  pub line: SpanIndex,
+  pub column: SpanIndex,
 }
 static_assert!(
   ::std::mem::needs_drop::<Coordinate>() == false,
@@ -118,12 +118,12 @@ impl Manager {
     let col_idx = (span.start as usize) - line_start;
 
     Coordinate {
-      line: (line_idx + 1) as u32,
-      column: (col_idx + 1) as u32,
+      line: (line_idx + 1) as SpanIndex,
+      column: (col_idx + 1) as SpanIndex,
     }
   }
 
-  /// Helper to get the actual text for a span
+  /// get the actual text for a span
   pub fn get_slice(&self, span: Span) -> &str {
     let file = &self.files[span.file_index as usize];
     &file.source[span.start as usize..span.end as usize]

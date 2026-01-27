@@ -207,7 +207,7 @@ impl Parser {
     _ = statement; // temporary workaround
   }
 }
-/// meta
+/// meta parse
 impl Parser {
   fn parse_type_specifier(&mut self) -> Option<TypeSpecifier> {
     match self.peek_lit() {

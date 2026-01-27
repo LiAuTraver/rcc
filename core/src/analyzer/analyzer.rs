@@ -6,7 +6,7 @@ use crate::{
   analyzer::{declaration as ad, expression as ae, statement as astmt},
   common::{
     Environment, Error, ErrorData::*, Operator, OperatorCategory, SourceSpan,
-    Storage, Symbol, VarDeclKind, Warning, WarningData,
+    Storage, Symbol, VarDeclKind, Warning, WarningData::*,
   },
   parser::{declaration as pd, expression as pe, statement as ps},
   types::{
@@ -19,6 +19,17 @@ type TypeRes = Result<QualifiedType, Error>;
 type ExprRes = Result<ae::Expression, Error>;
 type DeclRes<T> = Result<T, Error>;
 type StmtRes<T> = Result<T, Error>;
+
+#[cold]
+fn shall_ok_failed(msg: &str, location: &std::panic::Location) -> ! {
+  panic!(
+    "Invariant at {}: {}.
+    current implementation should always return `Ok` here.
+    This is a program internal error, please fix it!",
+    location, msg
+  );
+}
+
 trait ImplHelper<T> {
   /// Glorified `expect` for `Result`, use this to indicate a `program error/invariant`
   ///
@@ -32,16 +43,10 @@ impl<T> ImplHelper<T> for Result<T, Error> {
   fn shall_ok<M: Into<Option<&'static str>>>(self, msg: M) -> T {
     match self {
       Ok(t) => t,
-      Err(_) => {
-        let m = msg.into().unwrap_or("No additional info");
-        panic!(
-          "Invariant at {}: {}.
-        current implementation should always return `Ok` here.
-        This is a program internal error, please fix it!",
-          std::panic::Location::caller(),
-          m
-        );
-      },
+      Err(_) => shall_ok_failed(
+        msg.into().unwrap_or("No additional info"),
+        ::std::panic::Location::caller(),
+      ),
     }
   }
 }
@@ -50,16 +55,10 @@ impl<T> ImplHelper<T> for Option<T> {
   fn shall_ok<M: Into<Option<&'static str>>>(self, msg: M) -> T {
     match self {
       Some(t) => t,
-      None => {
-        let m = msg.into().unwrap_or("No additional info");
-        panic!(
-          "Invariant at {}: {}.
-        current implementation should always return `Ok` here.
-        This is a program internal error, please fix it!",
-          std::panic::Location::caller(),
-          m
-        );
-      },
+      None => shall_ok_failed(
+        msg.into().unwrap_or("No additional info"),
+        ::std::panic::Location::caller(),
+      ),
     }
   }
 }
@@ -76,6 +75,23 @@ impl<T> ImplHelper2<T, Analyzer> for Result<T, Error> {
       Err(e) => {
         context.add_error(e);
         default
+      },
+    }
+  }
+}
+
+#[allow(unused)]
+trait ImplHelper3<T, Listener> {
+  fn handle_or_dummy(self, context: &mut Listener) -> T;
+}
+
+impl<T: Dummy> ImplHelper3<T, Analyzer> for Result<T, Error> {
+  fn handle_or_dummy(self, context: &mut Analyzer) -> T {
+    match self {
+      Ok(t) => t,
+      Err(e) => {
+        context.add_error(e);
+        Dummy::dummy()
       },
     }
   }
@@ -469,8 +485,11 @@ impl Analyzer {
 
     self.environment.exit();
 
-    self.current_function.as_mut().unwrap().body =
-      Some(astmt::Compound::new(statements, body.span));
+    self
+      .current_function
+      .as_mut()
+      .shall_ok("impossible; no current function?")
+      .body = Some(astmt::Compound::new(statements, body.span));
     // verify labels and gotos
     let function =
       std::mem::take(&mut self.current_function).expect("never fails");
@@ -495,11 +514,10 @@ impl Analyzer {
     } = vardef;
     let (function_specifier, storage, qualified_type) =
       self.parse_declspecs(declspecs).shall_ok("vardef");
-    if !function_specifier.is_empty() {
-      contract_violation!(
-        "variable cannot have function specifier; this should be handled in parser"
-      );
-    }
+    contract_assert!(
+      function_specifier.is_empty(),
+      "variable cannot have function specifier; this should be handled in parser"
+    );
     let pd::Declarator {
       modifiers,
       name,
@@ -636,8 +654,7 @@ impl Analyzer {
       (Some(storage), Some(initializer)) => {
         if storage == Storage::Extern {
           self.add_warning(
-            WarningData::ExternVariableWithInitializer(name.clone())
-              .into_with(span),
+            ExternVariableWithInitializer(name.clone()).into_with(span),
           );
         }
         let symbol = Symbol::def(qualified_type, storage, name);
@@ -1382,17 +1399,11 @@ impl Analyzer {
       .expression(condition)
       .and_then(|e| e.conditional_conversion())
       .handle_with(self, ae::Expression::new_error_node(QualifiedType::bool()));
-    let analyzed_then_branch = self
-      .statement(*then_branch)
-      .handle_with(self, astmt::Statement::dummy())
-      .into();
+    let analyzed_then_branch =
+      self.statement(*then_branch).handle_or_dummy(self).into();
     let analyzed_else_branch = match else_branch {
-      Some(else_branch) => Some(
-        self
-          .statement(*else_branch)
-          .handle_with(self, astmt::Statement::dummy())
-          .into(),
-      ),
+      Some(else_branch) =>
+        Some(self.statement(*else_branch).handle_or_dummy(self).into()),
       None => None,
     };
     Ok(astmt::If::new(
@@ -1414,10 +1425,7 @@ impl Analyzer {
       .expression(condition)
       .and_then(|e| e.conditional_conversion())
       .handle_with(self, ae::Expression::new_error_node(QualifiedType::bool()));
-    let analyzed_body = self
-      .statement(*body)
-      .handle_with(self, astmt::Statement::dummy())
-      .into();
+    let analyzed_body = self.statement(*body).handle_or_dummy(self).into();
     Ok(astmt::While::new(
       analyzed_condition,
       analyzed_body,
@@ -1433,10 +1441,7 @@ impl Analyzer {
       tag: label,
       span,
     } = do_while;
-    let analyzed_body = self
-      .statement(*body)
-      .handle_with(self, astmt::Statement::dummy())
-      .into();
+    let analyzed_body = self.statement(*body).handle_or_dummy(self).into();
     let analyzed_condition = self
       .expression(condition)
       .and_then(|e| e.conditional_conversion())
@@ -1458,27 +1463,17 @@ impl Analyzer {
       tag: label,
       span,
     } = for_stmt;
-    let analyzed_initializer = initializer.map(|init| {
-      self
-        .statement(*init)
-        .handle_with(self, astmt::Statement::dummy())
-        .into()
-    });
+    let analyzed_initializer = initializer
+      .map(|init| self.statement(*init).handle_or_dummy(self).into());
     let analyzed_condition = condition.map(|cond| {
       self.expression(cond).handle_with(
         self,
         ae::Expression::new_error_node(QualifiedType::bool()),
       )
     });
-    let analyzed_increment = increment.map(|inc| {
-      self
-        .expression(inc)
-        .handle_with(self, ae::Expression::dummy())
-    });
-    let analyzed_body = self
-      .statement(*body)
-      .handle_with(self, astmt::Statement::dummy())
-      .into();
+    let analyzed_increment =
+      increment.map(|inc| self.expression(inc).handle_or_dummy(self));
+    let analyzed_body = self.statement(*body).handle_or_dummy(self).into();
     Ok(astmt::For::new(
       analyzed_initializer,
       analyzed_condition,
@@ -1514,10 +1509,15 @@ impl Analyzer {
         ae::Expression::new_error_node(QualifiedType::int())
       },
     };
-    let mut analyzed_cases = Vec::new();
-    for case in cases {
-      analyzed_cases.push(self.casestmt(case).shall_ok("switch case"));
-    }
+    // let mut analyzed_cases = Vec::new();
+    // for case in cases {
+    //   analyzed_cases.push(self.casestmt(case).shall_ok("switch case"));
+    // }
+    let analyzed_cases = cases
+      .into_iter()
+      .map(|case| self.casestmt(case).shall_ok("switch case"))
+      .collect::<Vec<_>>();
+
     let analyzed_default = match default {
       Some(default) =>
         Some(self.defaultstmt(default).shall_ok("switch default")),
@@ -1600,9 +1600,7 @@ impl Analyzer {
         {
           true => Ok(astmt::Label::new(
             name,
-            self
-              .statement(*statement)
-              .handle_with(self, astmt::Statement::dummy()),
+            self.statement(*statement).handle_or_dummy(self),
             span,
           )),
           false => Err(DuplicateLabel(name).into_with(span)),
