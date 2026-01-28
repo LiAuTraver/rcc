@@ -135,7 +135,7 @@ impl<'a> Lexer<'a> {
     &self.source[start..end]
   }
 
-  pub fn lex_all(&mut self) -> Vec<Token> {
+  pub fn lex(&mut self) -> Vec<Token> {
     let mut tokens = Vec::new();
     while !self.is_at_end() {
       if let Some(token) = self.next_token() {

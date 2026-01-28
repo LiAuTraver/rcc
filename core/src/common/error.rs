@@ -72,7 +72,7 @@ pub enum Data {
   // storage.rs
   StorageSpecsUnmergeable(Storage, Storage),
   // types.rs
-  MainFunctionProtoMismatch(CustomMessage),
+  MainFunctionProtoMismatch(CustomMsgFixed),
   // conversion.rs
   DiscardingQualifiers(Qualifiers),
   InvalidConversion(CustomMessage),

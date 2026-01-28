@@ -38,7 +38,7 @@ pub struct VarDef {
 #[derive(Debug)]
 pub struct Parameter {
   /// If the parameter is named, point to the symbol; otherwise None (abstract/unnamed parameter).
-  pub symbol: Option<SymbolRef>,
+  pub symbol: SymbolRef,
   pub span: SourceSpan,
 }
 
@@ -109,7 +109,7 @@ impl VarDef {
 }
 
 impl Parameter {
-  pub fn new(symbol: Option<SymbolRef>, span: SourceSpan) -> Self {
+  pub fn new(symbol: SymbolRef, span: SourceSpan) -> Self {
     Self { symbol, span }
   }
 }
@@ -177,14 +177,7 @@ mod fmt {
   impl Display for Parameter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       // Show only the type for brevity; names are optional.
-      write!(
-        f,
-        "{}",
-        match &self.symbol {
-          Some(sym) => sym.borrow().qualified_type.to_string(),
-          None => "<unnamed>".to_string(),
-        }
-      )
+      write!(f, "{}", self.symbol.borrow().qualified_type)
     }
   }
 

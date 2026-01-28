@@ -84,11 +84,16 @@ impl Manager {
     Ok(self.add_file(path, source))
   }
 
+  /// mustly used in debugging/testing
+  pub fn add_string(&mut self, source: String) -> u32 {
+    self.add_file(PathBuf::from("<input>"), source)
+  }
+
   pub fn add_file(&mut self, path: PathBuf, source: String) -> u32 {
     let mut line_offsets = vec![0]; // line 1 starts at byte 0
 
-    for (idx, char) in source.char_indices() {
-      if char == '\n' {
+    for (idx, ch) in source.char_indices() {
+      if ch == '\n' {
         line_offsets.push(idx + 1);
       }
     }

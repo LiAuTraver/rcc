@@ -3,3 +3,5 @@
 # workaround
 **/preprocessor/**
 test_compiler.ps1
+# output 
+out.txt

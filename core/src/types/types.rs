@@ -212,26 +212,28 @@ impl Primitive {
 impl FunctionProto {
   const MAIN_PROTO_ARGS: Lazy<FunctionProto> = Lazy::new(|| {
     FunctionProto::new(
-      Box::new(QualifiedType::new(
-        Qualifiers::empty(),
-        Type::Primitive(Primitive::Int),
-      )),
-      vec![QualifiedType::new(
-        Qualifiers::empty(),
-        Type::Pointer(Pointer::new(Box::new(QualifiedType::new(
-          Qualifiers::empty(),
-          Type::Primitive(Primitive::Char),
-        )))),
-      )],
+      QualifiedType::new_unqualified(Primitive::Int.into()).into(),
+      vec![
+        QualifiedType::new_unqualified(Primitive::Int.into()),
+        QualifiedType::new_unqualified(
+          Pointer::new(
+            QualifiedType::new_unqualified(
+              Pointer::new(
+                QualifiedType::new_unqualified(Primitive::Char.into()).into(),
+              )
+              .into(),
+            )
+            .into(),
+          )
+          .into(),
+        ),
+      ],
       false,
     )
   });
   const MAIN_PROTO_EMPTY: Lazy<FunctionProto> = Lazy::new(|| {
     FunctionProto::new(
-      Box::new(QualifiedType::new(
-        Qualifiers::empty(),
-        Type::Primitive(Primitive::Int),
-      )),
+      QualifiedType::new_unqualified(Primitive::Int.into()).into(),
       vec![],
       false,
     )
@@ -255,20 +257,20 @@ impl FunctionProto {
   ) -> Result<(), ErrorData> {
     if self.is_variadic {
       Err(ErrorData::MainFunctionProtoMismatch(
-        "main function cannot be variadic".to_string(),
+        "main function cannot be variadic",
       ))
     } else if function_specifier.contains(FunctionSpecifier::Inline) {
       Err(ErrorData::MainFunctionProtoMismatch(
-        "main function cannot be inline".to_string(),
+        "main function cannot be inline",
       ))
     } else if !self.compatible_with(&Self::MAIN_PROTO_EMPTY)
       && !self.compatible_with(&Self::MAIN_PROTO_ARGS)
     {
       Err(ErrorData::MainFunctionProtoMismatch(
-        "main function must have either no parameters or two parameters (int argc, char** argv)".to_string(),
+        "main function must have either no parameters or two parameters (int argc, char** argv)",
       ))
     } else {
-      todo!()
+      Ok(())
     }
   }
 }

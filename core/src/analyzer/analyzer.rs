@@ -136,19 +136,26 @@ impl Analyzer {
   pub fn warnings(&self) -> &[Warning] {
     &self.warnings
   }
+
+  pub fn unnamed_placeholder() -> String {
+    static COUNTER: ::std::sync::atomic::AtomicUsize =
+      ::std::sync::atomic::AtomicUsize::new(0);
+    let id = COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
+    format!("<unnamed_{}>", id)
+  }
 }
 impl Analyzer {
   fn apply_modifiers_for_varty(
     mut qualified_type: QualifiedType,
     modifiers: Vec<pd::Modifier>,
   ) -> QualifiedType {
-    // reverse order (right-to-left in C)
+    // reverse order
     for modifier in modifiers.into_iter().rev() {
       match modifier {
         pd::Modifier::Pointer(qualifiers) => {
           qualified_type = QualifiedType::new(
             qualifiers,
-            Type::Pointer(Pointer::new(Box::new(qualified_type))),
+            Pointer::new(qualified_type.into()).into(),
           );
         },
         pd::Modifier::Array(array_mod) => {
@@ -159,7 +166,7 @@ impl Analyzer {
           };
           qualified_type = QualifiedType::new_unqualified(
             Array {
-              element_type: Box::new(qualified_type),
+              element_type: qualified_type.into(),
               size,
             }
             .into(),
@@ -201,10 +208,7 @@ impl Analyzer {
     let is_variadic = function_signature.is_variadic;
     let parameter_types = parameters
       .iter()
-      .map(|param| match &param.symbol {
-        Some(sym) => sym.borrow().qualified_type.clone(),
-        None => QualifiedType::new_unqualified(Primitive::Int.into()), // default to int
-      })
+      .map(|param| param.symbol.borrow().qualified_type.clone())
       .collect::<Vec<QualifiedType>>();
     let functionproto =
       FunctionProto::new(return_type.into(), parameter_types, is_variadic);
@@ -220,7 +224,7 @@ impl Analyzer {
     parameters: Vec<pd::Parameter>,
   ) -> DeclRes<Vec<ad::Parameter>> {
     let mut analyzed_parameters = Vec::new();
-    for parameter in parameters {
+    parameters.into_iter().for_each(|parameter| {
       let pd::Parameter {
         declarator,
         declspecs,
@@ -242,16 +246,14 @@ impl Analyzer {
       } = declarator;
       let qualified_type =
         Self::apply_modifiers_for_varty(qualified_type, modifiers);
-      let symbol = name.map(|name| {
-        Symbol::new_ref(Symbol::new(
-          qualified_type,
-          Storage::Automatic,
-          name,
-          VarDeclKind::Declaration,
-        ))
-      });
+      let symbol = Symbol::new_ref(Symbol::new(
+        qualified_type,
+        Storage::Automatic,
+        name.unwrap_or_else(|| Self::unnamed_placeholder()),
+        VarDeclKind::Declaration,
+      ));
       analyzed_parameters.push(ad::Parameter::new(symbol, span));
-    }
+    });
     Ok(analyzed_parameters)
   }
 
@@ -417,9 +419,23 @@ impl Analyzer {
     } = declarator;
     let name = name
       .shall_ok("function must have a name; it should be handled in parser");
+
     let (qualified_type, parameters) = self
       .apply_modifiers_for_functiondecl(return_type, modifiers)
       .shall_ok("failed to apply modifiers for function declarator");
+
+    if name == "main" {
+      FunctionProto::main_proto_validate(
+        qualified_type
+          .unqualified_type()
+          .as_functionproto_unchecked(),
+        function_specifier,
+      )
+      .unwrap_or_else(|e| {
+        self.add_error(e.into_with(span));
+      });
+    }
+
     let symbol = Symbol::new_ref(Symbol::new(
       qualified_type,
       storage,
@@ -462,14 +478,23 @@ impl Analyzer {
 
     self.environment.enter();
 
-    for parameter in &self.current_function.as_ref().unwrap().parameters {
-      if let Some(param_symbol) = &parameter.symbol {
-        self.environment.declare_symbol(
-          param_symbol.borrow().name.clone(),
-          param_symbol.clone(),
-        );
-      }
-    }
+    self
+      .current_function
+      .as_ref()
+      .shall_ok("shall have function")
+      .parameters
+      .iter()
+      .for_each(|parameter| {
+        // FIXME: hsould we insert unnamed parameters or not?
+        if parameter.symbol.borrow().name.starts_with('<') {
+          // unnamed parameter - do nothing currently
+        } else {
+          self.environment.declare_symbol(
+            parameter.symbol.borrow().name.clone(),
+            parameter.symbol.clone(),
+          );
+        }
+      });
 
     let statements = body
       .statements
@@ -494,14 +519,14 @@ impl Analyzer {
     let function =
       std::mem::take(&mut self.current_function).expect("never fails");
 
-    for goto in &function.gotos {
+    function.gotos.iter().for_each(|goto| {
       if !function.labels.contains(goto) {
         contract_violation!(
           "goto label '{}' not found; this should be handled in parser",
           goto
         );
       }
-    }
+    });
     Ok(function)
   }
 
@@ -767,8 +792,7 @@ impl Analyzer {
 
     let mut analyzed_arguments = Vec::new();
     for argument in arguments {
-      let analyzed_argument = self.expression(argument)?;
-      analyzed_arguments.push(analyzed_argument);
+      analyzed_arguments.push(self.expression(argument)?);
     }
 
     if !function_proto.is_variadic
@@ -1509,10 +1533,6 @@ impl Analyzer {
         ae::Expression::new_error_node(QualifiedType::int())
       },
     };
-    // let mut analyzed_cases = Vec::new();
-    // for case in cases {
-    //   analyzed_cases.push(self.casestmt(case).shall_ok("switch case"));
-    // }
     let analyzed_cases = cases
       .into_iter()
       .map(|case| self.casestmt(case).shall_ok("switch case"))

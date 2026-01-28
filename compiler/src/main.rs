@@ -2,7 +2,11 @@ use ::rc_core::{
   analyzer::Analyzer, common::SourceManager, lexer::Lexer, parser::Parser,
 };
 use ::rc_utils::DisplayWith;
-
+enum Stage {
+  Lex,
+  Parse,
+  Analyze,
+}
 fn main() {
   let args = ::std::env::args().collect::<Vec<String>>();
 
@@ -25,13 +29,37 @@ fn main() {
       ::std::process::exit(1);
     });
 
-  let mut lexer = Lexer::new(&source_manager.files[0].source);
-  let tokens = lexer.lex_all();
+  let stage = match kind {
+    "all" | "--all" => Stage::Analyze,
+    "lex" | "--lex" => Stage::Lex,
+    "parse" | "--parse" => Stage::Parse,
+    _ => {
+      eprintln!("Unknown stage: {}", kind);
+      ::std::process::exit(1);
+    },
+  };
+  pipeline(&mut source_manager, stage, false);
+}
+
+fn pipeline(
+  source_manager: &mut SourceManager,
+  stage: Stage,
+  pretty_print: bool,
+) {
+  let content = &source_manager.files.get(0).unwrap().source;
+  let mut lexer = Lexer::new(content);
+  let tokens = lexer.lex();
   let errors = lexer.errors();
   tokens
     .iter()
     .take(tokens.iter().len() - 1) // last is EOF
-    .for_each(|t| println!("{t:?}"));
+    .for_each(|t| {
+      if pretty_print {
+        println!("{t}");
+      } else {
+        println!("{} ", t);
+      }
+    });
   if !errors.is_empty() {
     eprintln!("Lex errors:");
     errors
@@ -39,14 +67,13 @@ fn main() {
       .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
     ::std::process::exit(1);
   }
-  if kind == "--lex" || kind == "lex" {
+  if let Stage::Lex = stage {
     println!("Lex succeeded.");
     return;
   }
   let mut parser = Parser::new(tokens);
   let program = parser.parse();
-  println!("{:}", program);
-
+  println!("{program}");
   let parse_warnings = parser.warnings();
   if !parse_warnings.is_empty() {
     eprintln!("Parse warnings:");
@@ -54,7 +81,6 @@ fn main() {
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
   }
-
   let parse_errors = parser.errors();
   if !parse_errors.is_empty() {
     eprintln!("Parse errors:");
@@ -63,13 +89,16 @@ fn main() {
       .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
     ::std::process::exit(1);
   }
-  if kind == "--parse" || kind == "parse" {
+  if let Stage::Parse = stage {
+    if pretty_print {
+      println!("{:#?}", program);
+    }
     println!("Parse succeeded.");
     return;
   }
+  assert!(matches!(stage, Stage::Analyze));
   let mut analyzer = Analyzer::new(program);
   let translation_unit = analyzer.analyze();
-
   let analyze_warnings = analyzer.warnings();
   if !analyze_warnings.is_empty() {
     eprintln!("Analyze warnings:");
@@ -85,7 +114,11 @@ fn main() {
       .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
     ::std::process::exit(1);
   }
-  println!("{:}", translation_unit);
+  if pretty_print {
+    println!("{:#?}", translation_unit);
+  }
+  println!("{translation_unit}");
+
   println!("Analyze succeeded.");
 }
 
@@ -103,5 +136,17 @@ mod test {
   fn dummy() {
     println!("{}", Location::caller());
     println!("{}", Backtrace::capture())
+  }
+
+  #[test]
+  fn test_str() {
+    let s = r#"
+static const volatile int **const *const* volatile 
+    volatile_ptr_to_very_const_ptr_to_very_const_ptr;
+    int main(int argc, char **);
+"#;
+    let mut source_manager = SourceManager::default();
+    source_manager.add_string(s.into());
+    pipeline(&mut source_manager, Stage::Analyze, false);
   }
 }

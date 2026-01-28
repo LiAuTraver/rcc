@@ -406,7 +406,7 @@ mod fmt {
   };
 
   impl Display for Declaration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         Declaration::Function(func) => <Function as Display>::fmt(func, f),
         Declaration::Variable(var) => <VarDef as Display>::fmt(var, f),
@@ -415,7 +415,7 @@ mod fmt {
   }
 
   impl Display for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       self
         .declarations
         .iter()
@@ -423,7 +423,7 @@ mod fmt {
     }
   }
   impl Display for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
         "<{} {}: {} -> {}> {}",
@@ -458,12 +458,12 @@ mod fmt {
   }
 
   impl Display for Modifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         Modifier::Pointer(qualifiers) => {
           write!(
             f,
-            "*{}",
+            "{}*",
             if qualifiers.is_empty() {
               "".to_string()
             } else {
@@ -486,7 +486,7 @@ mod fmt {
   }
 
   impl Display for FunctionSignature {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(f, "(")?;
       for (i, param) in self.parameters.iter().enumerate() {
         if i > 0 {
@@ -514,50 +514,20 @@ mod fmt {
     }
   }
   impl Display for VarDef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      if self.is_typedef() {
-        write!(
-          f,
-          "typedef {} {};",
-          self
-            .declspecs
-            .type_specifiers
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>()
-            .join(" "),
-          match &self.declarator.name {
-            Some(name) => name,
-            None => "<anonymous>",
-          },
-        )
-      } else {
-        write!(
-          f,
-          "{} {}{}",
-          self
-            .declspecs
-            .type_specifiers
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>()
-            .join(" "),
-          match &self.declarator.name {
-            Some(name) => name,
-            None => "<anonymous>",
-          },
-          match &self.initializer {
-            Some(_) => " = <initializer>".to_string(),
-            None => "".to_string(),
-          }
-        )?;
-        write!(f, ";")
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      write!(f, "{} {}", self.declspecs, self.declarator)?;
+      if let Some(_) = &self.initializer {
+        // write!(f, " = {}", initializer)?;
+        write!(f, " = <initializer>")?;
       }
+      Ok(())
     }
   }
   impl Display for DeclSpecs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "{} ", self.function_specifiers)?;
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      if !self.function_specifiers.is_empty() {
+        write!(f, "{} ", self.function_specifiers)?;
+      }
       if let Some(storage) = &self.storage_class {
         write!(f, "{} ", storage)?;
       }
@@ -574,7 +544,7 @@ mod fmt {
     }
   }
   impl Display for Declarator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
         "{} {}",
@@ -585,6 +555,7 @@ mod fmt {
         self
           .modifiers
           .iter()
+          .rev()
           .map(|m| m.to_string())
           .collect::<Vec<_>>()
           .join(" ")
@@ -592,7 +563,7 @@ mod fmt {
     }
   }
   impl Display for TypeSpecifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         TypeSpecifier::Nullptr => write!(f, "nullptr"),
         TypeSpecifier::Void => write!(f, "void"),
@@ -614,7 +585,7 @@ mod fmt {
     }
   }
   impl Display for Struct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
         "{}",
@@ -626,7 +597,7 @@ mod fmt {
     }
   }
   impl Display for EnumSpecifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
         "{}",
