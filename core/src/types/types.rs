@@ -74,6 +74,7 @@ pub enum Primitive {
   Double,
   #[strum(serialize = "long double")]
   LongDouble,
+  /// 6.2.5.24: The void type comprises an empty set of values; it is an incomplete object type that cannot be completed.
   #[strum(serialize = "void")]
   Void,
   #[strum(serialize = "nullptr_t")]
@@ -104,12 +105,14 @@ pub struct Pointer {
 pub enum ArraySize {
   Constant(usize),
   Incomplete,
-  // Variable, // ignore for now
+  Variable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array {
-  /// Array itself cannot have qualifiers, hence the QualifiedType::qualifiers of the whole array should be empty, the actual element type's qualifiers are stored here.
+  /// Array itself cannot have qualifiers,
+  /// hence the QualifiedType::qualifiers of the whole array should be empty,
+  /// the actual element type's qualifiers are stored here.
   pub element_type: Box<QualifiedType>,
   pub size: ArraySize,
 }
@@ -212,32 +215,16 @@ impl Primitive {
 impl FunctionProto {
   const MAIN_PROTO_ARGS: Lazy<FunctionProto> = Lazy::new(|| {
     FunctionProto::new(
-      QualifiedType::new_unqualified(Primitive::Int.into()).into(),
+      Primitive::Int.into(),
       vec![
-        QualifiedType::new_unqualified(Primitive::Int.into()),
-        QualifiedType::new_unqualified(
-          Pointer::new(
-            QualifiedType::new_unqualified(
-              Pointer::new(
-                QualifiedType::new_unqualified(Primitive::Char.into()).into(),
-              )
-              .into(),
-            )
-            .into(),
-          )
-          .into(),
-        ),
+        Primitive::Int.into(),
+        Pointer::new(Pointer::new(Primitive::Char.into()).into()).into(),
       ],
       false,
     )
   });
-  const MAIN_PROTO_EMPTY: Lazy<FunctionProto> = Lazy::new(|| {
-    FunctionProto::new(
-      QualifiedType::new_unqualified(Primitive::Int.into()).into(),
-      vec![],
-      false,
-    )
-  });
+  const MAIN_PROTO_EMPTY: Lazy<FunctionProto> =
+    Lazy::new(|| FunctionProto::new(Primitive::Int.into(), vec![], false));
 
   pub fn new(
     return_type: Box<QualifiedType>,
@@ -314,6 +301,30 @@ make_trio_for!(FunctionProto, Type);
 make_trio_for!(Enum, Type);
 make_trio_for!(Record, Type);
 make_trio_for!(Union, Type);
+
+macro_rules! to_qualified_type {
+  ($ty:ty) => {
+    impl From<$ty> for QualifiedType {
+      fn from(value: $ty) -> Self {
+        QualifiedType::new_unqualified(Type::from(value))
+      }
+    }
+
+    impl From<$ty> for Box<QualifiedType> {
+      fn from(value: $ty) -> Self {
+        Box::new(QualifiedType::from(value))
+      }
+    }
+  };
+}
+
+to_qualified_type!(Primitive);
+to_qualified_type!(Array);
+to_qualified_type!(Pointer);
+to_qualified_type!(FunctionProto);
+to_qualified_type!(Enum);
+to_qualified_type!(Record);
+to_qualified_type!(Union);
 
 impl Type {
   pub fn is_modifiable(&self) -> bool {

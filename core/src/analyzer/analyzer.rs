@@ -162,15 +162,13 @@ impl Analyzer {
           let size = match array_mod.bound {
             pd::ArrayBound::Constant(n) => ArraySize::Constant(n),
             pd::ArrayBound::Incomplete => ArraySize::Incomplete,
-            pd::ArrayBound::Variable(_) => ArraySize::Incomplete, // simplify for now
+            pd::ArrayBound::Variable(_) => ArraySize::Variable,
           };
-          qualified_type = QualifiedType::new_unqualified(
-            Array {
-              element_type: qualified_type.into(),
-              size,
-            }
-            .into(),
-          );
+          qualified_type = Array {
+            element_type: qualified_type.into(),
+            size,
+          }
+          .into();
         },
         pd::Modifier::Function(_) => {
           contract_violation!(
@@ -213,10 +211,7 @@ impl Analyzer {
     let functionproto =
       FunctionProto::new(return_type.into(), parameter_types, is_variadic);
 
-    Ok((
-      QualifiedType::new_unqualified(functionproto.into()),
-      parameters,
-    ))
+    Ok((functionproto.into(), parameters))
   }
 
   fn parse_parameters(
@@ -729,9 +724,7 @@ impl Analyzer {
       pe::SizeOfKind::Expression(expression) => {
         let analyzed_expr = self.expression(*expression).handle_with(
           self,
-          ae::Expression::new_error_node(QualifiedType::new_unqualified(
-            Primitive::ULongLong.into(),
-          )),
+          ae::Expression::new_error_node(Primitive::ULongLong.into()),
         );
         let size = analyzed_expr.unqualified_type().size();
         Ok(ae::Expression::new_rvalue(
@@ -741,7 +734,7 @@ impl Analyzer {
               ..sizeof.span
             }),
           ),
-          QualifiedType::new_unqualified(Primitive::ULongLong.into()),
+          Primitive::ULongLong.into(),
         ))
       },
       pe::SizeOfKind::Type(unprocessed_type) => {
@@ -759,7 +752,7 @@ impl Analyzer {
             ae::ConstantLiteral::ULongLong(qualified_type.size() as u64)
               .into_with(sizeof.span),
           ),
-          QualifiedType::new_unqualified(Primitive::ULongLong.into()),
+          Primitive::ULongLong.into(),
         ))
       },
     }
@@ -848,7 +841,7 @@ impl Analyzer {
     };
     Ok(ae::Expression::new(
       ae::Constant::new(constant, span).into(),
-      QualifiedType::new_unqualified(unqualified_type),
+      unqualified_type.into(),
       value_category,
     ))
   }
@@ -856,7 +849,7 @@ impl Analyzer {
   fn unary(&mut self, unary: pe::Unary) -> ExprRes {
     let pe::Unary {
       operator,
-      oprand: pe_expr,
+      operand: pe_expr,
       span,
     } = unary;
     let operand = self.expression(*pe_expr)?;
@@ -953,9 +946,7 @@ impl Analyzer {
         if QualifiedType::compatible(left_pointee, right_pointee) {
           let qualified_type =
             QualifiedType::composite_unchecked(left_pointee, right_pointee);
-          let result_type = QualifiedType::new_unqualified(
-            Pointer::new(Box::new(qualified_type)).into(),
-          );
+          let result_type = Pointer::new(qualified_type.into()).into();
           Ok(ae::Expression::new_rvalue(
             ae::Ternary::new(condition, then_expr, else_expr, span).into(),
             result_type,
@@ -1057,11 +1048,10 @@ impl Analyzer {
     if !operand.is_lvalue() {
       Err(AddressofOperandNotLvalue(operand.to_string()).into_with(span))
     } else {
-      let pointer_type =
-        Pointer::new(operand.qualified_type().clone().into()).into();
+      let pointee = operand.qualified_type().clone();
       Ok(ae::Expression::new_rvalue(
         ae::Unary::new(operator, operand, span).into(),
-        QualifiedType::new_unqualified(pointer_type),
+        Pointer::new(pointee.into()).into(),
       ))
     }
   }

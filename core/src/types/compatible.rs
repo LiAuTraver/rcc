@@ -42,6 +42,7 @@ impl Compatibility for ArraySize {
       (Self::Incomplete, Self::Incomplete)
       | (Self::Constant(_), Self::Incomplete)
       | (Self::Incomplete, Self::Constant(_)) => true,
+      _ => todo!("variable array size compatible"),
     }
   }
 
@@ -59,6 +60,7 @@ impl Compatibility for ArraySize {
       (Self::Incomplete, Self::Incomplete) => Some(Self::Incomplete),
       (Self::Constant(l), Self::Incomplete)
       | (Self::Incomplete, Self::Constant(l)) => Some(Self::Constant(*l)),
+      _ => todo!("variable array size composite"),
     }
   }
 
@@ -71,6 +73,7 @@ impl Compatibility for ArraySize {
       (Self::Incomplete, Self::Incomplete) => Self::Incomplete,
       (Self::Constant(l), Self::Incomplete)
       | (Self::Incomplete, Self::Constant(l)) => Self::Constant(*l),
+      _ => todo!("variable array size composite_unchecked"),
     }
   }
 }

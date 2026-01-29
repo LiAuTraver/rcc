@@ -77,6 +77,7 @@ impl TypeInfo for Array {
       ArraySize::Constant(sz) =>
         sz * self.element_type.unqualified_type().size(),
       ArraySize::Incomplete => 0,
+      ArraySize::Variable => todo!(), // ignore for now
     }
   }
 

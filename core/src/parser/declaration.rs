@@ -54,9 +54,10 @@ pub struct Declarator {
 ///     - \* attribute-specifier-sequenceopt type-qualifier-list_opt
 ///     - \* attribute-specifier-sequenceopt type-qualifier-list_opt pointer
 ///
-/// won't care about attribute-specifier-sequence for now
+/// ignore attrs for now
 ///
 /// this is flatten structure, so the order of `Vec<Modifier>` in `Declarator` matters
+/// and usually applied in reverse order
 #[derive(Debug)]
 pub enum Modifier {
   Pointer(Qualifiers),

@@ -122,7 +122,7 @@ impl Expression {
       let span = self.span();
       Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::LValueToRValue, span).into(),
-        QualifiedType::new_unqualified(old_unqual_type),
+        old_unqual_type.into(),
       )
     } else {
       self
@@ -166,7 +166,7 @@ impl Expression {
       ImplicitCast::new(self.into(), CastType::FunctionToPointerDecay, span)
         .into(),
       // The pointer itself is never qualified
-      QualifiedType::new_unqualified(pointer_type.into()),
+      pointer_type.into(),
     )
   }
 
@@ -194,7 +194,7 @@ impl Expression {
       ImplicitCast::new(self.into(), CastType::ArrayToPointerDecay, span)
         .into(),
       // The pointer itself is never qualified
-      QualifiedType::new_unqualified(pointer_type),
+      pointer_type.into(),
     )
   }
 }
@@ -383,7 +383,7 @@ impl Expression {
         },
       };
 
-    let common_qtype = QualifiedType::new_unqualified(common_type.into());
+    let common_qtype = common_type.into();
     let lhs = Self::maybe_cast(lhs, lhs_cast, &common_qtype);
     let rhs = Self::maybe_cast(rhs, rhs_cast, &common_qtype);
     Ok((lhs, rhs, common_qtype))

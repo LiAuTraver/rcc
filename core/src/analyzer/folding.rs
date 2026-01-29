@@ -24,7 +24,7 @@ impl Expression {
       RawExpr::CStyleCast(cast) => cast.expr.is_integer_constant(),
       RawExpr::Unary(unary) =>
         matches!(unary.operator, Operator::Plus | Operator::Minus)
-          && unary.oprand.is_integer_constant(),
+          && unary.operand.is_integer_constant(),
       RawExpr::Variable(variable) =>
         Self::is_named_integer_constant_unchecked(variable),
       _ => false,
@@ -60,14 +60,14 @@ impl Expression {
     match self.raw_expr() {
       RawExpr::Constant(c) => c.is_nullptr(),
       RawExpr::Unary(unary) if self.unqualified_type().is_pointer() => {
-        if unary.oprand.is_lvalue() {
+        if unary.operand.is_lvalue() {
           true
         } else if matches!(
-          unary.oprand.unqualified_type(),
+          unary.operand.unqualified_type(),
           Type::FunctionProto(_)
         ) {
           true
-        } else if matches!(unary.oprand.raw_expr(),
+        } else if matches!(unary.operand.raw_expr(),
           RawExpr::Variable(var) if var.name.borrow().storage_class.is_static())
         {
           true

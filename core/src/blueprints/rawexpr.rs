@@ -146,7 +146,7 @@ pub struct RawConstant {
 #[derive(Debug)]
 pub struct RawUnary<ExprTy> {
   pub operator: Operator,
-  pub oprand: Box<ExprTy>,
+  pub operand: Box<ExprTy>,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
@@ -241,21 +241,21 @@ impl IntoWith<SourceSpan, RawConstant> for Constant {
 impl<ExprTy> RawUnary<ExprTy> {
   pub fn from_operator(
     operator: Operator,
-    oprand: ExprTy,
+    operand: ExprTy,
     span: SourceSpan,
   ) -> Option<Self> {
     match operator.unary() {
       true => Some(Self {
         operator,
-        oprand: oprand.into(),
+        operand: operand.into(),
         span,
       }),
       false => None,
     }
   }
 
-  pub fn new(operator: Operator, oprand: ExprTy, span: SourceSpan) -> Self {
-    Self::from_operator(operator, oprand, span).unwrap()
+  pub fn new(operator: Operator, operand: ExprTy, span: SourceSpan) -> Self {
+    Self::from_operator(operator, operand, span).unwrap()
   }
 }
 
@@ -378,7 +378,7 @@ mod fmt {
   }
   impl<ExprTy: Display> Display for RawUnary<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "({} {})", self.oprand, self.operator)
+      write!(f, "({} {})", self.operand, self.operator)
     }
   }
   impl<ExprTy: Display> Display for RawBinary<ExprTy> {

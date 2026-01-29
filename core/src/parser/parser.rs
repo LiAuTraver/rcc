@@ -231,7 +231,7 @@ impl Parser {
 }
 /// meta parse
 impl Parser {
-  fn parse_type_specifier(&mut self) -> Option<TypeSpecifier> {
+  fn parse_type_specifier(&self) -> Option<TypeSpecifier> {
     match self.peek_lit() {
       Literal::Keyword(Keyword::Struct) => todo!(),
       Literal::Keyword(Keyword::Union) => todo!(),
@@ -247,7 +247,7 @@ impl Parser {
     }
   }
 
-  fn parse_function_specifier(&mut self) -> Option<FunctionSpecifier> {
+  fn parse_function_specifier(&self) -> Option<FunctionSpecifier> {
     match self.peek_lit() {
       Literal::Keyword(kw) => FunctionSpecifier::try_from(kw).ok(),
       _ => None,
@@ -262,7 +262,7 @@ impl Parser {
       if self.peek_lit().is_qualifier() {
         let qualifier = Qualifiers::from(self.peek_lit());
         // qualifiers is a bitfield
-        if declspecs.qualifiers & qualifier != Qualifiers::empty() {
+        if declspecs.qualifiers.contains(qualifier) {
           self.add_warning(RedundantQualifier(qualifier).into_with(
             SourceSpan {
               end: self.peek_loc().end,
@@ -382,6 +382,9 @@ impl Parser {
       self.recoverable_get::<{ RightParen }>();
       modifiers.push(Modifier::Function(parameters));
     }
+    if self.peek_lit() == LeftBracket {
+      todo!("unimplementeds feature: array declarator");
+    }
     for qualifiers in pointer_qualifiers.into_iter().rev() {
       modifiers.push(Modifier::Pointer(qualifiers));
     }
@@ -426,7 +429,7 @@ impl Parser {
   }
 
   fn parse_function_params(&mut self) -> FunctionSignature {
-    // C17: a function declaration without a parameter list
+    // (functionnoproto type, deprecated in C23) a function declaration without a parameter list
     //  or function body provides no information about that function’s parameters
     // but I won't support that obselete feature :(
     if self.peek_lit() == Keyword::Void {
@@ -504,6 +507,23 @@ impl Parser {
         }
       }
       FunctionSignature::new(parameters, false)
+    }
+  }
+
+  /// distinguish between function params and parenthesized declarator.
+  ///
+  /// becayse: `direct_declarator := '(' declarator ')' | ...`
+  fn is_function_params_ahead(&self) -> bool {
+    if self.peek_lit_with_offset(1) == RightParen {
+      // ()
+      true
+    } else if self.peek_lit_with_offset(1) == Keyword::Void
+      && self.peek_lit_with_offset(2) == RightParen
+    {
+      // (void)
+      true
+    } else {
+      self.parse_type_specifier().is_some()
     }
   }
 
