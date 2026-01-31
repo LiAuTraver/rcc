@@ -6,7 +6,9 @@ use crate::{
     Operator::{self, *},
     OperatorCategory, SourceSpan, Storage, Token, UnitScope,
   },
-  diagnosis::{Error, ErrorData::*, Warning, WarningData::*},
+  diagnosis::{
+    Diagnosis, Error, ErrorData::*, Session, Warning, WarningData::*,
+  },
   parser::{
     declaration::{
       DeclSpecs, Declaration, Declarator, DeclaratorType, Function,
@@ -24,28 +26,30 @@ use crate::{
   },
   types::{FunctionSpecifier, Qualifiers},
 };
-#[derive(Debug, Default)]
-pub struct Parser {
+#[derive(Debug)]
+pub struct Parser<'session> {
   tokens: Vec<Token>,
   cursor: usize,
-  errors: Vec<Error>,
-  warnings: Vec<Warning>,
   loop_labels: Vec<String>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
+  session: &'session Session,
 }
 
 /// utility functions -- allow unused to suppress those annoying warnings.
 #[allow(unused)]
-impl Parser {
-  pub fn new(tokens: Vec<Token>) -> Self {
+impl<'session> Parser<'session> {
+  pub fn new(tokens: Vec<Token>, session: &'session Session) -> Self {
     assert_eq!(
       tokens.last().map(|t| &t.literal),
       Some(&Literal::Operator(EOF))
     );
     Self {
       tokens,
-      ..::std::default::Default::default()
+      cursor: usize::default(),
+      loop_labels: Vec::new(),
+      typedefs: UnitScope::new(),
+      session,
     }
   }
 
@@ -202,33 +206,25 @@ impl Parser {
   }
 }
 /// diagnostic functions
-impl Parser {
-  pub fn errors(&self) -> &[Error] {
-    &self.errors
+impl<'session> Parser<'session> {
+  fn add_error(&self, error: Error) {
+    self.session.diagnosis.add_error(error);
   }
 
-  pub fn warnings(&self) -> &[Warning] {
-    &self.warnings
-  }
-
-  fn add_error(&mut self, error: Error) {
-    self.errors.push(error);
-  }
-
-  fn add_warning(&mut self, warning: Warning) {
-    self.warnings.push(warning);
+  fn add_warning(&self, warning: Warning) {
+    self.session.diagnosis.add_warning(warning);
   }
 }
 /// opt checks
-impl Parser {
-  fn ios_c_strict_check_for_decl(&mut self, statement: &Statement) {
+impl<'session> Parser<'session> {
+  fn ios_c_strict_check_for_decl(&self, statement: &Statement) {
     if matches!(statement, Statement::Declaration(_)) {
       self.add_warning(DeprecatedStmtDeclCvt.into_with(*self.peek_loc()));
     }
   }
 }
 /// meta parse
-impl Parser {
+impl<'session> Parser<'session> {
   fn parse_type_specifier(&self) -> Option<TypeSpecifier> {
     match self.peek_lit() {
       Literal::Keyword(Keyword::Struct) => todo!(),
@@ -274,7 +270,7 @@ impl Parser {
       } else if self.peek_lit().is_storage_class() {
         let storage_class = Storage::from(self.peek_lit());
         match declspecs.storage_class {
-          Some(ref existing_storage) if existing_storage == &storage_class => {
+          Some(ref existing_storage) if existing_storage == storage_class => {
             self.add_warning(RedundantStorageSpecs(storage_class).into_with(
               SourceSpan {
                 end: self.peek_loc().end,
@@ -284,7 +280,7 @@ impl Parser {
           },
           Some(ref existing_storage) => {
             self.add_error(
-              StorageSpecsUnmergeable(existing_storage.clone(), storage_class)
+              StorageSpecsUnmergeable(*existing_storage, storage_class)
                 .into_with(SourceSpan {
                   end: self.peek_loc().end,
                   ..location
@@ -324,8 +320,13 @@ impl Parser {
     declspecs
   }
 
-  /// `TYPE`: Named: must have a name; Maybe: may have a name; Abstract: no name.
-  /// `AGGRESSIVE`: if true, will try to recover from missing identifier by consuming the next token.
+  /// `TYPE`: [`DeclaratorType`]
+  ///
+  /// - Named: normal declarator, must have a name;
+  /// - Maybe: may have a name;
+  /// - Abstract: abstract-declarator, no name.
+  ///
+  /// `AGGRESSIVE`: [`bool`] if true, will try to recover from missing identifier by consuming the next token.
   fn parse_declarator<const TYPE: DeclaratorType, const AGGRESSIVE: bool>(
     &mut self,
   ) -> Declarator {
@@ -623,7 +624,7 @@ impl Parser {
   }
 }
 /// declarations
-impl Parser {
+impl<'session> Parser<'session> {
   fn next_vardef(
     &mut self,
     declspecs: DeclSpecs,
@@ -739,7 +740,7 @@ impl Parser {
   }
 }
 /// statements
-impl Parser {
+impl<'session> Parser<'session> {
   fn next_function_body(
     &mut self,
     declspecs: DeclSpecs,
@@ -923,7 +924,7 @@ impl Parser {
         parser: &mut Parser,
       ) -> Option<Expression> {
         match parser.peek_lit() {
-          Literal::Operator(op) if op == &OP => {
+          Literal::Operator(op) if op == OP => {
             parser.must_get_op::<OP>();
             None
           },
@@ -1170,7 +1171,7 @@ impl Parser {
   }
 }
 /// expressions
-impl Parser {
+impl<'session> Parser<'session> {
   fn next_factor(&mut self) -> Expression {
     let location = *self.peek_loc();
     self.get();

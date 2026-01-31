@@ -1,3 +1,5 @@
+#![allow(clippy::double_must_use)]
+
 use ::rc_utils::IntoWith;
 
 use crate::{
@@ -243,7 +245,7 @@ impl Expression {
         if lhs
           .pointee
           .unqualified_type()
-          .compatible_with(&rhs.pointee.unqualified_type())
+          .compatible_with(rhs.pointee.unqualified_type())
           || lhs.pointee.unqualified_type().is_void()
           || rhs.pointee.unqualified_type().is_void()
         {

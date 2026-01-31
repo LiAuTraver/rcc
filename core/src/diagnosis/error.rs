@@ -144,11 +144,14 @@ fn format_expected(expected: &Option<Literal>) -> String {
 #[derive(Debug)]
 pub struct Error {
   pub span: SourceSpan,
-  pub data: Data,
+  pub data: Box<Data>,
 }
 impl Error {
   pub fn new(span: SourceSpan, data: Data) -> Self {
-    Self { span, data }
+    Self {
+      span,
+      data: data.into(),
+    }
   }
 }
 

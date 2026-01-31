@@ -1,7 +1,7 @@
 use ::rc_core::{
   analyzer::Analyzer,
   common::SourceManager,
-  diagnosis::{self, Diagnosis},
+  diagnosis::{Diagnosis, Session},
   lexer::Lexer,
   parser::Parser,
 };
@@ -50,10 +50,10 @@ fn pipeline(
   stage: Stage,
   pretty_print: bool,
 ) {
-  let content = &source_manager.files.get(0).unwrap().source;
-  let mut lexer = Lexer::new(content);
-  let mut diag = diagnosis::default();
-  let tokens = lexer.lex(&mut diag);
+  let content = &source_manager.files.first().unwrap().source;
+  let session = Session::default();
+  let mut lexer = Lexer::new(content, &session);
+  let tokens = lexer.lex();
   tokens
     .iter()
     .take(tokens.iter().len() - 1) // last is EOF
@@ -64,34 +64,38 @@ fn pipeline(
         println!("{} ", t);
       }
     });
-  if diag.has_errors() {
+  if session.diagnosis.has_errors() {
     eprintln!("Lex errors:");
-    diag
+    session
+      .diagnosis
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
     ::std::process::exit(1);
   }
   if let Stage::Lex = stage {
     println!("Lex succeeded.");
     return;
   }
-  let mut parser = Parser::new(tokens);
+  let session = Session::default();
+  let mut parser = Parser::new(tokens, &session);
   let program = parser.parse();
   println!("{program}");
-  let parse_warnings = parser.warnings();
-  if !parse_warnings.is_empty() {
-    eprintln!("Parse warnings:");
-    parse_warnings
+  if session.diagnosis.has_warnings() {
+    eprintln!("Parser warnings:");
+    session
+      .diagnosis
+      .warnings()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
   }
-  let parse_errors = parser.errors();
-  if !parse_errors.is_empty() {
-    eprintln!("Parse errors:");
-    parse_errors
+  if session.diagnosis.has_errors() {
+    eprintln!("Parser errors:");
+    session
+      .diagnosis
+      .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
     ::std::process::exit(1);
   }
   if let Stage::Parse = stage {
@@ -102,21 +106,24 @@ fn pipeline(
     return;
   }
   assert!(matches!(stage, Stage::Analyze));
-  let mut analyzer = Analyzer::new(program);
+  let session = Session::default();
+  let mut analyzer = Analyzer::new(program, &session);
   let translation_unit = analyzer.analyze();
-  let analyze_warnings = analyzer.warnings();
-  if !analyze_warnings.is_empty() {
-    eprintln!("Analyze warnings:");
-    analyze_warnings
+  if session.diagnosis.has_warnings() {
+    eprintln!("Analyzer warnings:");
+    session
+      .diagnosis
+      .warnings()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
   }
-  let analyze_errors = analyzer.errors();
-  if !analyze_errors.is_empty() {
-    eprintln!("Analyze errors:");
-    analyze_errors
+  if session.diagnosis.has_errors() {
+    eprintln!("Analyzer errors:");
+    session
+      .diagnosis
+      .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&source_manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
     ::std::process::exit(1);
   }
   if pretty_print {

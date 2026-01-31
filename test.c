@@ -60,11 +60,18 @@ int main(int argc, char **argv) { //
 }
 
 int f(int i, int j) {
-label:;
   int k = i + j;
+label:
+  k = k + 1;
   int *(ptr_to_k) = &k;
   float a = 1.0;
   typedef int (*FUNC_PTR)(int, int);
   goto label;
   return k;
 }
+void ff(double (*restrict a)[5]);
+void ff(double a[restrict][5]);
+void ff(double a[restrict 3][5]);
+void ff(double a[restrict static 3][5]);
+int p(int a[*]);
+int p(int a[static 10]) { return 0; }

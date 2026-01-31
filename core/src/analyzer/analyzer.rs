@@ -8,7 +8,9 @@ use crate::{
     Environment, Operator, OperatorCategory, SourceSpan, Storage, Symbol,
     VarDeclKind,
   },
-  diagnosis::{Error, ErrorData::*, Warning, WarningData::*},
+  diagnosis::{
+    Diagnosis, Error, ErrorData::*, Session, Warning, WarningData::*,
+  },
   parser::{declaration as pd, expression as pe, statement as ps},
   types::{
     Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
@@ -65,12 +67,12 @@ impl<T> ImplHelper<T> for Option<T> {
 }
 #[allow(unused)]
 trait ImplHelper2<T, Listener> {
-  fn handle_with(self, context: &mut Listener, default: T) -> T;
+  fn handle_with(self, context: &Listener, default: T) -> T;
 }
 
-impl<T> ImplHelper2<T, Analyzer> for Result<T, Error> {
+impl<T> ImplHelper2<T, Analyzer<'_>> for Result<T, Error> {
   /// if it's error, log it, and return a default value (means error)
-  fn handle_with(self, context: &mut Analyzer, default: T) -> T {
+  fn handle_with(self, context: &Analyzer, default: T) -> T {
     match self {
       Ok(t) => t,
       Err(e) => {
@@ -83,11 +85,11 @@ impl<T> ImplHelper2<T, Analyzer> for Result<T, Error> {
 
 #[allow(unused)]
 trait ImplHelper3<T, Listener> {
-  fn handle_or_dummy(self, context: &mut Listener) -> T;
+  fn handle_or_dummy(self, context: &Listener) -> T;
 }
 
-impl<T: Dummy> ImplHelper3<T, Analyzer> for Result<T, Error> {
-  fn handle_or_dummy(self, context: &mut Analyzer) -> T {
+impl<T: Dummy> ImplHelper3<T, Analyzer<'_>> for Result<T, Error> {
+  fn handle_or_dummy(self, context: &Analyzer) -> T {
     match self {
       Ok(t) => t,
       Err(e) => {
@@ -98,29 +100,30 @@ impl<T: Dummy> ImplHelper3<T, Analyzer> for Result<T, Error> {
   }
 }
 
-#[derive(Debug, Default)]
-pub struct Analyzer {
+#[derive(Debug)]
+pub struct Analyzer<'session> {
   program: pd::Program,
   environment: Environment,
   current_function: Option<ad::Function>,
-  errors: Vec<Error>,
-  warnings: Vec<Warning>,
+  session: &'session Session,
 }
 
-impl Analyzer {
-  pub fn new(program: pd::Program) -> Self {
+impl<'session> Analyzer<'session> {
+  pub fn new(program: pd::Program, session: &'session Session) -> Self {
     Self {
       program,
-      ..Analyzer::default()
+      session,
+      environment: Environment::default(),
+      current_function: None,
     }
   }
 
-  pub fn add_error(&mut self, error: Error) {
-    self.errors.push(error);
+  pub fn add_error(&self, error: Error) {
+    self.session.diagnosis.add_error(error);
   }
 
-  pub fn add_warning(&mut self, warning: Warning) {
-    self.warnings.push(warning);
+  pub fn add_warning(&self, warning: Warning) {
+    self.session.diagnosis.add_warning(warning);
   }
 
   pub fn analyze(&mut self) -> ad::TranslationUnit {
@@ -130,14 +133,6 @@ impl Analyzer {
     translation_unit
   }
 
-  pub fn errors(&self) -> &[Error] {
-    &self.errors
-  }
-
-  pub fn warnings(&self) -> &[Warning] {
-    &self.warnings
-  }
-
   pub fn unnamed_placeholder() -> String {
     static COUNTER: ::std::sync::atomic::AtomicUsize =
       ::std::sync::atomic::AtomicUsize::new(0);
@@ -145,9 +140,9 @@ impl Analyzer {
     format!("<unnamed_{}>", id)
   }
 }
-impl Analyzer {
+impl<'session> Analyzer<'session> {
   fn apply_modifiers_for_varty(
-    &mut self,
+    &self,
     mut qualified_type: QualifiedType,
     modifiers: Vec<pd::Modifier>,
   ) -> QualifiedType {
@@ -192,7 +187,7 @@ impl Analyzer {
   }
 
   fn apply_modifiers_for_functiondecl(
-    &mut self,
+    &self,
     return_type: QualifiedType,
     modifiers: Vec<pd::Modifier>,
   ) -> DeclRes<(
@@ -226,7 +221,7 @@ impl Analyzer {
   }
 
   fn parse_parameter_types(
-    &mut self,
+    &self,
     parameters: Vec<pd::Parameter>,
   ) -> Vec<QualifiedType> {
     parameters
@@ -256,7 +251,7 @@ impl Analyzer {
   }
 
   fn parse_parameters(
-    &mut self,
+    &self,
     parameters: Vec<pd::Parameter>,
   ) -> DeclRes<Vec<ad::Parameter>> {
     parameters
@@ -285,7 +280,7 @@ impl Analyzer {
         let symbol = Symbol::new_ref(Symbol::new(
           qualified_type,
           Storage::Automatic,
-          name.unwrap_or_else(|| Self::unnamed_placeholder()),
+          name.unwrap_or_else(Self::unnamed_placeholder),
           VarDeclKind::Declaration,
         ));
         Ok(ad::Parameter::new(symbol, span))
@@ -294,7 +289,7 @@ impl Analyzer {
   }
 
   fn parse_declspecs(
-    &mut self,
+    &self,
     declspecs: pd::DeclSpecs,
   ) -> Result<(FunctionSpecifier, Option<Storage>, QualifiedType), Error> {
     let qualified_type = self
@@ -405,7 +400,7 @@ impl Analyzer {
   }
 }
 
-impl Analyzer {
+impl<'session> Analyzer<'session> {
   fn externaldecl(&mut self) -> Vec<ad::ExternalDeclaration> {
     let mut declarations = Vec::new();
     std::mem::take(&mut self.program)
@@ -444,7 +439,7 @@ impl Analyzer {
     let (function_specifier, storage, return_type) = self
       .parse_declspecs(declspecs)
       .shall_ok("current implementation shall not return Err here");
-    let storage = storage.unwrap_or_else(|| Storage::Extern);
+    let storage = storage.unwrap_or(Storage::Extern);
     let pd::Declarator {
       modifiers,
       name,
@@ -629,6 +624,7 @@ impl Analyzer {
       }
       let prev_declkind = prev_symbol_ref.borrow().declkind;
       let new_declkind = vardef.symbol.borrow().declkind;
+      #[allow(clippy::upper_case_acronyms)]
       type VDK = VarDeclKind;
       match (&prev_declkind, &new_declkind) {
         (VDK::Definition, VDK::Definition) => Err(
@@ -652,7 +648,7 @@ impl Analyzer {
             )
             .unwrap_or_else(|error| {
               self.add_error(error.into_with(span));
-              prev.storage_class.clone()
+              prev.storage_class
             });
             prev.qualified_type = QualifiedType::composite_unchecked(
               &new_symbol.qualified_type,
@@ -679,7 +675,7 @@ impl Analyzer {
   }
 
   fn global_vardef(
-    &mut self,
+    &self,
     storage: Option<Storage>,
     qualified_type: QualifiedType,
     name: String,
@@ -712,7 +708,7 @@ impl Analyzer {
   }
 
   fn local_vardef(
-    &mut self,
+    &self,
     storage: Storage,
     qualified_type: QualifiedType,
     name: String,
@@ -728,8 +724,8 @@ impl Analyzer {
   }
 }
 
-impl Analyzer {
-  fn expression(&mut self, expression: pe::Expression) -> ExprRes {
+impl<'session> Analyzer<'session> {
+  fn expression(&self, expression: pe::Expression) -> ExprRes {
     match expression {
       pe::Expression::Empty => Ok(ae::Expression::default()),
       pe::Expression::Constant(constant) => self.constant(constant),
@@ -747,7 +743,7 @@ impl Analyzer {
     }
   }
 
-  fn sizeof(&mut self, sizeof: pe::SizeOf) -> ExprRes {
+  fn sizeof(&self, sizeof: pe::SizeOf) -> ExprRes {
     match sizeof.sizeof {
       pe::SizeOfKind::Expression(expression) => {
         let analyzed_expr = self.expression(*expression).handle_with(
@@ -786,7 +782,7 @@ impl Analyzer {
     }
   }
 
-  fn call(&mut self, call: pe::Call) -> ExprRes {
+  fn call(&self, call: pe::Call) -> ExprRes {
     let pe::Call {
       arguments,
       callee,
@@ -829,7 +825,7 @@ impl Analyzer {
     ))
   }
 
-  fn paren(&mut self, paren: pe::Paren) -> ExprRes {
+  fn paren(&self, paren: pe::Paren) -> ExprRes {
     let pe::Paren { expr, span } = paren;
     let analyzed_expr = self.expression(*expr)?;
     let expr_type = analyzed_expr.qualified_type().clone();
@@ -839,11 +835,11 @@ impl Analyzer {
     ))
   }
 
-  fn cast(&mut self, _: pe::CStyleCast) -> ExprRes {
+  fn cast(&self, _: pe::CStyleCast) -> ExprRes {
     not_implemented_feature!("C-style cast is not implemented yet");
   }
 
-  fn variable(&mut self, variable: pe::Variable) -> ExprRes {
+  fn variable(&self, variable: pe::Variable) -> ExprRes {
     let symbol = self.environment.find(&variable.name).ok_or(
       UndefinedVariable(variable.name.clone()).into_with(variable.span),
     )?;
@@ -859,7 +855,7 @@ impl Analyzer {
     }
   }
 
-  fn constant(&mut self, constant: pe::Constant) -> ExprRes {
+  fn constant(&self, constant: pe::Constant) -> ExprRes {
     let pe::Constant { constant, span } = constant;
     let unqualified_type = constant.unqualified_type();
     let value_category = if constant.is_char_array() {
@@ -874,7 +870,7 @@ impl Analyzer {
     ))
   }
 
-  fn unary(&mut self, unary: pe::Unary) -> ExprRes {
+  fn unary(&self, unary: pe::Unary) -> ExprRes {
     let pe::Unary {
       operator,
       operand: pe_expr,
@@ -895,7 +891,7 @@ impl Analyzer {
     }
   }
 
-  fn binary(&mut self, binary: pe::Binary) -> ExprRes {
+  fn binary(&self, binary: pe::Binary) -> ExprRes {
     let pe::Binary {
       left: pe_left,
       operator,
@@ -918,7 +914,7 @@ impl Analyzer {
     }
   }
 
-  fn ternary(&mut self, ternary: pe::Ternary) -> ExprRes {
+  fn ternary(&self, ternary: pe::Ternary) -> ExprRes {
     let pe::Ternary {
       condition: pe_condition,
       then_expr: pe_then_expr,
@@ -993,10 +989,10 @@ impl Analyzer {
     }
   }
 }
-impl Analyzer {
+impl<'session> Analyzer<'session> {
   /// unary arithmetic operators: `+`, `-`
   fn unary_arithmetic(
-    &mut self,
+    &self,
     operator: Operator,
     operand: ae::Expression,
     span: SourceSpan,
@@ -1021,7 +1017,7 @@ impl Analyzer {
   /// 6.5.4.3.4: The result of the ~ operator is the bitwise complement of its (promoted) operand.
   ///     The integer promotions are performed on the operand, and the result has the promoted type.
   fn tilde(
-    &mut self,
+    &self,
     operator: Operator,
     operand: ae::Expression,
     span: SourceSpan,
@@ -1046,7 +1042,7 @@ impl Analyzer {
 
   /// logical NOT operator `!`
   fn logical_not(
-    &mut self,
+    &self,
     operator: Operator,
     operand: ae::Expression,
     span: SourceSpan,
@@ -1067,7 +1063,7 @@ impl Analyzer {
   /// 6.5.4.2.3: The unary & operator yields the address of its operand.
   /// If the operand has type "type"(in my Type system it's represented as `QualifiedType`)
   fn addressof(
-    &mut self,
+    &self,
     operator: Operator,
     operand: ae::Expression,
     span: SourceSpan,
@@ -1089,7 +1085,7 @@ impl Analyzer {
   /// 6.5.4.2.4: The unary * operator denotes indirection.
   /// the pointee needs to `lvalue_conversion` and `decay`, but the result itself does not need to
   fn indirect(
-    &mut self,
+    &self,
     operator: Operator,
     operand: ae::Expression,
     span: SourceSpan,
@@ -1119,10 +1115,10 @@ impl Analyzer {
     }
   }
 }
-impl Analyzer {
+impl<'session> Analyzer<'session> {
   /// assignment operator `=`
   fn assignment(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1154,7 +1150,7 @@ impl Analyzer {
   /// 2. decay
   /// 3. conditional conversion
   fn logical(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1175,7 +1171,7 @@ impl Analyzer {
   ///
   /// same as `logical`, but with arithmetic conversions if both operands are arithmetic types
   fn relational(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1206,7 +1202,7 @@ impl Analyzer {
   /// 3. promotions\(inside `usual_arithmetic_conversion`\)
   /// 4. finally, the usual arithmetic conversion itself
   fn arithmetic(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1228,7 +1224,7 @@ impl Analyzer {
   ///
   /// mostly same as arithmetic, but only for integer types
   fn bitwise(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1263,7 +1259,7 @@ impl Analyzer {
   ///
   /// lvalue conversion, decay, promote, both operands must be integer types, but no usual arithmetic conversion
   fn bitshift(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1293,7 +1289,7 @@ impl Analyzer {
   ///
   /// left is void converted, result is right expression
   fn comma(
-    &mut self,
+    &self,
     operator: Operator,
     left: ae::Expression,
     right: ae::Expression,
@@ -1307,7 +1303,7 @@ impl Analyzer {
     ))
   }
 }
-impl Analyzer {
+impl<'session> Analyzer<'session> {
   fn statements(
     &mut self,
     statements: Vec<ps::Statement>,
@@ -1368,7 +1364,7 @@ impl Analyzer {
     callback: Fn,
   ) -> StmtRes<astmt::Compound>
   where
-    Fn: FnOnce(&mut Self),
+    Fn: FnOnce(&Self),
   {
     self.environment.enter();
 
@@ -1381,15 +1377,12 @@ impl Analyzer {
     Ok(astmt::Compound::new(statements, compound.span))
   }
 
-  fn exprstmt(
-    &mut self,
-    expr_stmt: pe::Expression,
-  ) -> StmtRes<astmt::Statement> {
+  fn exprstmt(&self, expr_stmt: pe::Expression) -> StmtRes<astmt::Statement> {
     // todo: unused expression result warning
     Ok(astmt::Statement::Expression(self.expression(expr_stmt)?))
   }
 
-  fn returnstmt(&mut self, return_stmt: ps::Return) -> StmtRes<astmt::Return> {
+  fn returnstmt(&self, return_stmt: ps::Return) -> StmtRes<astmt::Return> {
     let ps::Return { expression, span } = return_stmt;
     let analyzed_expr = match expression {
       Some(expr) => Some(self.expression(expr)?),
@@ -1449,11 +1442,9 @@ impl Analyzer {
       .handle_with(self, ae::Expression::new_error_node(QualifiedType::bool()));
     let analyzed_then_branch =
       self.statement(*then_branch).handle_or_dummy(self).into();
-    let analyzed_else_branch = match else_branch {
-      Some(else_branch) =>
-        Some(self.statement(*else_branch).handle_or_dummy(self).into()),
-      None => None,
-    };
+    let analyzed_else_branch = else_branch.map(|else_branch| {
+      self.statement(*else_branch).handle_or_dummy(self).into()
+    });
     Ok(astmt::If::new(
       analyzed_condition,
       analyzed_then_branch,
@@ -1562,11 +1553,8 @@ impl Analyzer {
       .map(|case| self.casestmt(case).shall_ok("switch case"))
       .collect::<Vec<_>>();
 
-    let analyzed_default = match default {
-      Some(default) =>
-        Some(self.defaultstmt(default).shall_ok("switch default")),
-      None => None,
-    };
+    let analyzed_default = default
+      .map(|default| self.defaultstmt(default).shall_ok("switch default"));
     Ok(astmt::Switch::new(
       analyzed_condition,
       analyzed_cases,
@@ -1654,7 +1642,7 @@ impl Analyzer {
     }
   }
 
-  fn breakstmt(&mut self, break_stmt: ps::Break) -> StmtRes<astmt::Statement> {
+  fn breakstmt(&self, break_stmt: ps::Break) -> StmtRes<astmt::Statement> {
     match self.environment.is_global() {
       true => contract_violation!(
         "break statement in global scope should be handled in parser"
@@ -1667,7 +1655,7 @@ impl Analyzer {
   }
 
   fn continuestmt(
-    &mut self,
+    &self,
     continue_stmt: ps::Continue,
   ) -> StmtRes<astmt::Statement> {
     match self.environment.is_global() {
@@ -1686,9 +1674,10 @@ mod test {
 
   #[test]
   fn oneplusone() {
-    use crate::{analyzer::Analyzer, parser::expression as pe};
+    use super::*;
+    let session = Session::default();
     // 1 + 1
-    let mut analyzer = Analyzer::default();
+    let analyzer = Analyzer::new(Default::default(), &session);
     let expr = pe::Expression::oneplusone();
     let analyzed_expr = analyzer.expression(expr);
 

@@ -289,7 +289,7 @@ impl<StmtTy, DeclTy, ExprTy> RawStmt<StmtTy, DeclTy, ExprTy> {
     format!("{}_{}", str, id)
   }
 }
-
+#[allow(clippy::write_with_newline)]
 mod fmt {
   use ::std::fmt::Display;
 

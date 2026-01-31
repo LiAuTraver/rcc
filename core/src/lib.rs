@@ -2,8 +2,6 @@
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
 #![feature(adt_const_params)]
-// for std::fmt::Formatter
-#![feature(formatting_options)]
 pub mod analyzer;
 pub(crate) mod blueprints;
 pub mod codegen;

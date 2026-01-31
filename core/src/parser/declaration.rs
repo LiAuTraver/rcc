@@ -239,6 +239,7 @@ impl FunctionSignature {
     }
   }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for FunctionSignature {
   fn default() -> Self {
     Self {
@@ -517,8 +518,7 @@ mod fmt {
   impl Display for VarDef {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(f, "{} {}", self.declspecs, self.declarator)?;
-      if let Some(_) = &self.initializer {
-        // write!(f, " = {}", initializer)?;
+      if self.initializer.is_some() {
         write!(f, " = <initializer>")?;
       }
       Ok(())

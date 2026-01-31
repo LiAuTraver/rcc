@@ -10,32 +10,36 @@ use crate::{
     Operator::{self, *},
     SourceSpan, Token,
   },
-  diagnosis::{Diagnosis, ErrorData::*},
+  diagnosis::{Diagnosis, ErrorData::*, Session},
   // this isn't strictrly correct, i uses the same `Constant` type in lexer and the parser,
   //    yet the lexeer part distinguishes number and string, but the parser part does not
   types::Constant as NumberConstant,
 };
 
-pub struct Lexer<'a> {
+pub struct Lexer<'session, 'source> {
   /// the SourceManager owns the String.
-  source: &'a str,
+  source: &'source str,
 
   /// maybe 1~4 bytes
-  chars: Peekable<Chars<'a>>,
+  chars: Peekable<Chars<'source>>,
 
   /// track position manually for Spans
   cursor: usize,
 
   /// report line/col errors *during* lexing
   coords: Coordinate,
+
+  /// Context.
+  session: &'session Session,
 }
-impl<'a> Lexer<'a> {
-  pub fn new(source: &'a str) -> Self {
+impl<'session, 'source> Lexer<'session, 'source> {
+  pub fn new(source: &'source str, session: &'session Session) -> Self {
     Self {
       source,
       chars: source.chars().peekable(),
       cursor: usize::default(),
       coords: Default::default(),
+      session,
     }
   }
 
@@ -70,7 +74,7 @@ impl<'a> Lexer<'a> {
 
   #[inline]
   fn recall(&self) -> char {
-    self.chars.clone().rev().next().expect(
+    self.chars.clone().next_back().expect(
       "should not fail, unless the number appears at the start of the file(?)",
     )
   }
@@ -123,10 +127,10 @@ impl<'a> Lexer<'a> {
     &self.source[start..end]
   }
 
-  pub fn lex(&mut self, diag: &mut impl Diagnosis) -> Vec<Token> {
+  pub fn lex(&mut self) -> Vec<Token> {
     let mut tokens = Vec::new();
     while !self.is_at_end() {
-      if let Some(token) = self.next_token(diag) {
+      if let Some(token) = self.next_token() {
         tokens.push(token);
       }
     }
@@ -135,7 +139,7 @@ impl<'a> Lexer<'a> {
     tokens
   }
 
-  fn next_token(&mut self, diag: &mut impl Diagnosis) -> Option<Token> {
+  fn next_token(&mut self) -> Option<Token> {
     let start = self.cursor;
 
     match self.advance() {
@@ -146,15 +150,15 @@ impl<'a> Lexer<'a> {
       c if Self::is_ident_start(c) => Some(self.lex_identifier(start)),
 
       // numbers
-      '0'..='9' => Some(self.lex_number(diag, start, false)),
+      '0'..='9' => Some(self.lex_number(start, false)),
 
       // strings
-      '"' => Some(self.lex_string(diag, start)),
+      '"' => Some(self.lex_string(start)),
 
       // dot (operator/floating point)
       '.' =>
         if self.peek().is_ascii_hexdigit() {
-          Some(self.lex_number(diag, start, true))
+          Some(self.lex_number(start, true))
         } else {
           self.lex_compound_op(start, Dot, &[("...", Ellipsis)])
         },
@@ -268,12 +272,7 @@ impl<'a> Lexer<'a> {
     }
   }
 
-  fn lex_number(
-    &mut self,
-    diag: &mut impl Diagnosis,
-    start: usize,
-    started_with_dot: bool,
-  ) -> Token {
+  fn lex_number(&mut self, start: usize, started_with_dot: bool) -> Token {
     let base = if !started_with_dot && self.cursor > 0 {
       match (self.recall(), self.peek()) {
         ('0', 'x' | 'X') => {
@@ -330,7 +329,7 @@ impl<'a> Lexer<'a> {
       // exponent digits, required
       if !self.peek().is_ascii_digit() {
         // self.add_error("Expected digits after exponent marker".to_string());
-        diag.add_error(
+        self.session.diagnosis.add_error(
           InvalidNumberFormat(
             "Expected digits after exponent marker".to_string(),
           )
@@ -354,7 +353,7 @@ impl<'a> Lexer<'a> {
       }
 
       if !self.peek().is_ascii_digit() {
-        diag.add_error(
+        self.session.diagnosis.add_error(
           InvalidNumberFormat(
             "Expected digits after hexadecimal exponent marker".to_string(),
           )
@@ -380,7 +379,7 @@ impl<'a> Lexer<'a> {
           if NumberConstant::FLOATING_SUFFIXES.contains(&s) {
             Some(s)
           } else {
-            diag.add_error(
+            self.session.diagnosis.add_error(
               InvalidNumberFormat(format!(
                 "Invalid floating point literal suffix '{}', ignoring",
                 s
@@ -393,7 +392,7 @@ impl<'a> Lexer<'a> {
           if NumberConstant::INTEGER_SUFFIXES.contains(&s) {
             Some(s)
           } else {
-            diag.add_error(
+            self.session.diagnosis.add_error(
               InvalidNumberFormat(format!(
                 "Invalid integer literal suffix '{}', ignoring",
                 s
@@ -409,7 +408,10 @@ impl<'a> Lexer<'a> {
 
     let (constant, error) = NumberConstant::parse(&num, suffix, is_floating);
     if let Some(e) = error {
-      diag.add_error(InvalidNumberFormat(e).into_with(self.span(start)));
+      self
+        .session
+        .diagnosis
+        .add_error(InvalidNumberFormat(e).into_with(self.span(start)));
     }
 
     Token::number(constant, self.span(start))
@@ -425,13 +427,16 @@ impl<'a> Lexer<'a> {
     }
   }
 
-  fn lex_string(&mut self, diag: &mut impl Diagnosis, start: usize) -> Token {
+  fn lex_string(&mut self, start: usize) -> Token {
     while !self.is_at_end() && self.peek() != ('"') {
       self.advance();
     }
 
     if self.is_at_end() {
-      diag.add_error(UnterminatedString.into_with(self.span(start)));
+      self
+        .session
+        .diagnosis
+        .add_error(UnterminatedString.into_with(self.span(start)));
       let text = self.slice(start, self.cursor);
       return Token::string(text.to_string(), self.span(start));
     }

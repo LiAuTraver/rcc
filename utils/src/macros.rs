@@ -111,11 +111,13 @@ macro_rules! breakpoint {
 #[macro_export]
 macro_rules! static_assert {
   ($condition:expr $(,)?) => {
+    #[allow(clippy::bool_comparison)]
     const _: () = {
       assert!($condition);
     };
   };
   ($condition:expr, $($arg:tt)+) => {
+    #[allow(clippy::bool_comparison)]
     const _: () = {
       assert!($condition, $($arg)+);
     };

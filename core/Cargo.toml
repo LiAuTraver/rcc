@@ -18,3 +18,7 @@ paste = "1.0.15"
 thiserror = "2.0.18"
 
 rc-utils = { path = "../utils" }
+
+[lints.clippy]
+needless_pass_by_ref_mut = "warn"
+module_inception = "allow"

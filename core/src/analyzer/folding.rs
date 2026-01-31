@@ -59,22 +59,11 @@ impl Expression {
   pub fn is_address_constant(&self) -> bool {
     match self.raw_expr() {
       RawExpr::Constant(c) => c.is_nullptr(),
-      RawExpr::Unary(unary) if self.unqualified_type().is_pointer() => {
-        if unary.operand.is_lvalue() {
-          true
-        } else if matches!(
-          unary.operand.unqualified_type(),
-          Type::FunctionProto(_)
-        ) {
-          true
-        } else if matches!(unary.operand.raw_expr(),
-          RawExpr::Variable(var) if var.name.borrow().storage_class.is_static())
-        {
-          true
-        } else {
-          false
-        }
-      },
+      RawExpr::Unary(unary) if self.unqualified_type().is_pointer() =>
+        unary.operand.is_lvalue()
+          || matches!(unary.operand.unqualified_type(), Type::FunctionProto(_))
+          || matches!(unary.operand.raw_expr(),
+          RawExpr::Variable(var) if var.name.borrow().storage_class.is_static()),
       _ => false,
     }
   }

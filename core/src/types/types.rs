@@ -214,6 +214,7 @@ impl Primitive {
 }
 
 impl FunctionProto {
+  #[allow(clippy::declare_interior_mutable_const)]
   const MAIN_PROTO_ARGS: Lazy<FunctionProto> = Lazy::new(|| {
     FunctionProto::new(
       Primitive::Int.into(),
@@ -224,6 +225,7 @@ impl FunctionProto {
       false,
     )
   });
+  #[allow(clippy::declare_interior_mutable_const)]
   const MAIN_PROTO_EMPTY: Lazy<FunctionProto> =
     Lazy::new(|| FunctionProto::new(Primitive::Int.into(), vec![], false));
 
@@ -239,24 +241,29 @@ impl FunctionProto {
     }
   }
 
+  #[allow(clippy::borrow_interior_mutable_const)]
   pub fn main_proto_validate(
     &self,
     function_specifier: FunctionSpecifier,
-  ) -> Result<(), ErrorData> {
+  ) -> Result<(), Box<ErrorData>> {
     if self.is_variadic {
-      Err(ErrorData::MainFunctionProtoMismatch(
-        "main function cannot be variadic",
-      ))
+      Err(
+        ErrorData::MainFunctionProtoMismatch(
+          "main function cannot be variadic",
+        )
+        .into(),
+      )
     } else if function_specifier.contains(FunctionSpecifier::Inline) {
-      Err(ErrorData::MainFunctionProtoMismatch(
-        "main function cannot be inline",
-      ))
+      Err(
+        ErrorData::MainFunctionProtoMismatch("main function cannot be inline")
+          .into(),
+      )
     } else if !self.compatible_with(&Self::MAIN_PROTO_EMPTY)
       && !self.compatible_with(&Self::MAIN_PROTO_ARGS)
     {
       Err(ErrorData::MainFunctionProtoMismatch(
         "main function must have either no parameters or two parameters (int argc, char** argv)",
-      ))
+      ).into())
     } else {
       Ok(())
     }

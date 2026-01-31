@@ -1,5 +1,7 @@
 mod error;
 mod warning;
+use ::std::cell::{Ref, RefCell};
+
 pub use self::{
   error::{Data as ErrorData, Error, ErrorDisplay},
   warning::{Data as WarningData, Warning, WarningDisplay},
@@ -11,85 +13,56 @@ pub trait Diagnosis {
   #[must_use]
   fn has_warnings(&self) -> bool;
   #[must_use]
-  fn errors(&self) -> &[Error];
+  fn errors(&self) -> Ref<'_, Vec<Error>>;
   #[must_use]
-  fn warnings(&self) -> &[Warning];
-  fn add_error(&mut self, error: Error);
-  fn add_warning(&mut self, warning: Warning);
+  fn warnings(&self) -> Ref<'_, Vec<Warning>>;
+  fn add_error(&self, error: Error);
+  fn add_warning(&self, warning: Warning);
 }
 
-pub fn default() -> OperationalDiag {
+pub fn operational() -> OperationalDiag {
   OperationalDiag::default()
 }
 
-pub fn noop() -> NoOpDiag {
-  NoOpDiag::default()
-}
-
-#[derive(Default)]
+#[derive(Default, Debug)]
 
 pub struct OperationalDiag {
-  errors: Vec<Error>,
-  warnings: Vec<Warning>,
+  errors: RefCell<Vec<Error>>,
+  warnings: RefCell<Vec<Warning>>,
 }
 
 impl Diagnosis for OperationalDiag {
   #[inline]
   fn has_errors(&self) -> bool {
-    !self.errors.is_empty()
+    !self.errors.borrow().is_empty()
   }
 
   #[inline]
   fn has_warnings(&self) -> bool {
-    !self.warnings.is_empty()
+    !self.warnings.borrow().is_empty()
   }
 
   #[inline]
-  fn errors(&self) -> &[Error] {
-    &self.errors
+  fn errors(&self) -> Ref<'_, Vec<Error>> {
+    self.errors.borrow()
   }
 
   #[inline]
-  fn warnings(&self) -> &[Warning] {
-    &self.warnings
+  fn warnings(&self) -> Ref<'_, Vec<Warning>> {
+    self.warnings.borrow()
   }
 
   #[inline]
-  fn add_error(&mut self, error: Error) {
-    self.errors.push(error);
+  fn add_error(&self, error: Error) {
+    self.errors.borrow_mut().push(error);
   }
 
   #[inline]
-  fn add_warning(&mut self, warning: Warning) {
-    self.warnings.push(warning);
+  fn add_warning(&self, warning: Warning) {
+    self.warnings.borrow_mut().push(warning);
   }
 }
-#[derive(Default)]
-pub struct NoOpDiag;
-impl Diagnosis for NoOpDiag {
-  #[inline]
-  fn has_errors(&self) -> bool {
-    false
-  }
-
-  #[inline]
-  fn has_warnings(&self) -> bool {
-    false
-  }
-
-  #[inline]
-  fn errors(&self) -> &[Error] {
-    &[]
-  }
-
-  #[inline]
-  fn warnings(&self) -> &[Warning] {
-    &[]
-  }
-
-  #[inline]
-  fn add_error(&mut self, _error: Error) {}
-
-  #[inline]
-  fn add_warning(&mut self, _warning: Warning) {}
+#[derive(Default, Debug)]
+pub struct Session {
+  pub diagnosis: OperationalDiag,
 }

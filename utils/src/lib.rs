@@ -42,10 +42,10 @@ pub trait TryFromWith<With, From>: Sized {
 ///
 /// Notable use case from myself:
 /// - use [`Dummy`] to create placeholder
-/// expressions/statements (just returns an empty node)
-/// to indicate errors during semantic analysis.
+///   expressions/statements (just returns an empty node)
+///   to indicate errors during semantic analysis.
 /// - [`SourceSpan`] to represent an invalid source location,
-/// ususally for unconstructed spans/nodes, or representing a error node's location.
+///   ususally for unconstructed spans/nodes, or representing a error node's location.
 ///
 pub trait Dummy {
   fn dummy() -> Self;

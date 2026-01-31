@@ -65,11 +65,11 @@ impl Expression {
   }
 
   pub fn unqualified_type(&self) -> &Type {
-    &self.expr_type.unqualified_type()
+    self.expr_type.unqualified_type()
   }
 
   pub fn qualifiers(&self) -> &Qualifiers {
-    &self.expr_type.qualifiers()
+    self.expr_type.qualifiers()
   }
 
   pub fn qualified_type(&self) -> &QualifiedType {
@@ -179,7 +179,7 @@ impl Expression {
     self.is_lvalue() && self.qualified_type().is_modifiable()
   }
 
-  pub fn to_rvalue(self) -> Self {
+  pub fn into_rvalue(self) -> Self {
     Self {
       value_category: RValue,
       ..self
@@ -313,7 +313,7 @@ mod test {
       RValue,
     );
     let float_expr = Expression::new(
-      RawExpr::Constant(ConstantLiteral::Float(3.14).into()),
+      RawExpr::Constant(ConstantLiteral::Float(::std::f32::consts::PI).into()),
       Type::from(Primitive::Float).into(),
       RValue,
     );

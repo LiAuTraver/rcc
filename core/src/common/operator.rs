@@ -6,6 +6,7 @@
   PartialEq,
   Eq,
   ::std::marker::ConstParamTy,
+  Default,
 )]
 pub enum Operator {
   // one-character operators
@@ -119,6 +120,7 @@ pub enum Operator {
   HashHash,
 
   #[strum(disabled)]
+  #[default]
   EOF,
 }
 use Operator::*;
@@ -275,11 +277,5 @@ impl Operator {
 impl PartialEq<Operator> for &Operator {
   fn eq(&self, other: &Operator) -> bool {
     *self == other
-  }
-}
-
-impl ::std::default::Default for Operator {
-  fn default() -> Self {
-    Operator::EOF
   }
 }

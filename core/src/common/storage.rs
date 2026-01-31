@@ -13,7 +13,7 @@ pub enum Storage {
   #[strum(serialize = "register")]
   Register,
   /// - Function declarations with no storage-class specifier are always handled
-  ///     as though they include an extern specifier
+  ///   as though they include an extern specifier
   /// - if variable declarations appear at file scope, they have external linkage
   /// - use extern to declare an identifier that’s already visible.
   /// ```c
@@ -25,7 +25,7 @@ pub enum Storage {
   #[strum(serialize = "extern")]
   Extern,
   /// - At file scope, the static specifier indicates that a function or variable
-  ///     has internal linkage.
+  ///   has internal linkage.
   /// - At block scope(i.e., for variables), the static specifier controls storage duration, not linkage.
   #[strum(serialize = "static")]
   Static,
@@ -67,16 +67,22 @@ impl From<&Literal> for Storage {
 }
 
 impl Storage {
-  pub fn try_merge(lhs: &Storage, rhs: &Storage) -> Result<Storage, ErrorData> {
+  pub fn try_merge(
+    lhs: &Storage,
+    rhs: &Storage,
+  ) -> Result<Storage, Box<ErrorData>> {
     match (lhs, rhs) {
-      (lhs, rhs) if lhs == rhs => Ok(lhs.clone()),
-      (Constexpr, _) | (_, Constexpr) => Err(ErrorData::UnsupportedFeature(
-        "Constexpr unimplemented yet".to_string(),
-      )),
+      (lhs, rhs) if lhs == rhs => Ok(*lhs),
+      (Constexpr, _) | (_, Constexpr) => Err(
+        ErrorData::UnsupportedFeature(
+          "Constexpr unimplemented yet".to_string(),
+        )
+        .into(),
+      ),
       (Typedef, _) | (_, Typedef) =>
-        Err(ErrorData::StorageSpecsUnmergeable(lhs.clone(), rhs.clone())),
-      (Extern, other) | (other, Extern) => Ok(other.clone()), // extern is compatible with any other storage class
-      _ => Err(ErrorData::StorageSpecsUnmergeable(lhs.clone(), rhs.clone())),
+        Err(ErrorData::StorageSpecsUnmergeable(*lhs, *rhs).into()),
+      (Extern, other) | (other, Extern) => Ok(*other), // extern is compatible with any other storage class
+      _ => Err(ErrorData::StorageSpecsUnmergeable(*lhs, *rhs).into()),
     }
   }
 
