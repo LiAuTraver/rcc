@@ -5,7 +5,7 @@ use ::rc_utils::IntoWith;
 use crate::{
   analyzer::expression::{Expression, ImplicitCast},
   common::SourceSpan,
-  diagnosis::{Error, ErrorData},
+  diagnosis::{Diag, DiagData::*, Severity},
   types::{
     CastType, Compatibility, Pointer, Primitive, Promotion, QualifiedType,
     Qualifiers, Type,
@@ -19,7 +19,7 @@ impl Expression {
   pub fn usual_arithmetic_conversion(
     lhs: Expression,
     rhs: Expression,
-  ) -> Result<(Expression, Expression, QualifiedType), Error> {
+  ) -> Result<(Expression, Expression, QualifiedType), Diag> {
     assert!(
       !lhs.is_lvalue() && !rhs.is_lvalue(),
       "perform lvalue conversion first"
@@ -39,7 +39,7 @@ impl Expression {
 
   #[must_use]
   #[inline]
-  pub fn usual_arithmetic_conversion_unary(self) -> Result<Self, Error> {
+  pub fn usual_arithmetic_conversion_unary(self) -> Result<Self, Diag> {
     assert!(!self.is_lvalue(), "perform lvalue conversion first");
     assert!(
       !matches!(
@@ -65,7 +65,7 @@ impl Expression {
   /// Returned expression is always rvalue of type `int` -- well, cannot be `bool` since `sizeof` expression will be wrong!
   #[must_use]
   #[inline]
-  pub fn conditional_conversion(self) -> Result<Self, Error> {
+  pub fn conditional_conversion(self) -> Result<Self, Diag> {
     assert!(
       !matches!(
         self.unqualified_type(),
@@ -96,7 +96,7 @@ impl Expression {
   pub fn assignment_conversion(
     self,
     target_type: &QualifiedType,
-  ) -> Result<Self, Error> {
+  ) -> Result<Self, Diag> {
     assert!(
       !matches!(
         self.unqualified_type(),
@@ -208,7 +208,7 @@ impl Expression {
   fn assignment_conversion_unchecked(
     self,
     target_type: &QualifiedType,
-  ) -> Result<Self, Error> {
+  ) -> Result<Self, Diag> {
     let span = self.span();
 
     match (&target_type.unqualified_type(), &self.unqualified_type()) {
@@ -235,9 +235,10 @@ impl Expression {
         // error if removing qualifiers (const, volatile, etc.)
         if !lhs.pointee.qualifiers().contains(*rhs.pointee.qualifiers()) {
           return Err(
-            ErrorData::DiscardingQualifiers(
+            DiscardingQualifiers(
               *rhs.pointee.qualifiers() - *lhs.pointee.qualifiers(),
             )
+            .into_with(Severity::Error)
             .into_with(span),
           );
         }
@@ -256,10 +257,11 @@ impl Expression {
           ))
         } else {
           Err(
-            ErrorData::IncompatiblePointerTypes(
+            IncompatiblePointerTypes(
               lhs.pointee.to_string(),
               rhs.pointee.to_string(),
             )
+            .into_with(Severity::Error)
             .into_with(span),
           )
         }
@@ -292,18 +294,19 @@ impl Expression {
         target_type.clone(),
       )),
       _ => Err(
-        ErrorData::InvalidConversion(format!(
+        InvalidConversion(format!(
           "cannot convert from '{}' to '{}'",
           self.unqualified_type(),
           target_type.unqualified_type()
         ))
+        .into_with(Severity::Error)
         .into_with(self.span()),
       ),
     }
   }
 
   #[must_use]
-  fn conditional_conversion_unchecked(self) -> Result<Self, Error> {
+  fn conditional_conversion_unchecked(self) -> Result<Self, Diag> {
     let span = self.span();
 
     match self.unqualified_type() {
@@ -321,16 +324,18 @@ impl Expression {
         QualifiedType::int(),
       )),
       Type::Primitive(Primitive::Void) => Err(
-        ErrorData::InvalidConversion(
+        InvalidConversion(
           "cannot convert void to int in conditional conversion".to_string(),
         )
+        .into_with(Severity::Error)
         .into_with(self.span()),
       ),
       Type::Primitive(_) => Err(
-        ErrorData::InvalidConversion(format!(
+        InvalidConversion(format!(
           "cannot convert '{}' to int in conditional conversion",
           self.unqualified_type()
         ))
+        .into_with(Severity::Error)
         .into_with(self.span()),
       ),
       // compare with nullptr
@@ -363,7 +368,7 @@ impl Expression {
   fn usual_arithmetic_conversion_unchecked(
     lhs: Expression,
     rhs: Expression,
-  ) -> Result<(Expression, Expression, QualifiedType), Error> {
+  ) -> Result<(Expression, Expression, QualifiedType), Diag> {
     let lhs = lhs.promote();
     let rhs = rhs.promote();
 
@@ -374,10 +379,11 @@ impl Expression {
         _ => {
           let lhs_span = lhs.span();
           return Err(
-            ErrorData::InvalidConversion(
+            InvalidConversion(
               "usual arithmetic conversion only applies to arithmetic types"
                 .to_string(),
             )
+            .into_with(Severity::Error)
             .into_with(SourceSpan {
               file_index: lhs_span.file_index,
               start: lhs_span.start,
@@ -395,15 +401,16 @@ impl Expression {
 
   /// used for unary `~`, `+` and `-`
   #[must_use]
-  fn usual_arithmetic_conversion_unary_unchecked(self) -> Result<Self, Error> {
+  fn usual_arithmetic_conversion_unary_unchecked(self) -> Result<Self, Diag> {
     let promoted = self.promote();
     match promoted.unqualified_type() {
       Type::Primitive(p) if p.is_arithmetic() => Ok(promoted),
       _ => Err(
-        ErrorData::InvalidConversion(
+        InvalidConversion(
           "usual arithmetic conversion only applies to arithmetic types"
             .to_string(),
         )
+        .into_with(Severity::Error)
         .into_with(promoted.span()),
       ),
     }

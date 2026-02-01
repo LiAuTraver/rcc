@@ -13,7 +13,7 @@ pub use self::{
   promotion::Promotion,
   type_info::TypeInfo,
   types::{
-    Array, ArraySize, Enum, FunctionProto, FunctionSpecifier, Pointer,
-    Primitive, QualifiedType, Qualifiers, Record, Type, Union,
+    Array, ArraySize, Enum, ExpressionId, FunctionProto, FunctionSpecifier,
+    Pointer, Primitive, QualifiedType, Qualifiers, Record, Type, Union,
   },
 };

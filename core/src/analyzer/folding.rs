@@ -1,9 +1,10 @@
 use crate::{
   analyzer::expression::{Expression, RawExpr, SizeOfKind, Variable},
   common::{Operator, Storage},
+  diagnosis::DiagData,
   types::Type,
 };
-
+/// FIXME: should implement this as `try_fold` or so, rather than `is_constant` methods
 impl Expression {
   /// 6.6.8: An integer constant expression shall have integer type and shall only have operands that are
   ///           integer constants, named and compound literal constants of integer type, character constants,
@@ -75,6 +76,12 @@ impl Expression {
 
   /// 6.6.6
   pub fn compound_literal_constant(&self) -> bool {
+    todo!()
+  }
+}
+
+impl Expression {
+  pub fn fold_unchecked(&mut self) -> Result<(), DiagData> {
     todo!()
   }
 }

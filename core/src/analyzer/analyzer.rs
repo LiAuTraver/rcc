@@ -9,7 +9,9 @@ use crate::{
     VarDeclKind,
   },
   diagnosis::{
-    Diagnosis, Error, ErrorData::*, Session, Warning, WarningData::*,
+    Diag,
+    DiagData::{self, *},
+    Diagnosis, Session, Severity,
   },
   parser::{declaration as pd, expression as pe, statement as ps},
   types::{
@@ -18,10 +20,10 @@ use crate::{
   },
 };
 
-type TypeRes = Result<QualifiedType, Error>;
-type ExprRes = Result<ae::Expression, Error>;
-type DeclRes<T> = Result<T, Error>;
-type StmtRes<T> = Result<T, Error>;
+type TypeRes = Result<QualifiedType, Diag>;
+type ExprRes = Result<ae::Expression, Diag>;
+type DeclRes<T> = Result<T, Diag>;
+type StmtRes<T> = Result<T, Diag>;
 
 #[cold]
 fn shall_ok_failed(msg: &str, location: &std::panic::Location) -> ! {
@@ -41,7 +43,7 @@ trait ImplHelper<T> {
   fn shall_ok<M: Into<Option<&'static str>>>(self, msg: M) -> T;
 }
 
-impl<T> ImplHelper<T> for Result<T, Error> {
+impl<T> ImplHelper<T> for Result<T, Diag> {
   #[track_caller]
   fn shall_ok<M: Into<Option<&'static str>>>(self, msg: M) -> T {
     match self {
@@ -70,13 +72,13 @@ trait ImplHelper2<T, Listener> {
   fn handle_with(self, context: &Listener, default: T) -> T;
 }
 
-impl<T> ImplHelper2<T, Analyzer<'_>> for Result<T, Error> {
+impl<T> ImplHelper2<T, Analyzer<'_>> for Result<T, Diag> {
   /// if it's error, log it, and return a default value (means error)
   fn handle_with(self, context: &Analyzer, default: T) -> T {
     match self {
       Ok(t) => t,
       Err(e) => {
-        context.add_error(e);
+        context.add_diag(e);
         default
       },
     }
@@ -88,12 +90,12 @@ trait ImplHelper3<T, Listener> {
   fn handle_or_dummy(self, context: &Listener) -> T;
 }
 
-impl<T: Dummy> ImplHelper3<T, Analyzer<'_>> for Result<T, Error> {
+impl<T: Dummy> ImplHelper3<T, Analyzer<'_>> for Result<T, Diag> {
   fn handle_or_dummy(self, context: &Analyzer) -> T {
     match self {
       Ok(t) => t,
       Err(e) => {
-        context.add_error(e);
+        context.add_diag(e);
         Dummy::dummy()
       },
     }
@@ -118,12 +120,16 @@ impl<'session> Analyzer<'session> {
     }
   }
 
-  pub fn add_error(&self, error: Error) {
-    self.session.diagnosis.add_error(error);
+  pub fn add_diag(&self, diag: Diag) {
+    self.session.diagnosis.add_diag(diag);
   }
 
-  pub fn add_warning(&self, warning: Warning) {
-    self.session.diagnosis.add_warning(warning);
+  pub fn add_error(&self, error: DiagData, span: SourceSpan) {
+    self.session.diagnosis.add_error(error, span);
+  }
+
+  pub fn add_warning(&self, warning: DiagData, span: SourceSpan) {
+    self.session.diagnosis.add_warning(warning, span);
   }
 
   pub fn analyze(&mut self) -> ad::TranslationUnit {
@@ -167,14 +173,15 @@ impl<'session> Analyzer<'session> {
 
               if analyzed_expr.qualified_type().is_scalar() {
                 if analyzed_expr.is_integer_constant() {
-                  todo!("constant folding not implemented yet");
+                  // let folded = analyzed_expr.fold_unchecked();
+                  todo!()
                 } else {
-                  todo!("VLA not supported yet");
+                  not_implemented_feature!("VLA not supported yet");
                 }
               } else {
                 self.add_error(
-                  NonIntegerInArraySubscript(analyzed_expr.to_string())
-                    .into_with(analyzed_expr.span()),
+                  NonIntegerInArraySubscript(analyzed_expr.to_string()),
+                  analyzed_expr.span(),
                 );
                 ArraySize::Constant(0) // error case
               }
@@ -310,11 +317,11 @@ impl<'session> Analyzer<'session> {
   fn parse_declspecs(
     &self,
     declspecs: pd::DeclSpecs,
-  ) -> Result<(FunctionSpecifier, Option<Storage>, QualifiedType), Error> {
+  ) -> Result<(FunctionSpecifier, Option<Storage>, QualifiedType), Diag> {
     let qualified_type = self
       .get_type(declspecs.type_specifiers)
       .unwrap_or_else(|e| {
-        self.add_error(e);
+        self.add_diag(e);
         QualifiedType::int()
       })
       .with_qualifiers(declspecs.qualifiers);
@@ -427,7 +434,7 @@ impl<'session> Analyzer<'session> {
       .into_iter()
       .for_each(|decl| match self.declarations(decl) {
         Ok(declaration) => declarations.push(declaration),
-        Err(e) => self.add_error(e),
+        Err(e) => self.add_diag(e),
       });
     declarations
   }
@@ -479,7 +486,7 @@ impl<'session> Analyzer<'session> {
         function_specifier,
       )
       .unwrap_or_else(|e| {
-        self.add_error(e.into_with(span));
+        self.add_diag(e.into_with(span));
       });
     }
 
@@ -635,9 +642,10 @@ impl<'session> Analyzer<'session> {
         return Err(
           IncompatibleType(
             name,
-            prev_symbol_ref.borrow().qualified_type.clone(),
-            vardef.symbol.borrow().qualified_type.clone(),
+            prev_symbol_ref.borrow().qualified_type.clone().into(),
+            vardef.symbol.borrow().qualified_type.clone().into(),
           )
+          .into_with(Severity::Error)
           .into_with(span),
         );
       }
@@ -648,6 +656,7 @@ impl<'session> Analyzer<'session> {
       match (&prev_declkind, &new_declkind) {
         (VDK::Definition, VDK::Definition) => Err(
           VariableAlreadyDefined(vardef.symbol.borrow().name.clone())
+            .into_with(Severity::Error)
             .into_with(span),
         ),
         (VDK::Definition, VDK::Declaration)
@@ -666,7 +675,7 @@ impl<'session> Analyzer<'session> {
               &new_symbol.storage_class,
             )
             .unwrap_or_else(|error| {
-              self.add_error(error.into_with(span));
+              self.add_diag(error.into_with(span));
               prev.storage_class
             });
             prev.qualified_type = QualifiedType::composite_unchecked(
@@ -716,9 +725,7 @@ impl<'session> Analyzer<'session> {
       },
       (Some(storage), Some(initializer)) => {
         if storage == Storage::Extern {
-          self.add_warning(
-            ExternVariableWithInitializer(name.clone()).into_with(span),
-          );
+          self.add_warning(ExternVariableWithInitializer(name.clone()), span);
         }
         let symbol = Symbol::def(qualified_type, storage, name);
         ad::VarDef::new(symbol, Some(initializer), span)
@@ -735,8 +742,7 @@ impl<'session> Analyzer<'session> {
     span: SourceSpan,
   ) -> DeclRes<ad::VarDef> {
     if storage == Storage::Extern && initializer.is_some() {
-      self
-        .add_error(LocalExternVarWithInitializer(name.clone()).into_with(span));
+      self.add_error(LocalExternVarWithInitializer(name.clone()), span);
     }
     let symbol = Symbol::decl(qualified_type, storage, name);
     Ok(ad::VarDef::new(symbol, initializer, span))
@@ -816,12 +822,14 @@ impl<'session> Analyzer<'session> {
         _ =>
           return Err(
             InvalidCallee(ptr.pointee.unqualified_type().to_string())
+              .into_with(Severity::Error)
               .into_with(span),
           ),
       },
       _ =>
         return Err(
           InvalidCallee(analyzed_callee.unqualified_type().to_string())
+            .into_with(Severity::Error)
             .into_with(span),
         ),
     };
@@ -860,7 +868,9 @@ impl<'session> Analyzer<'session> {
 
   fn variable(&self, variable: pe::Variable) -> ExprRes {
     let symbol = self.environment.find(&variable.name).ok_or(
-      UndefinedVariable(variable.name.clone()).into_with(variable.span),
+      UndefinedVariable(variable.name.clone())
+        .into_with(Severity::Error)
+        .into_with(variable.span),
     )?;
     if symbol.borrow().is_typedef() {
       contract_violation!(
@@ -1000,6 +1010,7 @@ impl<'session> Analyzer<'session> {
               left_pointee.to_string(),
               right_pointee.to_string(),
             )
+            .into_with(Severity::Error)
             .into_with(span),
           )
         }
@@ -1020,7 +1031,11 @@ impl<'session> Analyzer<'session> {
     let operand = operand.lvalue_conversion().decay();
 
     if !operand.unqualified_type().is_arithmetic() {
-      Err(NonArithmeticInUnaryOp(operator, operand.to_string()).into_with(span))
+      Err(
+        NonArithmeticInUnaryOp(operator, operand.to_string())
+          .into_with(Severity::Error)
+          .into_with(span),
+      )
     } else {
       let converted_operand = operand.usual_arithmetic_conversion_unary()?;
       let expr_type = converted_operand.qualified_type().clone();
@@ -1047,6 +1062,7 @@ impl<'session> Analyzer<'session> {
     if !operand.unqualified_type().is_integer() {
       Err(
         NonIntegerInBitwiseUnaryOp(operator, operand.to_string())
+          .into_with(Severity::Error)
           .into_with(span),
       )
     } else {
@@ -1089,7 +1105,11 @@ impl<'session> Analyzer<'session> {
   ) -> ExprRes {
     assert_eq!(operator, Operator::Ampersand);
     if !operand.is_lvalue() {
-      Err(AddressofOperandNotLvalue(operand.to_string()).into_with(span))
+      Err(
+        AddressofOperandNotLvalue(operand.to_string())
+          .into_with(Severity::Error)
+          .into_with(span),
+      )
     } else {
       let pointee = operand.qualified_type().clone();
       Ok(ae::Expression::new_rvalue(
@@ -1114,13 +1134,21 @@ impl<'session> Analyzer<'session> {
     let operand = operand.lvalue_conversion().decay();
 
     if !operand.unqualified_type().is_pointer() {
-      return Err(DerefNonPtr(operand.to_string()).into_with(span));
+      return Err(
+        DerefNonPtr(operand.to_string())
+          .into_with(Severity::Error)
+          .into_with(span),
+      );
     }
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
     if pointee_type.unqualified_type() == &Type::Primitive(Primitive::Void) {
-      Err(DerefVoidPtr(operand.to_string()).into_with(span))
+      Err(
+        DerefVoidPtr(operand.to_string())
+          .into_with(Severity::Error)
+          .into_with(span),
+      )
     } else {
       // If the operand points to a function, the result is a function designator; -- which means the we don't need to perform decay here
       // if it points to an object, the result is an lvalue designating the object.
@@ -1149,7 +1177,7 @@ impl<'session> Analyzer<'session> {
       "compound assignment(e.g. +=, /=, etc) not implemented"
     );
     if !left.is_modifiable_lvalue() {
-      self.add_error(ExprNotAssignable(left.to_string()).into_with(span));
+      self.add_error(ExprNotAssignable(left.to_string()), span);
       return Ok(left);
     }
     let assigned_expr = right
@@ -1260,8 +1288,8 @@ impl<'session> Analyzer<'session> {
           left.to_string(),
           right.to_string(),
           operator.clone(),
-        )
-        .into_with(span),
+        ),
+        span,
       );
     }
 
@@ -1293,6 +1321,7 @@ impl<'session> Analyzer<'session> {
       // return err_or_debugbreak!(); // error: bitshift operator requires integer operands
       return Err(
         NonIntegerInBitshiftOp(lhs.to_string(), rhs.to_string(), operator)
+          .into_with(Severity::Error)
           .into_with(span),
       );
     }
@@ -1332,7 +1361,7 @@ impl<'session> Analyzer<'session> {
       .filter_map(|statement| match self.statement(statement) {
         Ok(stmt) => Some(stmt),
         Err(e) => {
-          self.add_error(e);
+          self.add_diag(e);
           None
         },
       })
@@ -1427,11 +1456,13 @@ impl<'session> Analyzer<'session> {
         Ok(astmt::Return::new(None, span)),
       (None, _) => Err(
         ReturnTypeMismatch("non-void function must return a value".to_string())
+          .into_with(Severity::Error)
           .into_with(span),
       ),
 
       (Some(_), Type::Primitive(Primitive::Void)) => Err(
         ReturnTypeMismatch("void function cannot return a value".to_string())
+          .into_with(Severity::Error)
           .into_with(span),
       ),
 
@@ -1557,13 +1588,13 @@ impl<'session> Analyzer<'session> {
           ExprNotConstant(format!(
             "switch condition must have integer type, found '{}'",
             val.qualified_type()
-          ))
-          .into_with(span),
+          )),
+          span,
         );
         val
       },
       Err(e) => {
-        self.add_error(e);
+        self.add_diag(e);
         ae::Expression::new_error_node(QualifiedType::int())
       },
     };
@@ -1592,13 +1623,13 @@ impl<'session> Analyzer<'session> {
           ExprNotConstant(format!(
             "Integer constant expression must have integer type, found '{}'",
             val.qualified_type()
-          ))
-          .into_with(span),
+          )),
+          span,
         );
         val
       },
       Err(e) => {
-        self.add_error(e);
+        self.add_diag(e);
         ae::Expression::new_error_node(QualifiedType::int())
       },
     };
@@ -1636,7 +1667,11 @@ impl<'session> Analyzer<'session> {
             self.statement(*statement).handle_or_dummy(self),
             span,
           )),
-          false => Err(DuplicateLabel(name).into_with(span)),
+          false => Err(
+            DuplicateLabel(name)
+              .into_with(Severity::Error)
+              .into_with(span),
+          ),
         }
       },
     }

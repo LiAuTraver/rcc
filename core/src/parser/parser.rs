@@ -7,7 +7,8 @@ use crate::{
     OperatorCategory, SourceSpan, Storage, Token, UnitScope,
   },
   diagnosis::{
-    Diagnosis, Error, ErrorData::*, Session, Warning, WarningData::*,
+    DiagData::{self, *},
+    Diagnosis, Session,
   },
   parser::{
     declaration::{
@@ -190,8 +191,8 @@ impl<'session> Parser<'session> {
   fn recoverable_get<const OP: Operator>(&mut self) {
     if self.peek_lit() != OP {
       self.add_error(
-        UnexpectedCharacter(self.peek_lit().clone(), Some(OP.into()))
-          .into_with(*self.peek_loc()),
+        UnexpectedCharacter(self.peek_lit().clone(), Some(OP.into())),
+        *self.peek_loc(),
       );
     } else {
       self.must_get_op::<OP>();
@@ -207,19 +208,19 @@ impl<'session> Parser<'session> {
 }
 /// diagnostic functions
 impl<'session> Parser<'session> {
-  fn add_error(&self, error: Error) {
-    self.session.diagnosis.add_error(error);
+  fn add_error(&self, data: DiagData, span: SourceSpan) {
+    self.session.diagnosis.add_error(data, span);
   }
 
-  fn add_warning(&self, warning: Warning) {
-    self.session.diagnosis.add_warning(warning);
+  fn add_warning(&self, data: DiagData, span: SourceSpan) {
+    self.session.diagnosis.add_warning(data, span);
   }
 }
 /// opt checks
 impl<'session> Parser<'session> {
   fn ios_c_strict_check_for_decl(&self, statement: &Statement) {
     if matches!(statement, Statement::Declaration(_)) {
-      self.add_warning(DeprecatedStmtDeclCvt.into_with(*self.peek_loc()));
+      self.add_warning(DeprecatedStmtDeclCvt, *self.peek_loc());
     }
   }
 }
@@ -264,9 +265,7 @@ impl<'session> Parser<'session> {
     while self.peek_lit().is_qualifier() {
       let qualifier = self.parse_qualifier();
       if qualifiers.contains(qualifier) {
-        self.add_warning(
-          RedundantQualifier(qualifier).into_with(*self.peek_loc()),
-        );
+        self.add_warning(RedundantQualifier(qualifier), *self.peek_loc());
       }
       qualifiers |= qualifier;
     }
@@ -286,12 +285,13 @@ impl<'session> Parser<'session> {
         let qualifier = self.parse_qualifier();
         // qualifiers is a bitfield
         if qualifiers.contains(qualifier) {
-          self.add_warning(RedundantQualifier(qualifier).into_with(
+          self.add_warning(
+            RedundantQualifier(qualifier),
             SourceSpan {
               end: self.peek_loc().end,
               ..location
             },
-          ));
+          );
         } else {
           qualifiers |= qualifier;
         }
@@ -299,20 +299,21 @@ impl<'session> Parser<'session> {
         let storage_class = Storage::from(self.peek_lit());
         match storage {
           Some(ref existing_storage) if existing_storage == storage_class => {
-            self.add_warning(RedundantStorageSpecs(storage_class).into_with(
+            self.add_warning(
+              RedundantStorageSpecs(storage_class),
               SourceSpan {
                 end: self.peek_loc().end,
                 ..location
               },
-            ));
+            );
           },
           Some(ref existing_storage) => {
             self.add_error(
-              StorageSpecsUnmergeable(*existing_storage, storage_class)
-                .into_with(SourceSpan {
-                  end: self.peek_loc().end,
-                  ..location
-                }),
+              StorageSpecsUnmergeable(*existing_storage, storage_class),
+              SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              },
             );
           },
           None => {
@@ -338,10 +339,13 @@ impl<'session> Parser<'session> {
     }
 
     if type_specifiers.is_empty() {
-      self.add_error(MissingTypeSpecifier.into_with(SourceSpan {
-        end: self.peek_loc().end,
-        ..location
-      }));
+      self.add_error(
+        MissingTypeSpecifier,
+        SourceSpan {
+          end: self.peek_loc().end,
+          ..location
+        },
+      );
       type_specifiers.push(TypeSpecifier::Int);
     }
 
@@ -393,11 +397,11 @@ impl<'session> Parser<'session> {
         } else {
           if TYPE == DeclaratorType::Named {
             self.add_error(
-              MissingIdentifier("Expect identifier in declarator".to_string())
-                .into_with(SourceSpan {
-                  end: self.peek_loc().end,
-                  ..location
-                }),
+              MissingIdentifier("Expect identifier in declarator".to_string()),
+              SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              },
             );
             if AGGRESSIVE {
               self.get();
@@ -464,7 +468,8 @@ impl<'session> Parser<'session> {
       if is_static {
         // clang chooses to report an error here directly, nonetheless I choose to warn only.
         self.add_warning(
-          RedundantStorageSpecs(Storage::Static).into_with(*self.peek_loc()),
+          RedundantStorageSpecs(Storage::Static),
+          *self.peek_loc(),
         );
       } else {
         is_static = true;
@@ -485,10 +490,13 @@ impl<'session> Parser<'session> {
       Some(expr)
     };
     if is_static && bound.is_none() {
-      self.add_error(StaticArrayWithoutBound.into_with(SourceSpan {
-        end: self.peek_loc().end,
-        ..location
-      }));
+      self.add_error(
+        StaticArrayWithoutBound,
+        SourceSpan {
+          end: self.peek_loc().end,
+          ..location
+        },
+      );
     }
     ArrayModifier::new(
       qualifiers,
@@ -513,8 +521,8 @@ impl<'session> Parser<'session> {
         self.add_error(
           VoidVariableDecl(
             "Unexpected token after 'void' in parameter list".to_string(),
-          )
-          .into_with(*self.peek_loc()),
+          ),
+          *self.peek_loc(),
         );
         while self.peek_lit() != RightParen {
           self.get();
@@ -534,12 +542,13 @@ impl<'session> Parser<'session> {
         if let Some(storage) = &declspecs.storage_class
           && storage != Storage::Register
         {
-          self.add_error(ExtraneousStorageSpecs(*storage).into_with(
+          self.add_error(
+            ExtraneousStorageSpecs(*storage),
             SourceSpan {
               end: self.peek_loc().end,
               ..location
             },
-          ));
+          );
           declspecs.storage_class = None;
         }
         parameters.push(Parameter::new(
@@ -559,8 +568,8 @@ impl<'session> Parser<'session> {
               self.add_error(
                 ExtraneousComma(
                   "Trailing comma in parameter list is not allowed in C.",
-                )
-                .into_with(*self.peek_loc()),
+                ),
+                *self.peek_loc(),
               );
               break;
             }
@@ -571,8 +580,8 @@ impl<'session> Parser<'session> {
                 UnclosedParameterList(
                   "Expect ',', ')' or type specifier in parameter list"
                     .to_string(),
-                )
-                .into_with(*self.peek_loc()),
+                ),
+                *self.peek_loc(),
               );
               break;
             }
@@ -621,11 +630,11 @@ impl<'session> Parser<'session> {
         self.add_error(
           ExtraneousComma(
             "Trailing comma in argument list is not allowed in C.",
-          )
-          .into_with(SourceSpan {
+          ),
+          SourceSpan {
             end: self.peek_loc().end,
             ..location
-          }),
+          },
         );
         break;
       }
@@ -639,9 +648,8 @@ impl<'session> Parser<'session> {
     &mut self,
   ) -> Expression {
     if self.peek_lit() != LeftParen {
-      self.add_error(
-        MissingOpenParen(self.peek_lit().clone()).into_with(*self.peek_loc()),
-      );
+      self
+        .add_error(MissingOpenParen(self.peek_lit().clone()), *self.peek_loc());
       // assume the left paren is missing, continue parsing
     } else {
       self.must_get_op::<{ LeftParen }>();
@@ -649,7 +657,8 @@ impl<'session> Parser<'session> {
     let expr = self.next_expression(LMIN_PRECEDENCE);
     if self.peek_lit() != RightParen {
       self.add_error(
-        MissingCloseParen(self.peek_lit().clone()).into_with(*self.peek_loc()),
+        MissingCloseParen(self.peek_lit().clone()),
+        *self.peek_loc(),
       );
       self.get(); // get it otherwise infinite loop
     } else {
@@ -676,11 +685,11 @@ impl<'session> Parser<'session> {
       self.add_error(
         ExprNotConstant(
           "Case label must have a constant expression".to_string(),
-        )
-        .into_with(SourceSpan {
+        ),
+        SourceSpan {
           end: self.peek_loc().end,
           ..location
-        }),
+        },
       );
       self.must_get_op::<{ Colon }>();
       Expression::Empty
@@ -738,8 +747,8 @@ impl<'session> Parser<'session> {
       },
       _ => {
         self.add_error(
-          VarDeclUnclosed("Expect ';' or '=' after variable name".to_string())
-            .into_with(*self.peek_loc()),
+          VarDeclUnclosed("Expect ';' or '=' after variable name".to_string()),
+          *self.peek_loc(),
         );
         self.get();
         None
@@ -778,7 +787,7 @@ impl<'session> Parser<'session> {
     let mut recovery = false;
     // block definition is not allowed in top
     if self.peek_lit() == LeftBrace {
-      self.add_error(InvalidBlockItem.into_with(*self.peek_loc()));
+      self.add_error(InvalidBlockItem, *self.peek_loc());
       self.must_get_op::<{ LeftBrace }>();
       recovery = true;
     }
@@ -790,7 +799,7 @@ impl<'session> Parser<'session> {
       if let Some(name) = &declarator.name {
         self.typedefs.declare(name.clone());
       } else {
-        self.add_warning(EmptyTypedef.into_with(declarator.span));
+        self.add_warning(EmptyTypedef, declarator.span);
       }
       self.must_get_op::<{ Semicolon }>();
       return VarDef::new(
@@ -808,7 +817,7 @@ impl<'session> Parser<'session> {
       if matches!(declarator.modifiers.first(), Some(Modifier::Function(_))) {
         // int(void) is not allowed
         if declarator.name.is_none() {
-          self.add_error(MissingFunctionName.into_with(*self.peek_loc()));
+          self.add_error(MissingFunctionName, *self.peek_loc());
         }
         let (declspecs, declarator, body) =
           self.next_function_body(declspecs, declarator);
@@ -966,12 +975,13 @@ impl<'session> Parser<'session> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::For }>();
     if self.peek_lit() != LeftParen {
-      self.add_error(MissingOpenParen(self.peek_prev_lit().clone()).into_with(
+      self.add_error(
+        MissingOpenParen(self.peek_prev_lit().clone()),
         SourceSpan {
           end: self.peek_loc().end,
           ..location
         },
-      ));
+      );
       panic!() // workaound
     } else {
       self.must_get_op::<{ LeftParen }>();
@@ -988,11 +998,11 @@ impl<'session> Parser<'session> {
                 VariableUninitialized(
                   "Variable declared in for loop without initializer"
                     .to_string(),
-                )
-                .into_with(SourceSpan {
+                ),
+                SourceSpan {
                   end: self.peek_loc().end,
                   ..location
-                }),
+                },
               );
             }
             Some(Statement::Declaration(vardef.into()))
@@ -1003,11 +1013,11 @@ impl<'session> Parser<'session> {
               Custom(
                 "Expect variable declaration or expression in for initializer"
                   .to_string(),
-              )
-              .into_with(SourceSpan {
+              ),
+              SourceSpan {
                 end: self.peek_loc().end,
                 ..location
-              }),
+              },
             );
             None
           },
@@ -1070,19 +1080,19 @@ impl<'session> Parser<'session> {
         Literal::Keyword(Keyword::Case) => {
           let case = self.parse_case();
           if default.is_some() {
-            self.add_error(CaseLabelAfterDefault.into_with(*self.peek_loc()));
+            self.add_error(CaseLabelAfterDefault, *self.peek_loc());
           } else {
             cases.push(case);
           }
         },
         Literal::Keyword(Keyword::Default) =>
           if default.is_some() {
-            self.add_error(MultipleDefaultLabels.into_with(*self.peek_loc()));
+            self.add_error(MultipleDefaultLabels, *self.peek_loc());
           } else {
             default = Some(self.parse_default());
           },
         _ => {
-          self.add_error(MissingLabelInSwitch.into_with(*self.peek_loc()));
+          self.add_error(MissingLabelInSwitch, *self.peek_loc());
           self.get(); // consume the invalid token
         },
       }
@@ -1120,17 +1130,14 @@ impl<'session> Parser<'session> {
       Literal::Operator(LeftBrace) => self.next_block().into(),
       Literal::Operator(Semicolon) => self.next_emptystmt(),
       Literal::Keyword(Keyword::Case) => {
-        self.add_error(
-          LabelNotWithinSwitch(Keyword::Case).into_with(*self.peek_loc()),
-        );
+        self.add_error(LabelNotWithinSwitch(Keyword::Case), *self.peek_loc());
         // attempt to recover
         _ = self.parse_case();
         Statement::Empty()
       },
       Literal::Keyword(Keyword::Default) => {
-        self.add_error(
-          LabelNotWithinSwitch(Keyword::Default).into_with(*self.peek_loc()),
-        );
+        self
+          .add_error(LabelNotWithinSwitch(Keyword::Default), *self.peek_loc());
         // ditto
         _ = self.parse_default();
         Statement::Empty()
@@ -1152,7 +1159,7 @@ impl<'session> Parser<'session> {
     // 1. label at end of compound statement is not allowed until C23
     // 2. label can only jump to statements within the same function, not to mention cross file.
     if self.typedefs.is_top_level() {
-      self.add_error(TopLevelLabel.into_with(location));
+      self.add_error(TopLevelLabel, location);
       Statement::Empty()
     } else {
       self.get(); // consume ident
@@ -1188,10 +1195,13 @@ impl<'session> Parser<'session> {
       )
       .into()
     } else {
-      self.add_error(MissingLabelAfterGoto.into_with(SourceSpan {
-        end: self.peek_loc().end,
-        ..location
-      }));
+      self.add_error(
+        MissingLabelAfterGoto,
+        SourceSpan {
+          end: self.peek_loc().end,
+          ..location
+        },
+      );
       // assume the label is missing, continue parsing
       self.silent_get_if::<{ Semicolon }>();
       Statement::Empty()
@@ -1223,8 +1233,8 @@ impl<'session> Parser<'session> {
         self.add_error(
           InvalidControlFlowStmt(
             "Break statement not within a loop".to_string(),
-          )
-          .into_with(newloc),
+          ),
+          newloc,
         );
         Break::new("invalid_loop".to_string(), newloc)
       },
@@ -1255,8 +1265,8 @@ impl<'session> Parser<'session> {
         self.add_error(
           InvalidControlFlowStmt(
             "Continue statement not within a loop".to_string(),
-          )
-          .into_with(newloc),
+          ),
+          newloc,
         );
         Continue::new("invalid_loop".to_string(), newloc)
       },
@@ -1298,12 +1308,11 @@ impl<'session> Parser<'session> {
             self.get();
           } else {
             self.add_error(
-              MissingCloseParen(self.peek_lit().clone()).into_with(
-                SourceSpan {
-                  end: self.peek_loc().end,
-                  ..location
-                },
-              ),
+              MissingCloseParen(self.peek_lit().clone()),
+              SourceSpan {
+                end: self.peek_loc().end,
+                ..location
+              },
             );
           }
           Paren::new(
@@ -1316,12 +1325,11 @@ impl<'session> Parser<'session> {
           .into()
         } else {
           self.add_error(
-            UnexpectedCharacter(op.clone().into(), None).into_with(
-              SourceSpan {
-                end: self.peek_loc().end,
-                ..location
-              },
-            ),
+            UnexpectedCharacter(op.clone().into(), None),
+            SourceSpan {
+              end: self.peek_loc().end,
+              ..location
+            },
           );
           self.get();
           Expression::Constant(ConstantLiteral::Int(0).into_with(SourceSpan {
@@ -1360,12 +1368,11 @@ impl<'session> Parser<'session> {
 
         _ => {
           self.add_error(
-            UnexpectedCharacter(keyword.clone().into(), None).into_with(
-              SourceSpan {
-                end: self.peek_loc().end,
-                ..location
-              },
-            ),
+            UnexpectedCharacter(keyword.clone().into(), None),
+            SourceSpan {
+              end: self.peek_loc().end,
+              ..location
+            },
           );
           Expression::Constant(ConstantLiteral::Int(0).into_with(SourceSpan {
             end: self.peek_loc().end,

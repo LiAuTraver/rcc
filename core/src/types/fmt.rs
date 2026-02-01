@@ -47,7 +47,7 @@ impl Display for Array {
     match &self.size {
       ArraySize::Constant(sz) => write!(f, "{}", sz)?,
       ArraySize::Incomplete => write!(f, "")?,
-      ArraySize::Variable => todo!(), // ignore for now
+      ArraySize::Variable(_id) => todo!(), // ignore for now
     }
     write!(f, "]")
   }

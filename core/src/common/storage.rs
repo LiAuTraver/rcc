@@ -1,7 +1,8 @@
+use ::rc_utils::IntoWith;
 use strum_macros::Display;
 
 use super::{Keyword, Literal};
-use crate::diagnosis::ErrorData;
+use crate::diagnosis::{DiagData, DiagMeta, Severity};
 
 /// storage-class-specifier
 #[derive(Debug, Display, PartialEq, Eq, Clone, Copy)]
@@ -67,49 +68,56 @@ impl From<&Literal> for Storage {
 }
 
 impl Storage {
-  pub fn try_merge(
-    lhs: &Storage,
-    rhs: &Storage,
-  ) -> Result<Storage, Box<ErrorData>> {
+  pub fn try_merge(lhs: &Storage, rhs: &Storage) -> Result<Storage, DiagMeta> {
     match (lhs, rhs) {
       (lhs, rhs) if lhs == rhs => Ok(*lhs),
       (Constexpr, _) | (_, Constexpr) => Err(
-        ErrorData::UnsupportedFeature(
-          "Constexpr unimplemented yet".to_string(),
-        )
-        .into(),
+        DiagData::UnsupportedFeature("Constexpr unimplemented yet".to_string())
+          .into_with(Severity::Error),
       ),
-      (Typedef, _) | (_, Typedef) =>
-        Err(ErrorData::StorageSpecsUnmergeable(*lhs, *rhs).into()),
+      (Typedef, _) | (_, Typedef) => Err(
+        DiagData::StorageSpecsUnmergeable(*lhs, *rhs)
+          .into_with(Severity::Error),
+      ),
       (Extern, other) | (other, Extern) => Ok(*other), // extern is compatible with any other storage class
-      _ => Err(ErrorData::StorageSpecsUnmergeable(*lhs, *rhs).into()),
+      _ => Err(
+        DiagData::StorageSpecsUnmergeable(*lhs, *rhs)
+          .into_with(Severity::Error),
+      ),
     }
   }
 
+  #[inline]
   pub fn is_static(&self) -> bool {
     matches!(self, Static)
   }
 
+  #[inline]
   pub fn is_extern(&self) -> bool {
     matches!(self, Extern)
   }
 
+  #[inline]
   pub fn is_thread_local(&self) -> bool {
     matches!(self, ThreadLocal)
   }
 
+  #[inline]
   pub fn is_constexpr(&self) -> bool {
     matches!(self, Constexpr)
   }
 
+  #[inline]
   pub fn is_typedef(&self) -> bool {
     matches!(self, Typedef)
   }
 
+  #[inline]
   pub fn is_automatic(&self) -> bool {
     matches!(self, Automatic)
   }
 
+  #[inline]
   pub fn is_register(&self) -> bool {
     matches!(self, Register)
   }

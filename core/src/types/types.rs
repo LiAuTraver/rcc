@@ -1,10 +1,10 @@
 use ::once_cell::sync::Lazy;
-use ::rc_utils::{interconvert, make_trio_for};
+use ::rc_utils::{IntoWith, interconvert, make_trio_for};
 use ::std::str::FromStr;
 use ::strum_macros::{Display, EnumString, IntoStaticStr};
 
 use super::{Compatibility, TypeInfo};
-use crate::diagnosis::ErrorData;
+use crate::diagnosis::{DiagData::*, DiagMeta, Severity};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -100,15 +100,21 @@ pub struct QualifiedType {
 pub struct Pointer {
   pub pointee: Box<QualifiedType>,
 }
+#[repr(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpressionId {
+  id: usize,
+}
 
 #[derive(Debug, Clone, Display, PartialEq)]
 pub enum ArraySize {
   Constant(usize),
+  /// unspecified size
   Incomplete,
   /// unsupported dynamic size, but i kept it here for the `full` type category
   ///
   /// TODO: if this holds an expression -- it's a cyclic reference of mod `type` and mod `analyzer::expression`?!
-  Variable,
+  Variable(ExpressionId),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -250,25 +256,23 @@ impl FunctionProto {
   pub fn main_proto_validate(
     &self,
     function_specifier: FunctionSpecifier,
-  ) -> Result<(), Box<ErrorData>> {
+  ) -> Result<(), DiagMeta> {
     if self.is_variadic {
       Err(
-        ErrorData::MainFunctionProtoMismatch(
-          "main function cannot be variadic",
-        )
-        .into(),
+        MainFunctionProtoMismatch("main function cannot be variadic")
+          .into_with(Severity::Error),
       )
     } else if function_specifier.contains(FunctionSpecifier::Inline) {
       Err(
-        ErrorData::MainFunctionProtoMismatch("main function cannot be inline")
-          .into(),
+        MainFunctionProtoMismatch("main function cannot be inline")
+          .into_with(Severity::Error),
       )
     } else if !self.compatible_with(&Self::MAIN_PROTO_EMPTY)
       && !self.compatible_with(&Self::MAIN_PROTO_ARGS)
     {
-      Err(ErrorData::MainFunctionProtoMismatch(
+      Err(MainFunctionProtoMismatch(
         "main function must have either no parameters or two parameters (int argc, char** argv)",
-      ).into())
+      ).into_with(Severity::Error))
     } else {
       Ok(())
     }
