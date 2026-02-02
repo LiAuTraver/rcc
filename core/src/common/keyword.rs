@@ -117,6 +117,29 @@ pub enum Keyword {
   True,
   #[strum(serialize = "false")]
   False,
+  // make these deliberately keyword.
+  #[strum(serialize = "and")]
+  And,
+  #[strum(serialize = "and_eq")]
+  AndEq,
+  #[strum(serialize = "bitand")]
+  Bitand,
+  #[strum(serialize = "bitor")]
+  Bitor,
+  #[strum(serialize = "compl")]
+  Compl,
+  #[strum(serialize = "not")]
+  Not,
+  #[strum(serialize = "not_eq")]
+  NotEq,
+  #[strum(serialize = "or")]
+  Or,
+  #[strum(serialize = "or_eq")]
+  OrEq,
+  #[strum(serialize = "xor")]
+  Xor,
+  #[strum(serialize = "xor_eq")]
+  XorEq,
 }
 #[derive(
   Debug,
@@ -145,29 +168,6 @@ pub enum Reserved {
   #[strum(serialize = "_Decimal128")]
   Decimal128,
   // ^^^ C23 / C++, although not considering C++, but some words probably reserve them and emit a warning if used as identifiers vvv
-  #[strum(serialize = "and")]
-  And,
-  #[strum(serialize = "and_eq")]
-  AndEq,
-  #[strum(serialize = "bitand")]
-  Bitand,
-  #[strum(serialize = "bitor")]
-  Bitor,
-  #[strum(serialize = "compl")]
-  Compl,
-  #[strum(serialize = "not")]
-  Not,
-  #[strum(serialize = "not_eq")]
-  NotEq,
-  #[strum(serialize = "or")]
-  Or,
-  #[strum(serialize = "or_eq")]
-  OrEq,
-  #[strum(serialize = "xor")]
-  Xor,
-  #[strum(serialize = "xor_eq")]
-  XorEq,
-
   #[strum(serialize = "asm")]
   Asm,
   #[strum(serialize = "catch")]

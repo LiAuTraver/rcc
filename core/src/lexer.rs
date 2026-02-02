@@ -5,7 +5,7 @@ use ::std::{
 
 use crate::{
   common::{
-    Coordinate, Keyword,
+    Coordinate, Keyword, Literal,
     Operator::{self, *},
     SourceSpan, Token,
   },
@@ -192,7 +192,19 @@ impl<'session, 'source> Lexer<'session, 'source> {
         &[("--", MinusMinus), ("-=", MinusAssign), ("->", Arrow)],
       ),
       '*' => self.lex_compound_op(start, Star, &[("*=", StarAssign)]),
-      '%' => self.lex_compound_op(start, Percent, &[("%=", PercentAssign)]),
+      '%' => self.lex_compound_op(
+        start,
+        Percent,
+        &[
+          // [tab:lex.diagraph]
+          ("%:%:", HashHash),
+          //
+          ("%=", PercentAssign),
+          //
+          ("%>", RightBrace),
+          ("%:", Hash),
+        ],
+      ),
       '=' => self.lex_compound_op(start, Assign, &[("==", EqualEqual)]),
       '!' => self.lex_compound_op(start, Not, &[("!=", NotEqual)]),
       '<' => self.lex_compound_op(
@@ -202,6 +214,9 @@ impl<'session, 'source> Lexer<'session, 'source> {
           ("<<=", LeftShiftAssign),
           ("<<", LeftShift),
           ("<=", LessEqual),
+          //
+          ("<%", LeftBrace),
+          ("<:", LeftBracket),
         ],
       ),
       '>' => self.lex_compound_op(
@@ -221,7 +236,15 @@ impl<'session, 'source> Lexer<'session, 'source> {
       '|' =>
         self.lex_compound_op(start, Pipe, &[("||", Or), ("|=", PipeAssign)]),
       '^' => self.lex_compound_op(start, Caret, &[("^=", CaretAssign)]),
-      ':' => self.lex_compound_op(start, Colon, &[("::", DoubleColon)]),
+      ':' => self.lex_compound_op(
+        start,
+        Colon,
+        &[
+          ("::", DoubleColon),
+          //
+          (":>", RightBracket),
+        ],
+      ),
       '[' =>
         self.lex_compound_op(start, LeftBracket, &[("[[", DoubleLeftBracket)]),
       ']' =>
@@ -238,13 +261,13 @@ impl<'session, 'source> Lexer<'session, 'source> {
       '}' => Some(Token::operator(RightBrace, self.span(start))),
       '~' => Some(Token::operator(Tilde, self.span(start))),
       '?' => Some(Token::operator(Question, self.span(start))),
-      '\\' => todo!("character literals not implemented yet"),
+      '\\' => todo!("escape character not implemented yet"),
 
       _ => {
-        // self.errors.push(format!(
-        //   "Unknown character '{}' at {}:{}",
-        //   ch, start.line, start.column
-        // ));
+        self.session.diagnosis.add_error(
+          UnexpectedCharacter(Literal::Identifier(self.recall().into()), None),
+          self.span(start),
+        );
         None
       },
     }
@@ -266,7 +289,8 @@ impl<'session, 'source> Lexer<'session, 'source> {
     let text = self.slice(start, self.cursor);
 
     match Keyword::from_str(text) {
-      Ok(keyword) => Token::keyword(keyword, self.span(start)),
+      Ok(keyword) =>
+        Token::keyword(keyword, self.span(start)).transform_alternative(),
       Err(_) => Token::identifier(text.to_string(), self.span(start)),
     }
   }

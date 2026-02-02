@@ -65,6 +65,22 @@ impl Token {
       _ => panic!("should not call this: {:?}", self.literal),
     }
   }
+
+  pub fn transform_alternative(self) -> Self {
+    match self.literal {
+      Literal::Keyword(ref keyword) => match keyword {
+        Keyword::And => Self::operator(Operator::And, self.location),
+        Keyword::Or => Self::operator(Operator::Or, self.location),
+        Keyword::Not => Self::operator(Operator::Not, self.location),
+        Keyword::Xor => Self::operator(Operator::Caret, self.location),
+        Keyword::Bitand => Self::operator(Operator::Ampersand, self.location),
+        Keyword::Bitor => Self::operator(Operator::Pipe, self.location),
+        Keyword::Compl => Self::operator(Operator::Tilde, self.location),
+        _ => self,
+      },
+      _ => self,
+    }
+  }
 }
 impl Literal {
   pub fn is_qualifier(&self) -> bool {
