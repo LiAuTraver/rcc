@@ -4,7 +4,10 @@ use ::std::{rc::Rc, str::FromStr};
 use ::strum_macros::{Display, EnumString, IntoStaticStr};
 
 use super::{Compatibility, TypeInfo};
-use crate::diagnosis::{DiagData::*, DiagMeta, Severity};
+use crate::{
+  common::{FloatFormat, Floating, Integral, Signedness},
+  diagnosis::{DiagData::*, DiagMeta, Severity},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 #[enum_dispatch::enum_dispatch]
@@ -468,5 +471,38 @@ impl QualifiedType {
 impl From<Type> for QualifiedType {
   fn from(value: Type) -> Self {
     QualifiedType::new_unqualified(value.into())
+  }
+}
+impl Integral {
+  pub fn unqualified_type(&self) -> Type {
+    if self.signedness() == Signedness::Signed {
+      match self.width() {
+        Self::WIDTH_CHAR => Type::Primitive(Primitive::SChar),
+        Self::WIDTH_SHORT => Type::Primitive(Primitive::Short),
+        Self::WIDTH_INT => Type::Primitive(Primitive::Int),
+        // Self::WIDTH_LONG => Type::Primitive(Primitive::Long),
+        Self::WIDTH_LONG_LONG => Type::Primitive(Primitive::LongLong),
+        _ => Type::Primitive(Primitive::Int), // default
+      }
+    } else {
+      match self.width() {
+        Self::WIDTH_CHAR => Type::Primitive(Primitive::UChar),
+        Self::WIDTH_SHORT => Type::Primitive(Primitive::UShort),
+        Self::WIDTH_INT => Type::Primitive(Primitive::UInt),
+        // Self::WIDTH_LONG => Type::Primitive(Primitive::ULong),
+        Self::WIDTH_LONG_LONG => Type::Primitive(Primitive::ULongLong),
+        _ => Type::Primitive(Primitive::UInt), // default
+      }
+    }
+  }
+}
+
+impl Floating {
+  pub const fn unqualified_type(&self) -> Type {
+    use FloatFormat::*;
+    match self.format() {
+      IEEE32 => Type::float(),
+      IEEE64 => Type::double(),
+    }
   }
 }

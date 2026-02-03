@@ -9,9 +9,9 @@ use super::expression::{
   ValueCategory, Variable,
 };
 use crate::{
-  common::{Integral, Operator, Signedness, SourceSpan},
+  common::{Floating, Integral, Operator, SourceSpan},
   diagnosis::{DiagData::*, Diagnosis},
-  types::{CastType, Compatibility, Primitive, QualifiedType, Type, TypeInfo},
+  types::{CastType, Compatibility, QualifiedType, Type, TypeInfo},
 };
 
 #[derive(Debug)]
@@ -216,14 +216,14 @@ impl Folding for Unary {
       // unary `+` is no-op for arithmetic types
       Operator::Plus => return Success(folded_operand),
       // this happens after promotion, so no need to worry about smaller types
-      Operator::Minus =>
-        match &folded_operand.raw_expr().as_constant_unchecked().constant {
-          // as-is!
-          _ => contract_violation!(
-            "the unary '-' applied to non-numeric constant or types that should be promoted: {:?}",
-            folded_operand.raw_expr().as_constant_unchecked().constant
-          ),
-        },
+      Operator::Minus => todo!(),
+      // match &folded_operand.raw_expr().as_constant_unchecked().constant {
+      //   // as-is!
+      //   _ => contract_violation!(
+      //     "the unary '-' applied to non-numeric constant or types that should be promoted: {:?}",
+      //     folded_operand.raw_expr().as_constant_unchecked().constant
+      //   ),
+      // },
       Operator::Not => if folded_operand
         .raw_expr()
         .as_constant_unchecked()
@@ -284,27 +284,51 @@ impl Folding for Binary {
       folded_lhs.qualified_type() == folded_rhs.qualified_type(),
       "type checker makes sure both sides have the same type via `ImplicitCast`!"
     );
-    if folded_lhs.unqualified_type().is_integer() {
-      Self::integral_folding(
-        self.operator,
-        folded_lhs,
-        folded_rhs,
-        self.span,
-        diag,
-      )
-    } else if folded_lhs.unqualified_type().is_floating_point() {
-      Self::floating_folding(
-        self.operator,
-        folded_lhs,
-        folded_rhs,
-        self.span,
-        diag,
-      )
-    } else {
-      todo!()
-    }
-    .map(|constant| {
-      Expression::new(
+    let (lhs_expr, lhs_type, lhs_value_category) = folded_lhs.destructure();
+    let (rhs_expr, rhs_type, rhs_value_category) = folded_rhs.destructure();
+
+    assert!(
+      lhs_type == rhs_type,
+      "type checker ensures both sides have the same types!"
+    );
+
+    assert!(
+      lhs_value_category == ValueCategory::RValue
+        && rhs_value_category == ValueCategory::RValue,
+      "type checker ensures both sides are rvalues!"
+    );
+
+    let lhs = lhs_expr
+      .into_constant()
+      .expect("shall be constant")
+      .constant;
+    let rhs = rhs_expr
+      .into_constant()
+      .expect("shall be constant")
+      .constant;
+    match (lhs, rhs) {
+          (
+            crate::types::Constant::Integral(lhs),
+            crate::types::Constant::Integral(rhs),
+          ) => Integral::handle_binary_op(self.operator, lhs, rhs, self.span, diag).map(Into::into),
+          (
+            crate::types::Constant::Floating(lhs),
+            crate::types::Constant::Floating(rhs),
+          ) => Floating::handle_binary_op(self.operator, lhs, rhs, self.span, diag).map(Into::into),
+          (
+            crate::types::Constant::String(_),
+            crate::types::Constant::String(_),
+          ) => contract_violation!("can we reach here?"),
+          (
+            crate::types::Constant::Nullptr(_),
+            crate::types::Constant::Nullptr(_),
+          ) => contract_violation!("can we reach here?"),
+          _ => contract_violation!(
+            "type checker ensures both sides have the same types! or unimplemented type"
+          ),
+        }
+        .map(|constant:CL| {
+          Expression::new(
         constant.into_with(self.span),
         target_type,
         value_category,
@@ -312,288 +336,6 @@ impl Folding for Binary {
     })
   }
 }
-impl Binary {
-  fn integral_folding(
-    op: Operator,
-    folded_lhs: Expression,
-    folded_rhs: Expression,
-    span: SourceSpan,
-    diag: &impl Diagnosis,
-  ) -> FoldingResult<CL> {
-    let (lhs_expr, lhs_type, lhs_value_category) = folded_lhs.destructure();
-    let (rhs_expr, rhs_type, rhs_value_category) = folded_rhs.destructure();
-
-    assert!(
-      lhs_type == rhs_type,
-      "type checker ensures both sides have the same types!"
-    );
-
-    assert!(
-      lhs_value_category == ValueCategory::RValue
-        && rhs_value_category == ValueCategory::RValue,
-      "type checker ensures both sides are rvalues!"
-    );
-
-    let lhs = lhs_expr
-      .into_constant()
-      .expect("shall be constant")
-      .constant;
-    let rhs = rhs_expr
-      .into_constant()
-      .expect("shall be constant")
-      .constant;
-    todo!()
-
-    // macro_rules! arith {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         let (res, overflow) = <underlying_type_of!($variant)>::$op(l, r);
-    //         if overflow {
-    //           diag.add_warning(
-    //             ArithmeticBinOpOverflow(
-    //               CL::$variant(l),
-    //               CL::$variant(r),
-    //               op,
-    //             ),
-    //             span,
-    //           )
-    //         }
-    //         Success(CL::$variant(res))
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // use ::std::ops::{BitAnd, BitOr, BitXor};
-    // macro_rules! bitwise {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         Success(CL::$variant(<underlying_type_of!($variant)>::$op(l, r)))
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // use ::std::ops::{Shl, Shr};
-    // macro_rules! bitshift {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         Success(CL::$variant(<underlying_type_of!($variant)>::$op(l, r)))
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // macro_rules! logical {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         Success(CL::Int(((l != 0) $op (r != 0)) as underlying_type_of!(Int)))
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // macro_rules! rel {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         Success(CL::Int((l $op r) as underlying_type_of!(Int)))
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // macro_rules! shorthand {
-    //   ($select:ident, $op:tt) => {
-    //     $select!(
-    //       $op, lhs, rhs, Char UChar Short UShort Int UInt LongLong ULongLong
-    //     )
-    //   };
-    // }
-    // macro_rules! zerocheck {
-    //   ($select:ident, $op:tt) => {
-    //     if rhs.is_zero() {
-    //       diag.add_warning(DivideByZero, span);
-    //       // returns 0 as workaround
-    //       Failure(CL::Int(0))
-    //     } else {
-    //       shorthand!($select, $op)
-    //     }
-    //   };
-    // }
-    // match op {
-    //   Operator::Plus => shorthand!(arith, overflowing_add),
-    //   Operator::Minus => shorthand!(arith, overflowing_sub),
-    //   Operator::Star => shorthand!(arith, overflowing_mul),
-    //   Operator::Slash => zerocheck!(arith, overflowing_div),
-    //   Operator::Percent => zerocheck!(arith, overflowing_rem),
-
-    //   Operator::Ampersand => shorthand!(bitwise, bitand),
-    //   Operator::Pipe => shorthand!(bitwise, bitor),
-    //   Operator::Caret => shorthand!(bitwise, bitxor),
-    //   // had type checker ensures the rhs is non-negative?
-    //   Operator::LeftShift => shorthand!(bitshift, shl),
-    //   Operator::RightShift => shorthand!(bitshift, shr),
-
-    //   Operator::And => shorthand!(logical, &&),
-    //   Operator::Or => shorthand!(logical, ||),
-
-    //   Operator::Less => shorthand!(rel, <),
-    //   Operator::LessEqual => shorthand!(rel, <=),
-    //   Operator::Greater => shorthand!(rel, >),
-    //   Operator::GreaterEqual => shorthand!(rel, >=),
-    //   Operator::EqualEqual => shorthand!(rel, ==),
-    //   Operator::NotEqual => shorthand!(rel, !=),
-    //   _ => contract_violation!(
-    //     "not a binary operator! assignment op should be handled upstream, so does comma."
-    //   ),
-    // }
-  }
-
-  fn floating_folding(
-    op: Operator,
-    folded_lhs: Expression,
-    folded_rhs: Expression,
-    span: SourceSpan,
-    diag: &impl Diagnosis,
-  ) -> FoldingResult<CL> {
-    let (lhs_expr, lhs_type, lhs_value_category) = folded_lhs.destructure();
-    let (rhs_expr, rhs_type, rhs_value_category) = folded_rhs.destructure();
-
-    assert!(
-      lhs_type == rhs_type,
-      "type checker ensures both sides have the same types!"
-    );
-
-    assert!(
-      lhs_value_category == ValueCategory::RValue
-        && rhs_value_category == ValueCategory::RValue,
-      "type checker ensures both sides are rvalues!"
-    );
-    let lhs = lhs_expr
-      .into_constant()
-      .expect("shall be constant")
-      .constant;
-    let rhs = rhs_expr
-      .into_constant()
-      .expect("shall be constant")
-      .constant;
-
-    todo!()
-
-    // macro_rules! arith {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         let res = l $op r;
-
-    //         // if inputs were finite but result is infinite  => overflow.
-    //         if res.is_infinite() && l.is_finite() && r.is_finite() {
-    //           diag.add_warning(
-    //             ArithmeticBinOpOverflow(
-    //               CL::$variant(l),
-    //               CL::$variant(r),
-    //               op,
-    //             ),
-    //             span,
-    //           )
-    //         }
-    //         // inf with inf
-    //         if res.is_nan() {
-    //           diag.add_warning(
-    //             NotANumber(
-    //               CL::$variant(l),
-    //               CL::$variant(r),
-    //               op,
-    //             ),
-    //             span,
-    //           )
-    //         }
-
-    //         Success(CL::$variant(res).into())
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-    // macro_rules! logical {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         Success(CL::Int(((l != 0.0) $op (r != 0.0)) as underlying_type_of!(Int)).into())
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // macro_rules! rel {
-    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-    //     match ($lhs, $rhs) {
-    //       $( (CL::$variant(l), CL::$variant(r)) => {
-    //         Success(CL::Int((l $op r) as underlying_type_of!(Int)).into())
-    //       }, )*
-    //       _ => {
-    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
-    //       }
-    //     }
-    //   }
-    // }
-
-    // macro_rules! shorthand {
-    //   ($select:ident, $op:tt) => {
-    //     $select!(
-    //       $op, lhs, rhs, Float Double
-    //     )
-    //   };
-    // }
-    // match op {
-    //   Operator::Plus => shorthand!(arith, +),
-    //   Operator::Minus => shorthand!(arith, -),
-    //   Operator::Star => shorthand!(arith, *),
-    //   // Division by zero for floating-point yields inf or nan, so no need to warn.
-    //   Operator::Slash => shorthand!(arith, /),
-
-    //   Operator::And => shorthand!(logical, &&),
-    //   Operator::Or => shorthand!(logical, ||),
-
-    //   Operator::Less => shorthand!(rel, <),
-    //   Operator::LessEqual => shorthand!(rel, <=),
-    //   Operator::Greater => shorthand!(rel, >),
-    //   Operator::GreaterEqual => shorthand!(rel, >=),
-    //   Operator::EqualEqual => shorthand!(rel, ==),
-    //   Operator::NotEqual => shorthand!(rel, !=),
-
-    //   _ => contract_violation!(
-    //     "not a binary operator or bin-op but cannot be applied to floating-point! assignment op should be handled upstream, so does comma."
-    //   ),
-    // }
-  }
-}
-
 impl Folding for Ternary {
   fn fold(
     self,
@@ -717,7 +459,7 @@ impl Folding for ImplicitCast {
             expr_type.unqualified_type().as_primitive_unchecked();
           if target_primitive.integer_rank() < expr_primitive.integer_rank() {
             diag.add_warning(
-              CastDown(expr_type.clone().into(), target_type.clone().into()),
+              CastDown(expr_type.clone(), target_type.clone()),
               self.span,
             )
           }
@@ -752,5 +494,88 @@ impl Folding for ImplicitCast {
         .map(|c: CL| c.into_with(self.span)),
     }
     .map(|raw_expr| Expression::new(raw_expr, target_type, value_category))
+  }
+}
+impl Integral {
+  pub fn handle_binary_op(
+    op: Operator,
+    lhs: Self,
+    rhs: Self,
+    span: SourceSpan,
+    diag: &impl Diagnosis,
+  ) -> FoldingResult<Self> {
+    debug_assert!(op.binary());
+    debug_assert_eq!(lhs.width(), rhs.width());
+    debug_assert_eq!(lhs.signedness(), rhs.signedness());
+
+    macro_rules! arith {
+      ($func:ident, $op:expr) => {{
+        let (result, overflow) = lhs.$func(rhs);
+        if overflow {
+          diag.add_warning(
+            ArithmeticBinOpOverflow((lhs.into(), rhs.into(), $op).into()),
+            span,
+          );
+        }
+        Success(result)
+      }};
+    }
+    macro_rules! div_zero {
+      ($func:ident) => {{
+        match lhs.$func(rhs) {
+          Some(result) => Success(result),
+          None => {
+            diag.add_error(DivideByZero, span);
+            Failure(Integral::new(lhs.width(), 0, lhs.signedness()).into())
+          },
+        }
+      }};
+    }
+    use Operator::*;
+    match op {
+      Plus => arith!(overflowing_add, Plus),
+      Minus => arith!(overflowing_sub, Minus),
+      Star => arith!(overflowing_mul, Star),
+
+      Slash => div_zero!(checked_div),
+      Percent => div_zero!(checked_rem),
+
+      And => Success(Self::from_bool(!lhs.is_zero() && !rhs.is_zero())),
+      Or => Success(Self::from_bool(!lhs.is_zero() || !rhs.is_zero())),
+
+      Less => Success(Self::from_bool(lhs < rhs)),
+      LessEqual => Success(Self::from_bool(lhs <= rhs)),
+      Greater => Success(Self::from_bool(lhs > rhs)),
+      GreaterEqual => Success(Self::from_bool(lhs >= rhs)),
+      EqualEqual => Success(Self::from_bool(lhs == rhs)),
+      NotEqual => Success(Self::from_bool(lhs != rhs)),
+
+      Ampersand => Success(lhs & rhs),
+      Pipe => Success(lhs | rhs),
+      Caret => Success(lhs ^ rhs),
+      _ => contract_violation!(
+        "not a binary operator or bin-op but cannot be applied to integral! assignment op should be handled upstream, so does comma."
+      ),
+    }
+  }
+}
+
+impl Floating {
+  pub fn handle_binary_op(
+    op: Operator,
+    lhs: Floating,
+    rhs: Floating,
+    span: SourceSpan,
+    diag: &impl Diagnosis,
+  ) -> FoldingResult<Self> {
+    debug_assert!(
+      lhs.format() == rhs.format(),
+      "Mismatched floating formats in binary operation"
+    );
+    debug_assert!(
+      op.binary(),
+      "Tried to perform unary operation in binary op handler"
+    );
+    todo!()
   }
 }

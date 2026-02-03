@@ -16,8 +16,7 @@ use crate::{
 ///
 /// it's not needed since the type system can represent the type of the constant -- an indiscriminated union would be sufficient.
 ///
-/// TODO: move StringLiteral and Nullptr out, so that it did not need [`Drop`];
-/// also, string literals are not constant values in C `char[N]`
+/// discrepancy: string literals are not constant values in C `char[N]`
 /// (but in C++, it is, though. verified by clangd's AST: `const char[N]`.)
 #[derive(Debug, PartialEq, Clone)]
 pub enum Constant {

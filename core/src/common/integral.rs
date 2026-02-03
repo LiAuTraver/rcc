@@ -1,7 +1,5 @@
 use ::rc_utils::static_assert;
 
-use crate::types::Primitive;
-
 /// The underlying storage type for all integer values.
 /// Using u128 allows us to represent all C integer types (up to 64-bit)
 /// with room for intermediate calculations.
@@ -538,33 +536,9 @@ impl Integral {
       (1u128 << width) - 1
     }
   }
-
-  pub fn unqualified_type(&self) -> Type {
-    if self.signedness == Signedness::Signed {
-      match self.width {
-        Self::WIDTH_CHAR => Type::Primitive(Primitive::SChar),
-        Self::WIDTH_SHORT => Type::Primitive(Primitive::Short),
-        Self::WIDTH_INT => Type::Primitive(Primitive::Int),
-        // Self::WIDTH_LONG => Type::Primitive(Primitive::Long),
-        Self::WIDTH_LONG_LONG => Type::Primitive(Primitive::LongLong),
-        _ => Type::Primitive(Primitive::Int), // default
-      }
-    } else {
-      match self.width {
-        Self::WIDTH_CHAR => Type::Primitive(Primitive::UChar),
-        Self::WIDTH_SHORT => Type::Primitive(Primitive::UShort),
-        Self::WIDTH_INT => Type::Primitive(Primitive::UInt),
-        // Self::WIDTH_LONG => Type::Primitive(Primitive::ULong),
-        Self::WIDTH_LONG_LONG => Type::Primitive(Primitive::ULongLong),
-        _ => Type::Primitive(Primitive::UInt), // default
-      }
-    }
-  }
 }
 
 use ::std::ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Not, Shl, Shr, Sub};
-
-use crate::types::Type;
 
 impl Add for Integral {
   type Output = Self;

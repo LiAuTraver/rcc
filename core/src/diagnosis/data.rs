@@ -48,11 +48,7 @@ type Elem = String;
 /// TODO: reduce the size of this enum.
 #[derive(Debug, Error)]
 pub enum Data {
-  #[error(
-    "Unexpected character '{}'{expected}",
-    0.0,
-    expected = format_expected(&.0.1)
-  )]
+  #[error("Unexpected character '{}'{expected}", &.0.0, expected = format_expected(&.0.1))]
   UnexpectedCharacter(Box<(Literal, Option<Literal>)>),
   #[error("Unterminated string literal")]
   UnterminatedString,
@@ -189,21 +185,16 @@ pub enum Data {
   )]
   DeprecatedFunctionNoProto,
   #[error(
-    "Applying unary operator '{}' may cause overflow on constant '{}'",
-    0.1,
-    0.0
+    "Applying unary operator '{}' may cause overflow on constant '{}'", &.0.1, &.0.0
   )]
   ArithmeticUnaryOpOverflow(Box<(Constant, Operator)>),
   #[error(
-    "Arithmetic overflow in operation '{}' between '{}' and '{}'",
-    0.2,
-    0.0,
-    0.1
+    "Arithmetic overflow in operation '{}' between '{}' and '{}'", &.0.2, &.0.0, &.0.1
   )]
   ArithmeticBinOpOverflow(Box<(Constant, Constant, Operator)>),
   #[error("Possible data loss in implicit cast from '{0}' to '{1}'")]
   CastDown(QualifiedType, QualifiedType),
-  #[error("Operation '{}' between '{}' and '{}' results in NaN", 0.2, 0.0, 0.1)]
+  #[error("Operation '{}' between '{}' and '{}' results in NaN", &.0.2, &.0.0, &.0.1)]
   NotANumber(Box<(Constant, Constant, Operator)>),
   #[error("Division by zero")]
   DivideByZero,
