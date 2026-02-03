@@ -221,7 +221,7 @@ impl QualifiedType {
     Self::new_unqualified(Type::char().into())
   }
 }
-impl std::ops::Deref for QualifiedType {
+impl ::std::ops::Deref for QualifiedType {
   type Target = Type;
 
   fn deref(&self) -> &Self::Target {

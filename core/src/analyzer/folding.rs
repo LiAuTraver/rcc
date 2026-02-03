@@ -761,26 +761,15 @@ impl Folding for ImplicitCast {
       },
       // integral are promoted previously.
       IntegralToFloating => {
-        // let new_constant = match (
-        //   target_type.unqualified_type(),
-        //   expr_type.unqualified_type(),
-        // ) {
-        //   (Type::Primitive(target), Type::Primitive(current)) =>
-        //     match (target, current) {
-        //       (&Primitive::Float, &Primitive::Int) =>
-        //         raw_expr.into_constant_unchecked(). as underlying_type_of!(Float),
-        //       _ => todo!(),
-        //     },
-        //   _ => contract_violation!("unreachable"),
-        // };
         todo!()
       },
-      IntegralToBoolean | FloatingToBoolean => match raw_expr {
-        RawExpr::Constant(c) =>
-          Success(CL::Int(if c.constant.is_zero() { 0 } else { 1 }))
-            .map(|c| c.into_with(self.span)),
-        _ => contract_violation!("unreachable"),
-      },
+      IntegralToBoolean | FloatingToBoolean => Success(
+        raw_expr
+          .into_constant_unchecked()
+          .clone() // fixme: why here needs clone?
+          .into_boolean()
+          .into_with(self.span),
+      ),
       FloatingCast => todo!(),
       FloatingToIntegral => todo!(),
       IntegralToPointer => contract_violation!(

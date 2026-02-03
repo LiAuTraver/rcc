@@ -15,7 +15,9 @@ use crate::{
 ///
 /// it's not needed since the type system can represent the type of the constant -- an indiscriminated union would be sufficient.
 ///
-/// TODO: move StringLiteral and Nullptr out, so that it did not need [`Drop`].
+/// TODO: move StringLiteral and Nullptr out, so that it did not need [`Drop`];
+/// also, string literals are not constant values in C `char[N]`
+/// (but in C++, it is, though. verified by clangd's AST: `const char[N]`.)
 #[derive(Debug, PartialEq, Clone)]
 pub enum Constant {
   Char(i8),
@@ -287,9 +289,6 @@ impl Constant {
       Self::Double(_) => Double.into(),
       Self::Bool(_) => Bool.into(),
       Self::Nullptr(_) => Nullptr.into(),
-      // in C, char[N] is the type of string literal - although it's stored in read-only memory
-      // in C++ it's const char[N]
-      // ^^^ verified by clangd's AST
       Self::StringLiteral(str) => Array::new(
         QualifiedType::char().into(),
         // this is wrong for multi-byte characters, but let's ignore that for now
@@ -345,6 +344,10 @@ impl Constant {
 
   pub fn is_nullptr(&self) -> bool {
     matches!(self, Self::Nullptr(_))
+  }
+
+  pub fn into_boolean(self) -> Self {
+    Self::Bool(!self.is_zero())
   }
 }
 
