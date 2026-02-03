@@ -5,12 +5,12 @@ use ::rc_utils::{
 use crate::{
   analyzer::{
     declaration as ad,
-    expression::{self as ae, ConstantLiteral},
+    expression::{self as ae},
     statement as astmt,
   },
   common::{
-    Environment, Operator, OperatorCategory, SourceSpan, Storage, Symbol,
-    VarDeclKind,
+    Environment, Integral, Operator, OperatorCategory, SourceSpan, Storage,
+    Symbol, VarDeclKind,
   },
   diagnosis::{
     Diag,
@@ -181,7 +181,15 @@ impl<'session> Analyzer<'session> {
                 match analyzed_expr.fold(&self.session.diagnosis) {
                   super::folding::FoldingResult::Success(v) =>
                     if v.is_integer_constant() {
-                      ArraySize::Constant(v.try_into().handle_with(self, 0))
+                      ArraySize::Constant(
+                        match v.raw_expr().as_constant_unchecked().constant {
+                          ae::ConstantLiteral::Integral(integral) =>
+                            integral.to_u64() as usize,
+                          ae::ConstantLiteral::Floating(_) => unreachable!(),
+                          ae::ConstantLiteral::String(_) => unreachable!(),
+                          ae::ConstantLiteral::Nullptr(_) => 0,
+                        },
+                      )
                     } else {
                       self.add_error(
                         NonIntegerInArraySubscript(v.to_string()),
@@ -797,7 +805,10 @@ impl<'session> Analyzer<'session> {
         let size = analyzed_expr.unqualified_type().size();
         Ok(ae::Expression::new_rvalue(
           ae::RawExpr::Constant(
-            ae::ConstantLiteral::ULongLong(size as u64).into_with(SourceSpan {
+            ae::ConstantLiteral::Integral(Integral::from_ulong_long(
+              size as u64,
+            ))
+            .into_with(SourceSpan {
               end: analyzed_expr.span().end,
               ..sizeof.span
             }),
@@ -817,8 +828,10 @@ impl<'session> Analyzer<'session> {
         };
         Ok(ae::Expression::new_rvalue(
           ae::RawExpr::Constant(
-            ae::ConstantLiteral::ULongLong(qualified_type.size() as u64)
-              .into_with(sizeof.span),
+            ae::ConstantLiteral::Integral(Integral::from_ulong_long(
+              qualified_type.size() as u64,
+            ))
+            .into_with(sizeof.span),
           ),
           Primitive::ULongLong.into(),
         ))
@@ -1655,14 +1668,14 @@ impl<'session> Analyzer<'session> {
         .fold(&self.session.diagnosis)
         .transform(|expr| {
           if let ae::RawExpr::Constant(constant) = expr.raw_expr() {
-            if constant.is_integer() {
+            if constant.is_integral() {
               constant.constant.clone()
             } else {
               self.add_error(
                 NonIntegerInCaseStmt(constant.constant.clone()),
                 expr.span(),
               );
-              ConstantLiteral::Int(0)
+              Integral::default().into()
             }
           } else {
             contract_violation!("constant folding did not yield a constant")

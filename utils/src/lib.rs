@@ -1,9 +1,12 @@
 mod macros;
+mod num_traits;
 
 use ::std::{
   cell::RefCell,
   rc::{Rc, Weak},
 };
+
+pub use self::num_traits::*;
 
 pub type SmallString = compact_str::CompactString;
 /// as someone who came from C++, I'd more prefer to call it shared_ptr rather than Rc/RefCell or whatever. :p

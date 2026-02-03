@@ -131,6 +131,16 @@ macro_rules! static_assert {
     };
   };
 }
+#[macro_export]
+macro_rules! static_dispatch {
+  ($this:ident.$func:ident $args:tt, $($variant:ident)*) => {
+    match $this {
+      $(
+        Self::$variant(v) => v.$func $args,
+      )*
+    }
+  }
+}
 
 /// This macro acts like `assert!`,
 /// but with more clarification that it's the program's error, not the user's.

@@ -109,18 +109,9 @@ impl Display for Constant {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     use Constant::*;
     match self {
-      Char(i) => write!(f, "{}", i),
-      Short(i) => write!(f, "{}", i),
-      Int(i) => write!(f, "{}", i),
-      LongLong(i) => write!(f, "{}", i),
-      UChar(u) => write!(f, "{}", u),
-      UShort(u) => write!(f, "{}", u),
-      UInt(u) => write!(f, "{}", u),
-      ULongLong(u) => write!(f, "{}", u),
-      Float(fl) => write!(f, "{}", fl),
-      Double(fl) => write!(f, "{}", fl),
-      Bool(b) => write!(f, "{}", b),
-      StringLiteral(s) => write!(f, "\"{}\"", s),
+      Integral(i) => write!(f, "{i}"),
+      Floating(d) => write!(f, "{d}"),
+      String(s) => write!(f, "\"{}\"", s),
       Nullptr(_) => write!(f, "nullptr"),
     }
   }

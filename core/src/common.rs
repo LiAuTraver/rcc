@@ -1,4 +1,6 @@
 mod environment;
+mod floating;
+mod integral;
 mod keyword;
 mod operator;
 mod source_info;
@@ -7,6 +9,8 @@ mod token;
 
 pub use self::{
   environment::{Environment, Symbol, SymbolRef, UnitScope, VarDeclKind},
+  floating::{Floating, Format as FloatFormat},
+  integral::{Integral, Signedness},
   keyword::Keyword,
   operator::{Category as OperatorCategory, Operator},
   source_info::{

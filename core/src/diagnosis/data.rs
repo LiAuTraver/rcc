@@ -49,10 +49,11 @@ type Elem = String;
 #[derive(Debug, Error)]
 pub enum Data {
   #[error(
-    "Unexpected character '{0}'{expected}",
-    expected = format_expected(&.1)
+    "Unexpected character '{}'{expected}",
+    0.0,
+    expected = format_expected(&.0.1)
   )]
-  UnexpectedCharacter(Literal, Option<Literal>),
+  UnexpectedCharacter(Box<(Literal, Option<Literal>)>),
   #[error("Unterminated string literal")]
   UnterminatedString,
   #[error("Invalid number format '{0}'")]
@@ -187,14 +188,23 @@ pub enum Data {
     "Function declarations without prototypes(e.g., int main()) are deprecated and removed in C23. Please provide a prototype (e.g., int main(void)) rather than leaving it empty."
   )]
   DeprecatedFunctionNoProto,
-  #[error("Applying unary operator '{0}' may cause overflow on constant '{1}'")]
-  ArithmeticUnaryOpOverflow(Constant, Operator),
-  #[error("Arithmetic overflow in operation '{2}' between '{0}' and '{1}'")]
-  ArithmeticBinOpOverflow(Constant, Constant, Operator),
+  #[error(
+    "Applying unary operator '{}' may cause overflow on constant '{}'",
+    0.1,
+    0.0
+  )]
+  ArithmeticUnaryOpOverflow(Box<(Constant, Operator)>),
+  #[error(
+    "Arithmetic overflow in operation '{}' between '{}' and '{}'",
+    0.2,
+    0.0,
+    0.1
+  )]
+  ArithmeticBinOpOverflow(Box<(Constant, Constant, Operator)>),
   #[error("Possible data loss in implicit cast from '{0}' to '{1}'")]
-  CastDown(Box<QualifiedType>, Box<QualifiedType>),
-  #[error("Operation '{2}' between '{0}' and '{1}' results in NaN")]
-  NotANumber(Constant, Constant, Operator),
+  CastDown(QualifiedType, QualifiedType),
+  #[error("Operation '{}' between '{}' and '{}' results in NaN", 0.2, 0.0, 0.1)]
+  NotANumber(Box<(Constant, Constant, Operator)>),
   #[error("Division by zero")]
   DivideByZero,
   #[error(
@@ -206,7 +216,7 @@ pub enum Data {
   #[error("Empty statement")]
   EmptyStatement,
 }
-
+// TODO: reduce the size to 64 and lower vbytes.
 static_assert!(
   ::std::mem::size_of::<Data>() <= 64,
   "Diagnostic Data too large!"

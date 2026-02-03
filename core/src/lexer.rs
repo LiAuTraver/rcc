@@ -275,7 +275,9 @@ impl<'session, 'source> Lexer<'session, 'source> {
 
       _ => {
         self.session.diagnosis.add_error(
-          UnexpectedCharacter(Literal::Identifier(self.recall().into()), None),
+          UnexpectedCharacter(
+            (Literal::Identifier(self.recall().into()), None).into(),
+          ),
           self.span(start),
         );
         None

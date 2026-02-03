@@ -1,9 +1,5 @@
-use ::rc_utils::IntoWith;
-
-use self::ValueCategory::{LValue, RValue};
 use crate::{
   common::{Operator, OperatorCategory, SourceSpan, Storage, SymbolRef},
-  diagnosis::Diag,
   type_alias_expr,
   types::{
     CastType::{self, *},
@@ -21,6 +17,7 @@ pub enum ValueCategory {
   #[strum(serialize = "rvalue")]
   RValue,
 }
+use ValueCategory::{LValue, RValue};
 
 #[derive(Debug)]
 pub struct Expression {
@@ -87,17 +84,6 @@ impl Expression {
 
   pub(super) fn destructure(self) -> (RawExpr, QualifiedType, ValueCategory) {
     (self.raw_expr, self.expr_type, self.value_category)
-  }
-}
-impl TryFrom<Expression> for usize {
-  type Error = Diag;
-
-  fn try_from(value: Expression) -> Result<Self, Self::Error> {
-    match value.raw_expr {
-      RawExpr::Constant(c) =>
-        Self::try_from(c.constant).map_err(|m| m.into_with(c.span)),
-      _ => todo!(),
-    }
   }
 }
 impl Primitive {
@@ -288,21 +274,23 @@ impl Expression {
   ///           except as part of an operand to the typeof operators, sizeof operator, or alignof operator.
   pub fn is_integer_constant(&self) -> bool {
     match self.raw_expr() {
-      RawExpr::Constant(c) => c.is_integer() || c.is_char_array(),
-      // ignore VLA
-      RawExpr::SizeOf(sizeof) =>
-        if let SizeOfKind::Expression(e) = &sizeof.sizeof {
-          e.unqualified_type().is_integer()
-        } else {
-          true // sizeof(type) is always constant
-        },
-      RawExpr::CStyleCast(cast) => cast.expr.is_integer_constant(),
-      RawExpr::Unary(unary) =>
-        matches!(unary.operator, Operator::Plus | Operator::Minus)
-          && unary.operand.is_integer_constant(),
+      RawExpr::Constant(c) => c.is_integral() || c.is_char_array(),
       RawExpr::Variable(variable) =>
         Self::is_named_integer_constant_unchecked(variable),
-      _ => false,
+      // either be folded or not an integer constant expression
+      RawExpr::Empty(_)
+      | RawExpr::Unary(_)
+      | RawExpr::Binary(_)
+      | RawExpr::Call(_)
+      | RawExpr::Paren(_)
+      | RawExpr::MemberAccess(_)
+      | RawExpr::Ternary(_)
+      | RawExpr::SizeOf(_)
+      | RawExpr::CStyleCast(_)
+      | RawExpr::ArraySubscript(_)
+      | RawExpr::CompoundLiteral(_)
+      | RawExpr::ImplicitCast(_)
+      | RawExpr::Assignment(_) => false,
     }
   }
 
@@ -388,18 +376,22 @@ mod test {
 
   #[test]
   fn int_float() {
-    use ::rc_utils::Dummy;
+    use ::rc_utils::{Dummy, IntoWith};
 
     use super::*;
+    use crate::common::Integral;
 
     let int_expr = Expression::new(
-      RawExpr::Constant(ConstantLiteral::Int(42).into_with(Dummy::dummy())),
+      RawExpr::Constant(
+        ConstantLiteral::Integral(Integral::from_int(42))
+          .into_with(Dummy::dummy()),
+      ),
       QualifiedType::int(),
       RValue,
     );
     let float_expr = Expression::new(
       RawExpr::Constant(
-        ConstantLiteral::Float(::std::f32::consts::PI)
+        ConstantLiteral::Floating(::std::f32::consts::PI.into())
           .into_with(Dummy::dummy()),
       ),
       QualifiedType::float(),

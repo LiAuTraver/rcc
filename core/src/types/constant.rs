@@ -1,9 +1,10 @@
-use ::rc_utils::IntoWith;
+use ::rc_utils::{IntoWith, interconvert, make_trio_for};
 
-use super::{QualifiedType, Type};
 use crate::{
-  blueprints::Placeholder,
+  blueprints::Placeholder as Nullptr,
+  common::{FloatFormat, Floating, Integral, Signedness},
   diagnosis::{DiagData, DiagMeta, Severity},
+  types::Type,
 };
 
 /// This class is **mixed**.
@@ -20,154 +21,11 @@ use crate::{
 /// (but in C++, it is, though. verified by clangd's AST: `const char[N]`.)
 #[derive(Debug, PartialEq, Clone)]
 pub enum Constant {
-  Char(i8),
-  Short(i16),
-  Int(i32),
-  LongLong(i64),
-  UChar(u8),
-  UShort(u16),
-  UInt(u32),
-  ULongLong(u64),
-  Float(f32),
-  Double(f64),
-  Bool(bool),
-  StringLiteral(String),
-  Nullptr(Placeholder),
+  Integral(Integral),
+  Floating(Floating),
+  String(String),
+  Nullptr(Nullptr),
 }
-/// usage:
-///
-/// ```rust
-/// let x: underlying_type_of!(Int) = 42; // x is i32
-/// let y: underlying_type_of!(Int) = x + 1; // y is i32
-/// let res = <underlying_type_of!(Int)>::overflowing_add(x, y); // res is (i32, bool)
-/// ```
-#[macro_export]
-macro_rules! underlying_type_of {
-  (Char) => {
-    i8
-  };
-  (Short) => {
-    i16
-  };
-  (Int) => {
-    i32
-  };
-  (LongLong) => {
-    i64
-  };
-  (UChar) => {
-    u8
-  };
-  (UShort) => {
-    u16
-  };
-  (UInt) => {
-    u32
-  };
-  (ULongLong) => {
-    u64
-  };
-  (Float) => {
-    f32
-  };
-  (Double) => {
-    f64
-  };
-  (Bool) => {
-    bool
-  };
-  (StringLiteral) => {
-    String
-  };
-  (Nullptr) => {
-    ()
-  };
-}
-/// usage:
-///
-/// ```rust
-/// let x: signed_underlying_type_of!(UInt) = -1; // x is i32
-/// let y: signed_underlying_type_of!(Int) = -2; // y is i32
-/// let res = x + y; // res is i32
-/// ```
-#[macro_export]
-macro_rules! signed_underlying_type_of {
-  (UChar) => {
-    i16
-  };
-  (UShort) => {
-    i32
-  };
-  (UInt) => {
-    i64
-  };
-  (ULongLong) => {
-    i128
-  };
-  ($t:tt) => {
-    underlying_type_of!($t)
-  };
-}
-/// Returns the unsigned version of the underlying type.
-///
-/// If the type has no unsigned version or is already unsigned, returns the underlying type itself.
-#[macro_export]
-macro_rules! unsigned_underlying_type_of {
-  (Char) => {
-    u8
-  };
-  (Short) => {
-    u16
-  };
-  (Int) => {
-    u32
-  };
-  (LongLong) => {
-    u64
-  };
-  ($t:tt) => {
-    underlying_type_of!($t)
-  };
-}
-
-#[macro_export]
-macro_rules! signed_variant_of {
-  (UChar) => {
-    Char
-  };
-  (UShort) => {
-    Short
-  };
-  (UInt) => {
-    Int
-  };
-  (ULongLong) => {
-    LongLong
-  };
-  ($t:tt) => {
-    $t
-  };
-}
-
-#[macro_export]
-macro_rules! unsigned_variant_of {
-  (Char) => {
-    UChar
-  };
-  (Short) => {
-    UShort
-  };
-  (Int) => {
-    UInt
-  };
-  (LongLong) => {
-    ULongLong
-  };
-  ($t:tt) => {
-    $t
-  };
-}
-
 impl Constant {
   pub const FLOATING_SUFFIXES: &'static [&'static str] = &[
     "f", "F", // float
@@ -201,12 +59,15 @@ impl Constant {
     suffix: Option<&str>,
     is_floating: bool,
   ) -> (Self, Option<DiagMeta>) {
-    macro_rules! conv {
-      ($t:ty, $variant:ident) => {
+    macro_rules! int_conv {
+      ($t:ty, $signess:ident) => {
         match num.parse::<$t>() {
-          Ok(v) => (Constant::$variant(v), None),
+          Ok(v) => (
+            Integral::new(v, (<$t>::BITS) as u8, Signedness::$signess).into(),
+            None,
+          ),
           Err(e) => (
-            Constant::$variant(Default::default()),
+            Integral::default().into(),
             Some(
               DiagData::InvalidNumberFormat(e.to_string())
                 .into_with(Severity::Error),
@@ -214,11 +75,13 @@ impl Constant {
           ),
         }
       };
-      ($t:ty, $variant:ident, $cast:ty) => {
+    }
+    macro_rules! float_conv {
+      ($t:ty, $format:expr) => {
         match num.parse::<$t>() {
-          Ok(v) => (Constant::$variant(v as $cast), None),
+          Ok(v) => (Floating::new(v.to_bits(), $format).into(), None),
           Err(e) => (
-            Constant::$variant(Default::default()),
+            Floating::new(<$t>::default().to_bits(), $format).into(),
             Some(
               DiagData::InvalidNumberFormat(e.to_string())
                 .into_with(Severity::Error),
@@ -229,23 +92,23 @@ impl Constant {
     }
     match (suffix, is_floating) {
       // default to int
-      (None, false) => conv!(i32, Int),
+      (None, false) => int_conv!(i32, Signed),
       // default to double
-      (None, true) => conv!(f64, Double),
+      (None, true) => float_conv!(f64, FloatFormat::IEEE64),
       // integer with suffix
       (Some(suf), false) => match suf {
-        "u" | "U" => conv!(u32, UInt),
-        "l" | "L" => conv!(i64, LongLong),
-        "ll" | "LL" => conv!(i64, LongLong),
+        "u" | "U" => int_conv!(u32, Unsigned),
+        "l" | "L" => int_conv!(i64, Signed),
+        "ll" | "LL" => int_conv!(i64, Signed),
         "ul" | "uL" | "Ul" | "UL" | "lu" | "lU" | "Lu" | "LU" =>
-          conv!(u64, ULongLong),
+          int_conv!(u64, Unsigned),
         "ull" | "uLL" | "Ull" | "ULL" | "llu" | "llU" | "LLu" | "LLU" =>
-          conv!(u64, ULongLong),
-        "z" | "Z" => conv!(isize, LongLong, i64),
+          int_conv!(u64, Unsigned),
+        "z" | "Z" => int_conv!(isize, Signed),
         "uz" | "uZ" | "Uz" | "UZ" | "zu" | "zU" | "Zu" | "ZU" =>
-          conv!(usize, ULongLong, u64),
+          int_conv!(usize, Unsigned),
         _ => (
-          Constant::Int(Default::default()),
+          Integral::default().into(),
           Some(
             DiagData::InvalidNumberFormat(format!(
               "unsupported integer literal suffix: {}",
@@ -257,10 +120,10 @@ impl Constant {
       },
       // floating with suffix
       (Some(suf), true) => match suf {
-        "f" | "F" => conv!(f32, Float),
-        "l" | "L" => conv!(f64, Double),
+        "f" | "F" => float_conv!(f32, FloatFormat::IEEE32),
+        "l" | "L" => float_conv!(f64, FloatFormat::IEEE64),
         _ => (
-          Constant::Double(Default::default()),
+          Floating::default().into(),
           Some(
             DiagData::InvalidNumberFormat(format!(
               "unsupported floating literal suffix: {}",
@@ -273,105 +136,45 @@ impl Constant {
     }
   }
 
+  pub const fn is_char_array(&self) -> bool {
+    matches!(self, Self::String(_))
+  }
+
   pub fn unqualified_type(&self) -> Type {
-    use super::{Array, ArraySize, Primitive::*};
-
     match self {
-      Self::Char(_) => Char.into(),
-      Self::Short(_) => Short.into(),
-      Self::Int(_) => Int.into(),
-      Self::LongLong(_) => LongLong.into(),
-      Self::UChar(_) => UChar.into(),
-      Self::UShort(_) => UShort.into(),
-      Self::UInt(_) => UInt.into(),
-      Self::ULongLong(_) => ULongLong.into(),
-      Self::Float(_) => Float.into(),
-      Self::Double(_) => Double.into(),
-      Self::Bool(_) => Bool.into(),
-      Self::Nullptr(_) => Nullptr.into(),
-      Self::StringLiteral(str) => Array::new(
-        QualifiedType::char().into(),
-        // this is wrong for multi-byte characters, but let's ignore that for now
-        ArraySize::Constant(str.len() + 1 /* null terminator */),
-      )
-      .into(),
+      Self::Integral(integral) => integral.unqualified_type(),
+      Self::Floating(floating) => floating.unqualified_type(),
+      Self::String(str) => Type::char_array(str.len() + 1),
+      Self::Nullptr(_) => Type::nullptr(),
     }
-  }
-
-  pub fn is_char_array(&self) -> bool {
-    matches!(self, Self::StringLiteral(_))
-  }
-
-  pub fn is_integer(&self) -> bool {
-    matches!(
-      self,
-      Self::Char(_)
-        | Self::Short(_)
-        | Self::Int(_)
-        | Self::LongLong(_)
-        | Self::UChar(_)
-        | Self::UShort(_)
-        | Self::UInt(_)
-        | Self::ULongLong(_)
-    )
-  }
-
-  pub fn is_floating(&self) -> bool {
-    matches!(self, Self::Float(_) | Self::Double(_))
-  }
-
-  pub fn is_boolean(&self) -> bool {
-    matches!(self, Self::Bool(_))
   }
 
   pub fn is_zero(&self) -> bool {
     match self {
-      Self::Char(c) => *c == 0,
-      Self::Short(s) => *s == 0,
-      Self::Int(i) => *i == 0,
-      Self::LongLong(l) => *l == 0,
-      Self::UChar(u) => *u == 0,
-      Self::UShort(u) => *u == 0,
-      Self::UInt(u) => *u == 0,
-      Self::ULongLong(u) => *u == 0,
-      Self::Float(f) => *f == 0.0,
-      Self::Double(d) => *d == 0.0,
-      Self::Bool(b) => !*b,
+      Self::Integral(integral) => integral.is_zero(),
+      Self::Floating(floating) => floating.is_zero(),
+      Self::String(_) => false,
       Self::Nullptr(_) => true,
-      Self::StringLiteral(s) => s.is_empty(),
     }
   }
 
-  pub fn is_nullptr(&self) -> bool {
-    matches!(self, Self::Nullptr(_))
-  }
-
-  pub fn into_boolean(self) -> Self {
-    Self::Bool(!self.is_zero())
-  }
-}
-
-impl TryFrom<Constant> for usize {
-  type Error = DiagMeta;
-
-  fn try_from(value: Constant) -> Result<Self, Self::Error> {
-    match value {
-      Constant::Char(c) if c >= 0 => Ok(c as Self),
-      Constant::Short(s) if s >= 0 => Ok(s as Self),
-      Constant::Int(i) if i >= 0 => Ok(i as Self),
-      Constant::LongLong(l) if l >= 0 => Ok(l as Self),
-      Constant::UChar(u) => Ok(u as Self),
-      Constant::UShort(u) => Ok(u as Self),
-      Constant::UInt(u) => Ok(u as Self),
-      Constant::ULongLong(u) => Ok(u as Self),
-      Constant::Bool(b) => Ok(if b { 1 } else { 0 }),
-      Constant::Nullptr(_) => Ok(0),
-      _ => Err(DiagMeta::new(
-        Severity::Error,
-        DiagData::InvalidConversion(
-          "Array declaration size must be a non-negative integer".to_string(),
-        ),
-      )),
+  pub fn to_boolean(&self) -> Constant {
+    match self {
+      Self::Integral(integral) =>
+        Constant::Integral(Integral::from_bool(!integral.is_zero())),
+      Self::Floating(floating) =>
+        Constant::Integral(Integral::from_bool(!floating.is_zero())),
+      Self::String(_) => Constant::Integral(Integral::from_bool(true)),
+      Self::Nullptr(_) => Constant::Integral(Integral::from_bool(false)),
     }
   }
 }
+interconvert!(Integral, Constant);
+interconvert!(Floating, Constant);
+interconvert!(String, Constant);
+interconvert!(Nullptr, Constant);
+
+make_trio_for!(Integral, Constant);
+make_trio_for!(Floating, Constant);
+make_trio_for!(Nullptr, Constant);
+make_trio_for!(String, Constant);

@@ -1,4 +1,6 @@
-use ::rc_utils::{IntoWith, contract_assert, contract_violation};
+use ::rc_utils::{
+  IntoWith, contract_assert, contract_violation, static_dispatch,
+};
 
 use super::expression::{
   ArraySubscript, Assignment, Binary, CStyleCast, Call, CompoundLiteral,
@@ -7,7 +9,7 @@ use super::expression::{
   ValueCategory, Variable,
 };
 use crate::{
-  common::{Operator, SourceSpan},
+  common::{Integral, Operator, Signedness, SourceSpan},
   diagnosis::{DiagData::*, Diagnosis},
   types::{CastType, Compatibility, Primitive, QualifiedType, Type, TypeInfo},
 };
@@ -166,15 +168,6 @@ impl Folding for Assignment {
     Failure(Expression::new(self.into(), target_type, value_category))
   }
 }
-macro_rules! static_dispatch {
-  ($this:ident.$func:ident $args:tt, $($variant:ident)*) => {
-    match $this {
-      $(
-        Self::$variant(v) => v.$func $args,
-      )*
-    }
-  }
-}
 impl Folding for RawExpr {
   fn fold(
     self,
@@ -225,52 +218,26 @@ impl Folding for Unary {
       // this happens after promotion, so no need to worry about smaller types
       Operator::Minus =>
         match &folded_operand.raw_expr().as_constant_unchecked().constant {
-          CL::UInt(u) => {
-            let (res, overflow) = u.overflowing_neg();
-            if overflow {
-              diag.add_warning(
-                ArithmeticUnaryOpOverflow(CL::UInt(*u), Operator::Minus),
-                self.span,
-              )
-            }
-            // unsigned integer overflow is well-defined in C, so still a constant expression
-            Success(CL::UInt(res))
-          },
-          CL::Int(i) => Success(CL::Int(i.wrapping_neg())),
-          CL::ULongLong(ull) => {
-            let (res, overflow) = ull.overflowing_neg();
-            if overflow {
-              diag.add_warning(
-                ArithmeticUnaryOpOverflow(CL::ULongLong(*ull), Operator::Minus),
-                self.span,
-              )
-            }
-            // ditto
-            Success(CL::ULongLong(res))
-          },
-          CL::LongLong(ll) => Success(CL::LongLong(ll.wrapping_neg())),
-          CL::Float(f) => Success(CL::Float(-f)),
-          CL::Double(d) => Success(CL::Double(-d)),
           // as-is!
           _ => contract_violation!(
             "the unary '-' applied to non-numeric constant or types that should be promoted: {:?}",
             folded_operand.raw_expr().as_constant_unchecked().constant
           ),
         },
-      Operator::Not =>
-        if folded_operand
-          .raw_expr()
-          .as_constant_unchecked()
-          .constant
-          .is_zero()
-        {
-          Success(CL::Int(1))
-        } else {
-          Success(CL::Int(0))
-        },
+      Operator::Not => if folded_operand
+        .raw_expr()
+        .as_constant_unchecked()
+        .constant
+        .is_zero()
+      {
+        Success(Integral::from_bool(true))
+      } else {
+        Success(Integral::from_bool(false))
+      }
+      .map(|c: Integral| c.into()),
       _ => todo!(),
     };
-    raw_constant.map(|constant| {
+    raw_constant.map(|constant: CL| {
       Expression::new(
         constant.into_with(self.span),
         target_type,
@@ -353,8 +320,6 @@ impl Binary {
     span: SourceSpan,
     diag: &impl Diagnosis,
   ) -> FoldingResult<CL> {
-    use crate::underlying_type_of;
-
     let (lhs_expr, lhs_type, lhs_value_category) = folded_lhs.destructure();
     let (rhs_expr, rhs_type, rhs_value_category) = folded_rhs.destructure();
 
@@ -377,130 +342,131 @@ impl Binary {
       .into_constant()
       .expect("shall be constant")
       .constant;
+    todo!()
 
-    macro_rules! arith {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            let (res, overflow) = <underlying_type_of!($variant)>::$op(l, r);
-            if overflow {
-              diag.add_warning(
-                ArithmeticBinOpOverflow(
-                  CL::$variant(l),
-                  CL::$variant(r),
-                  op,
-                ),
-                span,
-              )
-            }
-            Success(CL::$variant(res))
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    // macro_rules! arith {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         let (res, overflow) = <underlying_type_of!($variant)>::$op(l, r);
+    //         if overflow {
+    //           diag.add_warning(
+    //             ArithmeticBinOpOverflow(
+    //               CL::$variant(l),
+    //               CL::$variant(r),
+    //               op,
+    //             ),
+    //             span,
+    //           )
+    //         }
+    //         Success(CL::$variant(res))
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-    use ::std::ops::{BitAnd, BitOr, BitXor};
-    macro_rules! bitwise {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            Success(CL::$variant(<underlying_type_of!($variant)>::$op(l, r)))
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    // use ::std::ops::{BitAnd, BitOr, BitXor};
+    // macro_rules! bitwise {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         Success(CL::$variant(<underlying_type_of!($variant)>::$op(l, r)))
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-    use ::std::ops::{Shl, Shr};
-    macro_rules! bitshift {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            Success(CL::$variant(<underlying_type_of!($variant)>::$op(l, r)))
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    // use ::std::ops::{Shl, Shr};
+    // macro_rules! bitshift {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         Success(CL::$variant(<underlying_type_of!($variant)>::$op(l, r)))
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-    macro_rules! logical {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            Success(CL::Int(((l != 0) $op (r != 0)) as underlying_type_of!(Int)))
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    // macro_rules! logical {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         Success(CL::Int(((l != 0) $op (r != 0)) as underlying_type_of!(Int)))
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-    macro_rules! rel {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            Success(CL::Int((l $op r) as underlying_type_of!(Int)))
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    // macro_rules! rel {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         Success(CL::Int((l $op r) as underlying_type_of!(Int)))
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-    macro_rules! shorthand {
-      ($select:ident, $op:tt) => {
-        $select!(
-          $op, lhs, rhs, Char UChar Short UShort Int UInt LongLong ULongLong
-        )
-      };
-    }
-    macro_rules! zerocheck {
-      ($select:ident, $op:tt) => {
-        if rhs.is_zero() {
-          diag.add_warning(DivideByZero, span);
-          // returns 0 as workaround
-          Failure(CL::Int(0))
-        } else {
-          shorthand!($select, $op)
-        }
-      };
-    }
-    match op {
-      Operator::Plus => shorthand!(arith, overflowing_add),
-      Operator::Minus => shorthand!(arith, overflowing_sub),
-      Operator::Star => shorthand!(arith, overflowing_mul),
-      Operator::Slash => zerocheck!(arith, overflowing_div),
-      Operator::Percent => zerocheck!(arith, overflowing_rem),
+    // macro_rules! shorthand {
+    //   ($select:ident, $op:tt) => {
+    //     $select!(
+    //       $op, lhs, rhs, Char UChar Short UShort Int UInt LongLong ULongLong
+    //     )
+    //   };
+    // }
+    // macro_rules! zerocheck {
+    //   ($select:ident, $op:tt) => {
+    //     if rhs.is_zero() {
+    //       diag.add_warning(DivideByZero, span);
+    //       // returns 0 as workaround
+    //       Failure(CL::Int(0))
+    //     } else {
+    //       shorthand!($select, $op)
+    //     }
+    //   };
+    // }
+    // match op {
+    //   Operator::Plus => shorthand!(arith, overflowing_add),
+    //   Operator::Minus => shorthand!(arith, overflowing_sub),
+    //   Operator::Star => shorthand!(arith, overflowing_mul),
+    //   Operator::Slash => zerocheck!(arith, overflowing_div),
+    //   Operator::Percent => zerocheck!(arith, overflowing_rem),
 
-      Operator::Ampersand => shorthand!(bitwise, bitand),
-      Operator::Pipe => shorthand!(bitwise, bitor),
-      Operator::Caret => shorthand!(bitwise, bitxor),
-      // had type checker ensures the rhs is non-negative?
-      Operator::LeftShift => shorthand!(bitshift, shl),
-      Operator::RightShift => shorthand!(bitshift, shr),
+    //   Operator::Ampersand => shorthand!(bitwise, bitand),
+    //   Operator::Pipe => shorthand!(bitwise, bitor),
+    //   Operator::Caret => shorthand!(bitwise, bitxor),
+    //   // had type checker ensures the rhs is non-negative?
+    //   Operator::LeftShift => shorthand!(bitshift, shl),
+    //   Operator::RightShift => shorthand!(bitshift, shr),
 
-      Operator::And => shorthand!(logical, &&),
-      Operator::Or => shorthand!(logical, ||),
+    //   Operator::And => shorthand!(logical, &&),
+    //   Operator::Or => shorthand!(logical, ||),
 
-      Operator::Less => shorthand!(rel, <),
-      Operator::LessEqual => shorthand!(rel, <=),
-      Operator::Greater => shorthand!(rel, >),
-      Operator::GreaterEqual => shorthand!(rel, >=),
-      Operator::EqualEqual => shorthand!(rel, ==),
-      Operator::NotEqual => shorthand!(rel, !=),
-      _ => contract_violation!(
-        "not a binary operator! assignment op should be handled upstream, so does comma."
-      ),
-    }
+    //   Operator::Less => shorthand!(rel, <),
+    //   Operator::LessEqual => shorthand!(rel, <=),
+    //   Operator::Greater => shorthand!(rel, >),
+    //   Operator::GreaterEqual => shorthand!(rel, >=),
+    //   Operator::EqualEqual => shorthand!(rel, ==),
+    //   Operator::NotEqual => shorthand!(rel, !=),
+    //   _ => contract_violation!(
+    //     "not a binary operator! assignment op should be handled upstream, so does comma."
+    //   ),
+    // }
   }
 
   fn floating_folding(
@@ -532,98 +498,99 @@ impl Binary {
       .expect("shall be constant")
       .constant;
 
-    macro_rules! arith {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            let res = l $op r;
+    todo!()
 
-            // if inputs were finite but result is infinite  => overflow.
-            if res.is_infinite() && l.is_finite() && r.is_finite() {
-              diag.add_warning(
-                ArithmeticBinOpOverflow(
-                  CL::$variant(l),
-                  CL::$variant(r),
-                  op,
-                ),
-                span,
-              )
-            }
-            // inf with inf
-            if res.is_nan() {
-              diag.add_warning(
-                NotANumber(
-                  CL::$variant(l),
-                  CL::$variant(r),
-                  op,
-                ),
-                span,
-              )
-            }
+    // macro_rules! arith {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         let res = l $op r;
 
-            Success(CL::$variant(res).into())
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
-    use crate::underlying_type_of;
-    macro_rules! logical {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            Success(CL::Int(((l != 0.0) $op (r != 0.0)) as underlying_type_of!(Int)).into())
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    //         // if inputs were finite but result is infinite  => overflow.
+    //         if res.is_infinite() && l.is_finite() && r.is_finite() {
+    //           diag.add_warning(
+    //             ArithmeticBinOpOverflow(
+    //               CL::$variant(l),
+    //               CL::$variant(r),
+    //               op,
+    //             ),
+    //             span,
+    //           )
+    //         }
+    //         // inf with inf
+    //         if res.is_nan() {
+    //           diag.add_warning(
+    //             NotANumber(
+    //               CL::$variant(l),
+    //               CL::$variant(r),
+    //               op,
+    //             ),
+    //             span,
+    //           )
+    //         }
 
-    macro_rules! rel {
-      ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
-        match ($lhs, $rhs) {
-          $( (CL::$variant(l), CL::$variant(r)) => {
-            Success(CL::Int((l $op r) as underlying_type_of!(Int)).into())
-          }, )*
-          _ => {
-            panic!("type checker ensures both sides have the same types! or unimplemented type");
-          }
-        }
-      }
-    }
+    //         Success(CL::$variant(res).into())
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
+    // macro_rules! logical {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         Success(CL::Int(((l != 0.0) $op (r != 0.0)) as underlying_type_of!(Int)).into())
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-    macro_rules! shorthand {
-      ($select:ident, $op:tt) => {
-        $select!(
-          $op, lhs, rhs, Float Double
-        )
-      };
-    }
-    match op {
-      Operator::Plus => shorthand!(arith, +),
-      Operator::Minus => shorthand!(arith, -),
-      Operator::Star => shorthand!(arith, *),
-      // Division by zero for floating-point yields inf or nan, so no need to warn.
-      Operator::Slash => shorthand!(arith, /),
+    // macro_rules! rel {
+    //   ($op:tt, $lhs:ident, $rhs:ident, $($variant:ident)*) => {
+    //     match ($lhs, $rhs) {
+    //       $( (CL::$variant(l), CL::$variant(r)) => {
+    //         Success(CL::Int((l $op r) as underlying_type_of!(Int)).into())
+    //       }, )*
+    //       _ => {
+    //         panic!("type checker ensures both sides have the same types! or unimplemented type");
+    //       }
+    //     }
+    //   }
+    // }
 
-      Operator::And => shorthand!(logical, &&),
-      Operator::Or => shorthand!(logical, ||),
+    // macro_rules! shorthand {
+    //   ($select:ident, $op:tt) => {
+    //     $select!(
+    //       $op, lhs, rhs, Float Double
+    //     )
+    //   };
+    // }
+    // match op {
+    //   Operator::Plus => shorthand!(arith, +),
+    //   Operator::Minus => shorthand!(arith, -),
+    //   Operator::Star => shorthand!(arith, *),
+    //   // Division by zero for floating-point yields inf or nan, so no need to warn.
+    //   Operator::Slash => shorthand!(arith, /),
 
-      Operator::Less => shorthand!(rel, <),
-      Operator::LessEqual => shorthand!(rel, <=),
-      Operator::Greater => shorthand!(rel, >),
-      Operator::GreaterEqual => shorthand!(rel, >=),
-      Operator::EqualEqual => shorthand!(rel, ==),
-      Operator::NotEqual => shorthand!(rel, !=),
+    //   Operator::And => shorthand!(logical, &&),
+    //   Operator::Or => shorthand!(logical, ||),
 
-      _ => contract_violation!(
-        "not a binary operator or bin-op but cannot be applied to floating-point! assignment op should be handled upstream, so does comma."
-      ),
-    }
+    //   Operator::Less => shorthand!(rel, <),
+    //   Operator::LessEqual => shorthand!(rel, <=),
+    //   Operator::Greater => shorthand!(rel, >),
+    //   Operator::GreaterEqual => shorthand!(rel, >=),
+    //   Operator::EqualEqual => shorthand!(rel, ==),
+    //   Operator::NotEqual => shorthand!(rel, !=),
+
+    //   _ => contract_violation!(
+    //     "not a binary operator or bin-op but cannot be applied to floating-point! assignment op should be handled upstream, so does comma."
+    //   ),
+    // }
   }
 }
 
@@ -676,11 +643,12 @@ impl Folding for SizeOf {
   ) -> FoldingResult<Expression> {
     match self.sizeof {
       SizeOfKind::Type(qualified_type) => if qualified_type.size() > 0 {
-        Success(CL::ULongLong(qualified_type.size() as u64))
+        Success(Integral::from_ulong_long(qualified_type.size() as u64))
       } else {
-        Failure(CL::ULongLong(qualified_type.size() as u64))
+        Failure(Integral::from_ulong_long(0))
       }
-      .map(|constant| {
+      .map(Integral::into)
+      .map(|constant: CL| {
         Expression::new(
           constant.into_with(self.span),
           target_type,
@@ -738,9 +706,7 @@ impl Folding for ImplicitCast {
       ArrayToPointerDecay => todo!("address constant"),
       FunctionToPointerDecay => todo!("address constant"),
       NullptrToPointer => match target_type.unqualified_type() {
-        // FIXME: i dont think this is correct
-        Type::Pointer(_) =>
-          Success(RawExpr::Constant(CL::ULongLong(0).into_with(self.span))),
+        Type::Pointer(_) => todo!(),
         _ => contract_violation!("unreachable"),
       },
       IntegralCast => match raw_expr {
@@ -766,8 +732,7 @@ impl Folding for ImplicitCast {
       IntegralToBoolean | FloatingToBoolean => Success(
         raw_expr
           .into_constant_unchecked()
-          .clone() // fixme: why here needs clone?
-          .into_boolean()
+          .to_boolean()
           .into_with(self.span),
       ),
       FloatingCast => todo!(),
@@ -778,20 +743,13 @@ impl Folding for ImplicitCast {
       PointerToIntegral => Failure(raw_expr),
       PointerToBoolean => Failure(raw_expr),
       NullptrToIntegral => match target_type.unqualified_type() {
-        Type::Primitive(p) => match p {
-          Primitive::Int => Success(CL::Int(0)),
-          Primitive::Long => Success(CL::LongLong(0)),
-          Primitive::LongLong => Success(CL::LongLong(0)),
-          Primitive::UInt => Success(CL::UInt(0)),
-          Primitive::ULong => Success(CL::ULongLong(0)),
-          Primitive::ULongLong => Success(CL::ULongLong(0)),
-          _ => contract_violation!("unreachable"),
-        },
+        Type::Primitive(p) =>
+          Success(Integral::new(p.size(), 0, p.is_signed().into()).into()),
         _ => contract_violation!("unreachable"),
       }
-      .map(|c| c.into_with(self.span)),
-      NullptrToBoolean =>
-        Success(CL::Bool(false)).map(|c| c.into_with(self.span)),
+      .map(|c: CL| c.into_with(self.span)),
+      NullptrToBoolean => Success(Integral::from_bool(false).into())
+        .map(|c: CL| c.into_with(self.span)),
     }
     .map(|raw_expr| Expression::new(raw_expr, target_type, value_category))
   }

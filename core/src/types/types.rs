@@ -417,12 +417,25 @@ impl Type {
     Type::Primitive(Primitive::Float)
   }
 
+  pub const fn double() -> Self {
+    Type::Primitive(Primitive::Double)
+  }
+
   pub const fn nullptr() -> Self {
     Type::Primitive(Primitive::Nullptr)
   }
 
   pub const fn char() -> Self {
     Type::Primitive(Primitive::Char)
+  }
+
+  pub fn char_array(length: usize) -> Self {
+    Type::Array(Array {
+      element_type: Box::new(QualifiedType::new_unqualified(
+        Type::Primitive(Primitive::Char).into(),
+      )),
+      size: ArraySize::Constant(length),
+    })
   }
 }
 impl QualifiedType {

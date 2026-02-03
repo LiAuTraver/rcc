@@ -2,7 +2,7 @@ use ::rc_utils::{IntoWith, contract_assert};
 
 use crate::{
   common::{
-    Keyword, Literal,
+    Integral, Keyword, Literal,
     Operator::{self, *},
     OperatorCategory, SourceSpan, Storage, Token, UnitScope,
   },
@@ -191,7 +191,7 @@ impl<'session> Parser<'session> {
   fn recoverable_get<const OP: Operator>(&mut self) {
     if self.peek_lit() != OP {
       self.add_error(
-        UnexpectedCharacter(self.peek_lit().clone(), Some(OP.into())),
+        UnexpectedCharacter((self.peek_lit().clone(), Some(OP.into())).into()),
         *self.peek_loc(),
       );
     } else {
@@ -1136,8 +1136,7 @@ impl<'session> Parser<'session> {
       Literal::Number(num) =>
         Expression::Constant(num.clone().into_with(self.eloc(location))),
       Literal::String(str) => Expression::Constant(
-        ConstantLiteral::StringLiteral(str.clone())
-          .into_with(self.eloc(location)),
+        ConstantLiteral::String(str.clone()).into_with(self.eloc(location)),
       ),
       Literal::Operator(op) =>
         if op.unary() {
@@ -1160,12 +1159,13 @@ impl<'session> Parser<'session> {
           Paren::new(expr, self.eloc(location)).into()
         } else {
           self.add_error(
-            UnexpectedCharacter((*op).into(), None),
+            UnexpectedCharacter(((*op).into(), None).into()),
             self.eloc(location),
           );
           self.get();
           Expression::Constant(
-            ConstantLiteral::Int(0).into_with(self.eloc(location)),
+            ConstantLiteral::Integral(Integral::default())
+              .into_with(self.eloc(location)),
           )
         },
       Literal::Identifier(ident) => {
@@ -1183,10 +1183,12 @@ impl<'session> Parser<'session> {
         Keyword::Alignof => todo!(),
         Keyword::Alignas => todo!(),
         Keyword::True => Expression::Constant(
-          ConstantLiteral::Bool(true).into_with(self.eloc(location)),
+          ConstantLiteral::Integral(Integral::from_bool(true))
+            .into_with(self.eloc(location)),
         ),
         Keyword::False => Expression::Constant(
-          ConstantLiteral::Bool(false).into_with(self.eloc(location)),
+          ConstantLiteral::Integral(Integral::from_bool(false))
+            .into_with(self.eloc(location)),
         ),
         Keyword::Nullptr => Expression::Constant(
           ConstantLiteral::Nullptr(Empty::default())
@@ -1195,11 +1197,12 @@ impl<'session> Parser<'session> {
 
         _ => {
           self.add_error(
-            UnexpectedCharacter(keyword.clone().into(), None),
+            UnexpectedCharacter((keyword.clone().into(), None).into()),
             self.eloc(location),
           );
           Expression::Constant(
-            ConstantLiteral::Int(0).into_with(self.eloc(location)),
+            ConstantLiteral::Integral(Integral::default())
+              .into_with(self.eloc(location)),
           )
         },
       },

@@ -17,3 +17,7 @@ pub use self::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Placeholder;
+
+impl From<Placeholder> for () {
+  fn from(_: Placeholder) -> Self {}
+}
