@@ -1,10 +1,10 @@
 [package]
-name = "rc-core"
+name = "rcc-core"
 version = "0.1.0"
 edition = "2024"
 authors = ["LiAuTraver"]
 license-file = "LICENSE"
-homepage = "https://github.com/LiAuTraver/rc"
+homepage = "https://github.com/LiAuTraver/rcc"
 readme = "README.md"
 
 
@@ -17,7 +17,7 @@ bitflags = "2.10.0"
 paste = "1.0.15"
 thiserror = "2.0.18"
 
-rc-utils = { path = "../utils" }
+rcc-utils = { path = "../utils" }
 
 [lints.clippy]
 needless_pass_by_ref_mut = "warn"

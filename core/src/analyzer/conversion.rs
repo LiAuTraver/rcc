@@ -1,6 +1,6 @@
 #![allow(clippy::double_must_use)]
 
-use ::rc_utils::IntoWith;
+use ::rcc_utils::IntoWith;
 
 use crate::{
   analyzer::expression::{Expression, ImplicitCast},

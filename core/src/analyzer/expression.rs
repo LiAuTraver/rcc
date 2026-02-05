@@ -376,7 +376,7 @@ mod test {
 
   #[test]
   fn int_float() {
-    use ::rc_utils::{Dummy, IntoWith};
+    use ::rcc_utils::{Dummy, IntoWith};
 
     use super::*;
 

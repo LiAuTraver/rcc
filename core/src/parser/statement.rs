@@ -1,4 +1,4 @@
-use ::rc_utils::interconvert;
+use ::rcc_utils::interconvert;
 
 use super::{declaration::Declaration, expression::Expression};
 use crate::type_alias_stmt;
@@ -47,7 +47,7 @@ impl ::std::default::Default for Statement {
   }
 }
 mod fmt {
-  use ::rc_utils::static_dispatch;
+  use ::rcc_utils::static_dispatch;
   use ::std::fmt::Display;
 
   use super::Statement;

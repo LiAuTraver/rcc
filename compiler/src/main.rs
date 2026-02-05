@@ -1,11 +1,11 @@
-use ::rc_core::{
+use ::rcc_core::{
   analyzer::Analyzer,
   common::SourceManager,
   diagnosis::{Diagnosis, Session},
   lexer::Lexer,
   parser::Parser,
 };
-use ::rc_utils::DisplayWith;
+use ::rcc_utils::DisplayWith;
 enum Stage {
   Lex,
   Parse,
@@ -20,7 +20,7 @@ fn main() {
     [_] => ("all", "test.c"),
     [_, kind, filename] => (kind.as_str(), filename.as_str()),
     _ => {
-      eprintln!("Usage: rc [all|lex|parse] <filename>");
+      eprintln!("Usage: rcc [all|lex|parse] <filename>");
       ::std::process::exit(1);
     },
   };
@@ -49,7 +49,7 @@ fn pipeline(
   source_manager: &mut SourceManager,
   stage: Stage,
   pretty_print: bool,
-) {
+) -> i32 {
   let content = &source_manager.files.first().unwrap().source;
   let session = Session::default();
   let mut lexer = Lexer::new(content, &session);
@@ -71,11 +71,11 @@ fn pipeline(
       .errors()
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
-    ::std::process::exit(1);
+    return 1;
   }
   if let Stage::Lex = stage {
     println!("Lex succeeded.");
-    return;
+    return 0;
   }
   let session = Session::default();
   let mut parser = Parser::new(tokens, &session);
@@ -96,14 +96,14 @@ fn pipeline(
       .errors()
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
-    ::std::process::exit(1);
+    return 1;
   }
   if let Stage::Parse = stage {
     if pretty_print {
       println!("{:#?}", program);
     }
     println!("Parse succeeded.");
-    return;
+    return 0;
   }
   assert!(matches!(stage, Stage::Analyze));
   let session = Session::default();
@@ -124,7 +124,7 @@ fn pipeline(
       .errors()
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(source_manager)));
-    ::std::process::exit(1);
+    return 1;
   }
   if pretty_print {
     println!("{:#?}", translation_unit);
@@ -132,6 +132,7 @@ fn pipeline(
   println!("{translation_unit}");
 
   println!("Analyze succeeded.");
+  0
 }
 
 #[cfg(test)]
@@ -153,26 +154,78 @@ mod test {
   #[test]
   fn t1() {
     let s = r#"
-void f2(int a[][5]);
-void f2(int a[][10]); // ERROR: 'int(*)[5]' vs 'int(*)[10]'
+int *normal_ptr;
+const int *ptr_to_const;
+int const *ptr_to_const2;
+int *const const_ptr;
+const int *const const_ptr_to_const;
+
+int **ptr_to_ptr;
+int *const *ptr_to_const_ptr;
+int **const const_ptr_to_ptr;
+const int **ptr_to_ptr_to_const;
+int *const *const const_ptr_to_const_ptr;
+const int **const const_ptr_to_ptr_to_const;
+const int *const *ptr_to_const_ptr_to_const;
+const int *const *const const_ptr_to_const_ptr_to_const;
+
+// well, if this passed parsing, it might be... ok ig
+static const volatile int **const *const
+    *volatile volatile_ptr_to_very_const_ptr_to_very_const_ptr;
+// func ptr test
+extern int j;
+static int j = 0;
+extern int j;
+int j;
+
 "#;
     test_str(s);
   }
   #[test]
   fn t2() {
-    let s = "int (*func_ptr)(int, int);";
-    test_str(s);
+    let s = r#"
+int main(int argc, char **argv) { //
+  goto label;
+  {
+  label:;
+    int k = foo(0);
+  }
+  int f(int, int);
+  typedef int const CONST_INT;
+  INT x = sizeof(char);
+  typedef int const CONST_INT;
+  int foo;
+  CONST_INT(INT) = (10);
+  static int y = sizeof x;
+  switch (x) {
+  case 3.0 / 5.0: // case expr shall be integral constant expression
+  case 2147483647 + 1: // overflow test
+    y = y + 1;
+    x = x + 1;
+    break;
+  default:
+    y = y + 2;
+  }
+  for (int i = 0; i < 10; i = i + 1) { // my parser can't handle += and ++
+    y = y + i;
+    continue;
+  }
+  const int a = 2.0 / 3;
+  return f(2, 3);
+}
+    "#;
+    assert_eq!(test_str(s), 1);
   }
   #[test]
   fn t3() {
     let s = "const unsigned a = 1.0/0.9f;";
     let mut source_manager = SourceManager::default();
     source_manager.add_string(s.into());
-    pipeline(&mut source_manager, Stage::Analyze, true);
+    assert_eq!(pipeline(&mut source_manager, Stage::Analyze, true), 0);
   }
-  fn test_str(source: &str) {
+  fn test_str(source: &str) -> i32 {
     let mut source_manager = SourceManager::default();
     source_manager.add_string(source.into());
-    pipeline(&mut source_manager, Stage::Analyze, true);
+    pipeline(&mut source_manager, Stage::Analyze, true)
   }
 }

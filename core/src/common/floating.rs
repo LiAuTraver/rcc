@@ -1,4 +1,4 @@
-use ::rc_utils::{
+use ::rcc_utils::{
   BuiltinFloat, NumTo, ToI128, ToU128, static_assert, underlying_type_of,
 };
 
@@ -41,7 +41,7 @@ impl ::std::fmt::Display for Floating {
   }
 }
 impl Floating {
-  pub fn new<T: ::rc_utils::ToU128>(bits: T, format: Format) -> Self {
+  pub fn new<T: ::rcc_utils::ToU128>(bits: T, format: Format) -> Self {
     Self {
       bits: bits.to_u128(),
       format,

@@ -1,4 +1,4 @@
-use ::rc_utils::{IntoWith, contract_assert};
+use ::rcc_utils::{IntoWith, contract_assert};
 
 use crate::{
   common::{
@@ -641,7 +641,7 @@ impl<'session> Parser<'session> {
         self.eloc(location),
       );
       self.must_get_op::<{ Colon }>();
-      Expression::Empty(Empty::default())
+      Expression::default()
     } else {
       let expr = self.next_expression(Operator::DEFAULT);
       self.recoverable_get::<{ Colon }>();
@@ -677,7 +677,16 @@ impl<'session> Parser<'session> {
       Literal::Operator(Assign) => {
         self.must_get_op::<{ Assign }>();
         let initializer = self.next_expression(Operator::DEFAULT);
-        assert_eq!(*self.peek_lit(), Literal::Operator(Semicolon));
+        // assert_eq!(*self.peek_lit(), Literal::Operator(Semicolon));
+        if *self.peek_lit() != Semicolon {
+          eprintln!(
+            "invariant: shall be ';' here. found: {:?}",
+            self.peek_lit()
+          );
+          while self.peek_lit() != Semicolon && !self.is_at_end() {
+            self.get();
+          }
+        }
         self.must_get_op::<{ Semicolon }>();
         Some(initializer)
       },
@@ -1013,14 +1022,14 @@ impl<'session> Parser<'session> {
         self.add_error(LabelNotWithinSwitch(Keyword::Case), *self.peek_loc());
         // attempt to recover
         _ = self.parse_case();
-        Statement::Empty(Empty::default())
+        Statement::default()
       },
       Literal::Keyword(Keyword::Default) => {
         self
           .add_error(LabelNotWithinSwitch(Keyword::Default), *self.peek_loc());
         // ditto
         _ = self.parse_default();
-        Statement::Empty(Empty::default())
+        Statement::default()
       },
       Literal::Keyword(Keyword::Goto) => self.next_gotostmt(),
       Literal::Keyword(_) => self.next_declaration().into(),
@@ -1040,7 +1049,7 @@ impl<'session> Parser<'session> {
     // 2. label can only jump to statements within the same function, not to mention cross file.
     if self.typedefs.is_top_level() {
       self.add_error(TopLevelLabel, location);
-      Statement::Empty(Empty::default())
+      Statement::default()
     } else {
       self.get(); // consume ident
       self.must_get_op::<{ Colon }>();
@@ -1063,13 +1072,13 @@ impl<'session> Parser<'session> {
       self.add_error(MissingLabelAfterGoto, self.eloc(location));
       // assume the label is missing, continue parsing
       self.silent_get_if::<{ Semicolon }>();
-      Statement::Empty(Empty::default())
+      Statement::default()
     }
   }
 
   fn next_emptystmt(&mut self) -> Statement {
     self.must_get_op::<{ Semicolon }>();
-    Statement::Empty(Empty::default())
+    Statement::default()
   }
 
   fn next_exprstmt(&mut self) -> Expression {
@@ -1264,19 +1273,14 @@ impl<'session> Parser<'session> {
               operator.precedence() + 1
             },
           );
-          current = Binary::from_operator_unchecked(
-            operator,
-            current,
-            right,
-            self.eloc(location),
-          )
-          .into();
+          current =
+            Binary::new(operator, current, right, self.eloc(location)).into();
           continue;
         } else if op == Question {
           self.must_get_op::<{ Question }>();
           let then_branch = self.next_expression(Operator::DEFAULT);
           self.recoverable_get::<{ Colon }>();
-          let else_branch = self.next_expression(Operator::TERNARY);
+          let else_branch = self.next_expression(Operator::DEFAULT);
           current = Ternary::new(
             current,
             then_branch,

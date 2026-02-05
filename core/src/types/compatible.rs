@@ -1,5 +1,5 @@
 #![allow(unused)]
-use ::rc_utils::breakpoint;
+use ::rcc_utils::breakpoint;
 
 use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, QualifiedType,

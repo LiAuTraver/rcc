@@ -1,4 +1,4 @@
-use ::rc_utils::{Dummy, IntoWith};
+use ::rcc_utils::{Dummy, IntoWith};
 
 use crate::{
   analyzer::expression::{Binary, ConstantLiteral, Expression},

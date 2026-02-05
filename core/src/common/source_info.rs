@@ -1,4 +1,4 @@
-use ::rc_utils::{DisplayWith, static_assert};
+use ::rcc_utils::{DisplayWith, static_assert};
 use ::std::path::PathBuf;
 
 pub trait Display<'a, DisplayHelperType: ::std::fmt::Display>:
@@ -41,7 +41,7 @@ impl Span {
   }
 }
 #[cfg(debug_assertions)]
-use ::rc_utils::Dummy;
+use ::rcc_utils::Dummy;
 #[cfg(debug_assertions)]
 impl Dummy for Span {
   #[inline(always)]

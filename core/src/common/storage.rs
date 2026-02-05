@@ -1,4 +1,4 @@
-use ::rc_utils::IntoWith;
+use ::rcc_utils::IntoWith;
 
 use super::{Keyword, Literal};
 use crate::diagnosis::{DiagData, DiagMeta, Severity};

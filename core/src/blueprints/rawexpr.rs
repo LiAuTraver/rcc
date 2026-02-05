@@ -1,4 +1,4 @@
-use ::rc_utils::IntoWith;
+use ::rcc_utils::IntoWith;
 
 use crate::{
   common::{Operator, SourceSpan},
@@ -71,45 +71,45 @@ macro_rules! type_alias_expr {
     mod cvtrawexpr {
       use super::*;
 
-      ::rc_utils::interconvert!(Empty, RawExpr);
-      ::rc_utils::interconvert!(Constant, RawExpr);
-      ::rc_utils::interconvert!(Unary, RawExpr);
-      ::rc_utils::interconvert!(Binary, RawExpr);
-      ::rc_utils::interconvert!(Call, RawExpr);
-      ::rc_utils::interconvert!(Paren, RawExpr);
-      ::rc_utils::interconvert!(MemberAccess, RawExpr);
-      ::rc_utils::interconvert!(Ternary, RawExpr);
-      ::rc_utils::interconvert!(SizeOf, RawExpr);
-      ::rc_utils::interconvert!(CStyleCast, RawExpr);
-      ::rc_utils::interconvert!(ArraySubscript, RawExpr);
-      ::rc_utils::interconvert!(CompoundLiteral, RawExpr);
+      ::rcc_utils::interconvert!(Empty, RawExpr);
+      ::rcc_utils::interconvert!(Constant, RawExpr);
+      ::rcc_utils::interconvert!(Unary, RawExpr);
+      ::rcc_utils::interconvert!(Binary, RawExpr);
+      ::rcc_utils::interconvert!(Call, RawExpr);
+      ::rcc_utils::interconvert!(Paren, RawExpr);
+      ::rcc_utils::interconvert!(MemberAccess, RawExpr);
+      ::rcc_utils::interconvert!(Ternary, RawExpr);
+      ::rcc_utils::interconvert!(SizeOf, RawExpr);
+      ::rcc_utils::interconvert!(CStyleCast, RawExpr);
+      ::rcc_utils::interconvert!(ArraySubscript, RawExpr);
+      ::rcc_utils::interconvert!(CompoundLiteral, RawExpr);
       $(
-        ::rc_utils::interconvert!($extra, RawExpr);
+        ::rcc_utils::interconvert!($extra, RawExpr);
       )*
 
-      ::rc_utils::make_trio_for!(Empty, RawExpr);
-      ::rc_utils::make_trio_for!(Constant, RawExpr);
-      ::rc_utils::make_trio_for!(Unary, RawExpr);
-      ::rc_utils::make_trio_for!(Binary, RawExpr);
-      ::rc_utils::make_trio_for!(Call, RawExpr);
-      ::rc_utils::make_trio_for!(Paren, RawExpr);
-      ::rc_utils::make_trio_for!(MemberAccess, RawExpr);
-      ::rc_utils::make_trio_for!(Ternary, RawExpr);
-      ::rc_utils::make_trio_for!(SizeOf, RawExpr);
-      ::rc_utils::make_trio_for!(CStyleCast, RawExpr);
-      ::rc_utils::make_trio_for!(ArraySubscript, RawExpr);
-      ::rc_utils::make_trio_for!(CompoundLiteral, RawExpr);
+      ::rcc_utils::make_trio_for!(Empty, RawExpr);
+      ::rcc_utils::make_trio_for!(Constant, RawExpr);
+      ::rcc_utils::make_trio_for!(Unary, RawExpr);
+      ::rcc_utils::make_trio_for!(Binary, RawExpr);
+      ::rcc_utils::make_trio_for!(Call, RawExpr);
+      ::rcc_utils::make_trio_for!(Paren, RawExpr);
+      ::rcc_utils::make_trio_for!(MemberAccess, RawExpr);
+      ::rcc_utils::make_trio_for!(Ternary, RawExpr);
+      ::rcc_utils::make_trio_for!(SizeOf, RawExpr);
+      ::rcc_utils::make_trio_for!(CStyleCast, RawExpr);
+      ::rcc_utils::make_trio_for!(ArraySubscript, RawExpr);
+      ::rcc_utils::make_trio_for!(CompoundLiteral, RawExpr);
       $(
-        ::rc_utils::make_trio_for!($extra, RawExpr);
+        ::rcc_utils::make_trio_for!($extra, RawExpr);
       )*
 
-      impl ::rc_utils::IntoWith<SourceSpan, RawExpr> for ConstantLiteral {
+      impl ::rcc_utils::IntoWith<SourceSpan, RawExpr> for ConstantLiteral {
         fn into_with(self, span: SourceSpan) -> RawExpr {
           RawExpr::Constant(self.into_with(span))
         }
       }
 
-      impl ::rc_utils::IntoWith<SourceSpan, RawExpr> for SizeOfKind {
+      impl ::rcc_utils::IntoWith<SourceSpan, RawExpr> for SizeOfKind {
         fn into_with(self, span: SourceSpan) -> RawExpr {
           RawExpr::SizeOf(self.into_with(span))
         }
@@ -142,7 +142,7 @@ macro_rules! type_alias_expr {
       }
     }
 
-    ::rc_utils::static_assert!(
+    ::rcc_utils::static_assert!(
       ::std::mem::size_of::<RawExpr>() <= 64,
       "RawExpr size exceeds 64 bytes",
     );
@@ -296,13 +296,15 @@ impl<ExprTy> RawBinary<ExprTy> {
     }
   }
 
+  #[inline]
   pub fn new(
     operator: Operator,
     left: ExprTy,
     right: ExprTy,
     span: SourceSpan,
   ) -> Self {
-    Self::from_operator(operator, left, right, span).unwrap()
+    Self::from_operator(operator, left, right, span)
+      .expect("not a binary operator! use `from_operator` instead")
   }
 }
 impl<ExprTy> RawTernary<ExprTy> {

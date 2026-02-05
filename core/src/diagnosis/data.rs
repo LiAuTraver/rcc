@@ -10,8 +10,8 @@
 //!
 //! A [`Data`] can be easily converted into a [`Meta`] with a given [`Severity`], like
 //! ```rust
-//! use ::rc_utils::IntoWith;
-//! use ::rc_core::diagnosis::{Data, Meta, Severity};
+//! use ::rcc_utils::IntoWith;
+//! use ::rcccore::diagnosis::{Data, Meta, Severity};
 //! let data = Data::MissingIdentifier("after type specifier".to_string());
 //! let meta: Meta = data.into_with(Severity::Error);
 //! let diag = meta.into_with(Default::default()); // default span
@@ -51,7 +51,7 @@ pub enum Severity {
   Error,
 }
 
-use ::rc_utils::{DisplayWith, IntoWith, static_assert};
+use ::rcc_utils::{DisplayWith, IntoWith, static_assert};
 
 use crate::{
   common::{Keyword, Literal, Operator, SourceManager, SourceSpan, Storage},

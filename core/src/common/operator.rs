@@ -131,10 +131,14 @@ impl Operator {
   /// when parsing function call arguments or functiondecl, use this to stop at ',' or ')'
   pub const EXCOMMA: u8 = 0x04;
   /// use this to stop before `:`, excluding the `,` in ternary operator
+  #[deprecated(note = "Based on the clang AST output, the precedence level \
+                       for `? :` is lower than that of `,`. That is, `0 ? 1, \
+                       2 : 3` is parsed as `0 ? (1, 2) : 3`. Use DEFAULT \
+                       instead.")]
   pub const TERNARY: u8 = 0x06;
 }
 impl Operator {
-  pub fn unary(&self) -> bool {
+  pub const fn unary(&self) -> bool {
     matches!(
       self,
       // arithmetic
@@ -147,13 +151,13 @@ impl Operator {
       // dereference and address-of
         | Star
         | Ampersand
-      // increment and decrement
+      // increment and decrement -- PREFIX only.
         | PlusPlus
         | MinusMinus
     )
   }
 
-  pub fn binary(&self) -> bool {
+  pub const fn binary(&self) -> bool {
     matches!(
       self,
       Star
@@ -179,8 +183,13 @@ impl Operator {
     ) || self.assignment()
   }
 
+  /// note: [`LeftBracket`], [`LeftParen`] are **not** considered postfix here.
+  pub const fn postfix(&self) -> bool {
+    matches!(self, PlusPlus | MinusMinus | Dot | Arrow)
+  }
+
   // left-.
-  pub fn precedence(&self) -> u8 {
+  pub const fn precedence(&self) -> u8 {
     debug_assert!(self.binary(), "precedence called on non-binary operator");
     match self {
       // multiplicative
@@ -211,7 +220,9 @@ impl Operator {
       And => 0x10,
       // logical OR
       Or => 0x08,
-      // Question mark: 0x06,
+
+      // Question mark: 0x06, DEPRECATED: not needed, see `TERNARY` doc.
+
       // assignment - it's a trick since it's mostly right associative
       _ if self.assignment() => 0x04,
       // comma operator
@@ -239,7 +250,7 @@ pub enum Category {
   Comma,
 }
 impl Operator {
-  pub fn category(&self) -> Category {
+  pub const fn category(&self) -> Category {
     match self {
       And | Or | Not => Category::Logical,
 
@@ -261,7 +272,7 @@ impl Operator {
     }
   }
 
-  pub fn assignment(&self) -> bool {
+  pub const fn assignment(&self) -> bool {
     matches!(
       self,
       Assign
@@ -278,7 +289,7 @@ impl Operator {
     )
   }
 
-  pub fn is_arithmetic(&self) -> bool {
+  pub const fn is_arithmetic(&self) -> bool {
     matches!(self, Plus | Minus | Star | Slash | Percent)
   }
 }

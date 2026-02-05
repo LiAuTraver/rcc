@@ -45,28 +45,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "rc"
+name = "rcc"
 version = "0.1.0"
 dependencies = [
- "rc-core",
- "rc-utils",
+ "rcc-core",
+ "rcc-utils",
 ]
 
 [[package]]
-name = "rc-core"
+name = "rcc-core"
 version = "0.1.0"
 dependencies = [
  "bitflags",
  "once_cell",
  "paste",
- "rc-utils",
+ "rcc-utils",
  "strum",
  "strum_macros",
  "thiserror",
 ]
 
 [[package]]
-name = "rc-utils"
+name = "rcc-utils"
 version = "0.1.0"
 dependencies = [
  "paste",

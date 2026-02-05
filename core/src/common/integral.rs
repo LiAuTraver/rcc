@@ -1,4 +1,4 @@
-use ::rc_utils::{
+use ::rcc_utils::{
   BuiltinFloat, BuiltinIntegerOrBoolean, NumFrom, NumTo, ToU128,
   signed_type_of, static_assert,
 };

@@ -1,4 +1,4 @@
-use ::rc_utils::{
+use ::rcc_utils::{
   IntoWith, contract_assert, contract_violation, not_implemented_feature,
 };
 

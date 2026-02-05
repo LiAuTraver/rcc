@@ -1,12 +1,12 @@
 [package]
-name = "rc"
+name = "rcc"
 version = "0.1.0"
 edition = "2024"
 authors = ["LiAuTraver"]
 license-file = "LICENSE"
-homepage = "https://github.com/LiAuTraver/rc"
+homepage = "https://github.com/LiAuTraver/rcc"
 readme = "README.md"
 
 [dependencies]
-rc-core = { path = "../core" }
-rc-utils = { path = "../utils" }
+rcc-core = { path = "../core" }
+rcc-utils = { path = "../utils" }

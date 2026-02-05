@@ -1,4 +1,4 @@
-use ::rc_utils::static_dispatch;
+use ::rcc_utils::static_dispatch;
 
 use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, Primitive::*,

@@ -8,16 +8,16 @@
       "type": "lldb",
       "request": "launch",
       // codelldb provide better support as for breakpoint
-      "name": "codelldb debug rc",
+      "name": "codelldb debug rcc",
       "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/target/debug/rc.exe",
+      "program": "${workspaceFolder}/target/debug/rcc.exe",
       "preLaunchTask": "rust: cargo build",
       "cargo": {
         "args": [
           "build"
         ],
         "filter": {
-          "name": "rc",
+          "name": "rcc",
           "kind": "bin"
         }
       },
@@ -31,9 +31,9 @@
       "type": "lldb-dap",
       "request": "launch",
       // lldb-dap is more friendly as for debug console
-      "name": "lldb-dap debug rc",
+      "name": "lldb-dap debug rcc",
       "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/target/debug/rc.exe",
+      "program": "${workspaceFolder}/target/debug/rcc.exe",
       "preLaunchTask": "rust: cargo build",
       "console": "internalConsole",
       "stopOnEntry": false,

@@ -1,4 +1,4 @@
-use ::rc_utils::static_dispatch;
+use ::rcc_utils::static_dispatch;
 use ::std::fmt::Display;
 
 use super::{
