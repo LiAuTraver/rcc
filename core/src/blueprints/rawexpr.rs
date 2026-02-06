@@ -1,3 +1,7 @@
+//! likely a sophisticated version of the Two-Level Types described in
+//! [this article](https://blog.ezyang.com/2013/05/the-ast-typing-problem/),
+//! I probably used the Parametric Polymorphism to "tie the knot" of recursion.
+
 use ::rcc_utils::IntoWith;
 
 use crate::{
@@ -8,12 +12,10 @@ use crate::{
 #[macro_export(local_inner_macros)]
 macro_rules! type_alias_expr {
   ($exprty:ident, $typety:ident, $($extra:ident)*) => {
-    /// likely a sophisticated version of the Two-Level Types described in
-    /// [this article](https://blog.ezyang.com/2013/05/the-ast-typing-problem/),
-    /// I probably used the Parametric Polymorphism to "tie the knot" of recursion.
     #[derive(Debug)]
     pub enum RawExpr {
-      Empty(Empty), // no-op for error recovery; for empty expr should use Option<ExprTy> instead
+      // no-op for error recovery; for empty expr should use Option<ExprTy> instead
+      Empty(Empty),
       Constant(Constant),
       Unary(Unary),
       Binary(Binary),
@@ -22,9 +24,9 @@ macro_rules! type_alias_expr {
       MemberAccess(MemberAccess),
       Ternary(Ternary),
       SizeOf(SizeOf),
-      CStyleCast(CStyleCast),                     // (int)x
-      ArraySubscript(ArraySubscript), // arr[i]
-      CompoundLiteral(CompoundLiteral), // (struct Point){.x=1, .y=2}
+      CStyleCast(CStyleCast),
+      ArraySubscript(ArraySubscript),
+      CompoundLiteral(CompoundLiteral),
       $(
         // Generate a variant for each extra type
         $extra($extra),
@@ -51,22 +53,13 @@ macro_rules! type_alias_expr {
 
     mod fmtrawexpr {
       use super::*;
-      use ::std::fmt::Display;
-      impl Display for RawExpr {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-          match self {
-            RawExpr::Constant(c) => <Constant as Display>::fmt(c, f),
-            RawExpr::Unary(u) => <Unary as Display>::fmt(u, f),
-            RawExpr::Binary(b) => <Binary as Display>::fmt(b, f),
-            RawExpr::Ternary(t) => <Ternary as Display>::fmt(t, f),
-            RawExpr::Call(call) => <Call as Display>::fmt(call, f),
-            RawExpr::Paren(p) => <Paren as Display>::fmt(p, f),
-            RawExpr::Empty(_) => ::std::write!(f, "<noop>"),
-            $(
-              RawExpr::$extra(inner) => <$extra as Display>::fmt(inner, f),
-            )*
-            _ => ::std::todo!(),
-          }
+      impl ::std::fmt::Display for RawExpr {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+          ::rcc_utils::static_dispatch!(
+            self.fmt(f),
+            Empty Constant Unary Binary Variable Call Paren MemberAccess Ternary SizeOf CStyleCast ArraySubscript CompoundLiteral
+            $($extra)*
+          )
         }
       }
     }
@@ -453,7 +446,7 @@ mod fmt {
   // noop display impl for the rest
   impl<ExprTy: Display> Display for RawArraySubscript<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "<array subscript>")
+      write!(f, "(({})[{}])", self.array, self.index)
     }
   }
   impl Display for RawCompoundLiteral {

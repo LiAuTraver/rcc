@@ -287,6 +287,9 @@ impl Folding for Binary {
       self.operator.binary(),
       "not a binary operator! should not happen!"
     );
+    // TODO: logical && and || should be short-circuit evaluated,
+    // so that `static const int j = 0 && x;` would pass constant folding,
+    // while `static const int j = 0 || x;` would not.
     let fl = self.left.fold(diag);
     let fr = self.right.fold(diag);
     let (folded_lhs, folded_rhs) =
@@ -305,6 +308,7 @@ impl Folding for Binary {
         ));
       };
     if self.operator == Operator::Comma {
+      diag.add_warning(LeftCommaNoEffect, self.span);
       return Success(Expression::new(
         folded_rhs.destructure().0,
         target_type,
@@ -322,7 +326,7 @@ impl Folding for Binary {
        `ImplicitCast`! {:#?} vs {:#?}, op {:#?}",
       folded_lhs.qualified_type(),
       folded_rhs.qualified_type(),
-        self.operator
+      self.operator
     );
     let (lhs_expr, lhs_type, lhs_value_category) = folded_lhs.destructure();
     let (rhs_expr, rhs_type, rhs_value_category) = folded_rhs.destructure();
@@ -415,27 +419,31 @@ impl Folding for Ternary {
       "type checker ensures both branches have compatible types!"
     );
     let fc = self.condition.fold(diag);
-    let ft = self.then_expr.fold(diag);
-    let fe = self.else_expr.fold(diag);
-
-    let is_success =
-      matches!((&fc, &ft, &fe), (Success(_), Success(_), Success(_)));
-
-    let expr = Expression::new(
-      Self {
-        condition: fc.unwrap().into(),
-        then_expr: ft.unwrap().into(),
-        else_expr: fe.unwrap().into(),
-        ..self
-      }
-      .into(),
-      target_type,
-      value_category,
-    );
-
-    match is_success {
-      true => Success(expr),
-      false => Failure(expr),
+    match fc {
+      Success(folded_condition) => {
+        match folded_condition
+          .raw_expr()
+          .as_constant_unchecked()
+          .constant
+          .is_zero()
+        {
+          true => self.else_expr.fold(diag),
+          false => self.then_expr.fold(diag),
+        }
+      },
+      Failure(_) => fc.map(|folded_condition| {
+        Expression::new(
+          Self {
+            condition: folded_condition.into(),
+            then_expr: self.then_expr.fold(diag).unwrap().into(),
+            else_expr: self.else_expr.fold(diag).unwrap().into(),
+            ..self
+          }
+          .into(),
+          target_type,
+          value_category,
+        )
+      }),
     }
   }
 }
@@ -539,7 +547,7 @@ impl Folding for ImplicitCast {
           )
         }
         .map(|c: CL| c.into_with(self.span)),
-        _ => contract_violation!("unreachable"),
+        _ => contract_violation!("unreachable: {:?}", raw_expr),
       },
       // integral are promoted previously.
       IntegralToFloating => Success(

@@ -8,13 +8,15 @@ typedef int const CONST_INT;
 int (*func_ptr)(INT, CONST_INT);
 int func(INT a, CONST_INT b) { return a + b; }
 inline static int foo(int a) { return a + 1; }
-int p = 0 ? 1, 0 : 2;
+long int p = 0 && 9 ? 1, 0 : 2;
 int f(int i, int j) {
-  // k[0] = i + j;
+  k[p] = i + j;
   p++;
   p += 9;
   // 1 ++;
-  func_ptr &&func_ptr;
+  int *ptr;
+  ptr = ptr + 4;
+  // ptr += 4;
   int k = i + j;
   k = foo(0);
 

@@ -175,7 +175,7 @@ pub struct Enum {
 }
 
 impl QualifiedType {
-  pub fn new(qualifiers: Qualifiers, unqualified_type: Rc<Type>) -> Self {
+  pub const fn new(qualifiers: Qualifiers, unqualified_type: Rc<Type>) -> Self {
     Self {
       qualifiers,
       unqualified_type,
@@ -193,8 +193,9 @@ impl QualifiedType {
     Self::new_unqualified(Type::void().into())
   }
 
-  pub fn bool() -> Self {
-    Self::new_unqualified(Type::bool().into())
+  /// Currently it returns an [`Primitive::Int`] instead of [`Primitive::Bool`].
+  pub fn bool_type() -> Self {
+    Self::new_unqualified(Type::bool_type().into())
   }
 
   pub fn int() -> Self {
@@ -213,8 +214,8 @@ impl QualifiedType {
     Self::new_unqualified(Type::uintptr().into())
   }
 
-  pub fn intptr() -> Self {
-    Self::new_unqualified(Type::intptr().into())
+  pub fn ptrdiff() -> Self {
+    Self::new_unqualified(Type::ptrdiff().into())
   }
 
   pub fn char() -> Self {
@@ -408,8 +409,9 @@ impl Type {
     Type::Primitive(Primitive::Void)
   }
 
-  pub const fn bool() -> Self {
-    Type::Primitive(Primitive::Bool)
+  pub const fn bool_type() -> Self {
+    // Type::Primitive(Primitive::Bool)
+    Self::int()
   }
 
   pub const fn int() -> Self {
@@ -432,7 +434,7 @@ impl Type {
     Type::Primitive(Primitive::ULongLong)
   }
 
-  pub const fn intptr() -> Self {
+  pub const fn ptrdiff() -> Self {
     Type::Primitive(Primitive::LongLong)
   }
 

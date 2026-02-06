@@ -218,7 +218,7 @@ int main(int argc, char **argv) { //
   }
   #[test]
   fn t3() {
-    let s = "const unsigned a = 1.0/0.9f;";
+    let s = "long int p = 0 && 8 ? 1, 0 : 2;";
     let mut source_manager = SourceManager::default();
     source_manager.add_string(s.into());
     assert_eq!(pipeline(&mut source_manager, Stage::Analyze, true), 0);

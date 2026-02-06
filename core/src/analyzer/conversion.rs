@@ -196,6 +196,55 @@ impl Expression {
       pointer_type.into(),
     )
   }
+
+  /// I didnt find this in C standard, but it's a handy conversion for pointer arithmetic with numeric types (e.g. `ptr + 1`).
+  #[must_use]
+  #[inline]
+  pub fn uintptr_conversion(self) -> Result<Self, Diag> {
+    debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
+    debug_assert!(
+      !matches!(
+        self.unqualified_type(),
+        Type::FunctionProto(_) | Type::Array(_)
+      ),
+      "perform decay first"
+    );
+    if !self.unqualified_type().is_integer() {
+      Err(
+        InvalidConversion(
+          "pointer conversion only applies to integer types".to_string(),
+        )
+        .into_with(Severity::Error)
+        .into_with(self.span()),
+      )
+    } else {
+      Ok(Self::uintptr_conversion_unchecked(self))
+    }
+  }
+
+  #[must_use]
+  #[inline]
+  pub fn ptrdiff_conversion(self) -> Result<Self, Diag> {
+    debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
+    debug_assert!(
+      !matches!(
+        self.unqualified_type(),
+        Type::FunctionProto(_) | Type::Array(_)
+      ),
+      "perform decay first"
+    );
+    if !self.unqualified_type().is_integer() {
+      Err(
+        InvalidConversion(
+          "pointer conversion only applies to integer types".to_string(),
+        )
+        .into_with(Severity::Error)
+        .into_with(self.span()),
+      )
+    } else {
+      Ok(Self::ptrdiff_conversion_unchecked(self))
+    }
+  }
 }
 // unchecked version is requireds to use w.r.t. `&`, `sizeof`, `alignof`, etc.
 impl Expression {
@@ -303,18 +352,19 @@ impl Expression {
     let span = self.span();
 
     match self.unqualified_type() {
-      Type::Primitive(Primitive::Bool) => Ok(self),
+      Type::Primitive(Primitive::Bool) =>
+        Ok(Self::cast_if_needed(self, &QualifiedType::bool_type())),
       Type::Primitive(p) if p.is_integer() =>
-        Ok(self.cast_if_needed(&QualifiedType::int())),
+        Ok(self.cast_if_needed(&QualifiedType::bool_type())),
       Type::Primitive(p) if p.is_floating_point() => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::FloatingToIntegral, span)
           .into(),
-        QualifiedType::int(),
+        QualifiedType::bool_type(),
       )),
       Type::Primitive(Primitive::Nullptr) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::NullptrToIntegral, span)
           .into(),
-        QualifiedType::int(),
+        QualifiedType::bool_type(),
       )),
       Type::Primitive(Primitive::Void) => Err(
         InvalidConversion(
@@ -335,7 +385,7 @@ impl Expression {
       Type::Pointer(_) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::PointerToIntegral, span)
           .into(),
-        QualifiedType::int(),
+        QualifiedType::bool_type(),
       )),
 
       Type::Array(array) => panic!(
@@ -407,8 +457,25 @@ impl Expression {
       ),
     }
   }
+
+  #[must_use]
+  pub(super) fn uintptr_conversion_unchecked(self) -> Self {
+    debug_assert!(self.unqualified_type().is_integer());
+    let cast_type =
+      Self::get_cast_type(self.unqualified_type(), &Type::uintptr());
+    Self::maybe_cast(self, cast_type, &Type::uintptr().into())
+  }
+
+  #[must_use]
+  pub(super) fn ptrdiff_conversion_unchecked(self) -> Self {
+    debug_assert!(self.unqualified_type().is_integer());
+    let cast_type =
+      Self::get_cast_type(self.unqualified_type(), &Type::ptrdiff());
+    Self::maybe_cast(self, cast_type, &Type::ptrdiff().into())
+  }
 }
 
+/// Heplers.
 impl Expression {
   #[must_use]
   fn get_cast_type(from: &Type, to: &Type) -> CastType {

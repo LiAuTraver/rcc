@@ -20,7 +20,7 @@ use crate::{
   parser::{declaration as pd, expression as pe, statement as ps},
   types::{
     Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
-    Primitive, QualifiedType, Qualifiers, Type, TypeInfo,
+    Primitive, QualifiedType, Type, TypeInfo,
   },
 };
 
@@ -803,7 +803,7 @@ impl<'session> Analyzer<'session> {
               .inspect_error(|e| {
                 self.add_error(
                   ExprNotConstant(format!(
-                    "Expression {e} cannot resolved to a constant value"
+                    "Expression {e} cannot be evaluated to a constant value"
                   )),
                   e.span(),
                 );
@@ -1140,8 +1140,40 @@ impl<'session> Analyzer<'session> {
     todo!()
   }
 
-  fn array_subscript(&self, _array_subscript: pe::ArraySubscript) -> ExprRes {
-    todo!()
+  fn array_subscript(&self, array_subscript: pe::ArraySubscript) -> ExprRes {
+    // a[i] = *(a + i)
+    let pe::ArraySubscript {
+      array: pe_array,
+      index: pe_index,
+      span,
+    } = array_subscript;
+    let analyzed_array =
+      self.expression(*pe_array)?.lvalue_conversion().decay();
+    let analyzed_index =
+      self.expression(*pe_index)?.lvalue_conversion().decay();
+
+    if !analyzed_index.unqualified_type().is_integer() {
+      do yeet NonIntegerSubscript(analyzed_index.to_string())
+        .into_with(Severity::Error)
+        .into_with(span)
+    }
+
+    let analyzed_index = analyzed_index.ptrdiff_conversion_unchecked();
+
+    if let Type::Pointer(ptr) = analyzed_array.unqualified_type() {
+      let elem_type = ptr.pointee.clone();
+      Ok(ae::Expression::new_lvalue(
+        // store the pointer(decayed array) and index here, not the array here... maybe a wrong idesa, idk for now.
+        ae::ArraySubscript::new(analyzed_array, analyzed_index, span).into(),
+        elem_type,
+      ))
+    } else {
+      Err(
+        DerefNonPtr(analyzed_array.to_string())
+          .into_with(Severity::Error)
+          .into_with(span),
+      )
+    }
   }
 
   fn compound_literal(
@@ -1257,7 +1289,7 @@ impl<'session> Analyzer<'session> {
     let converted_operand = operand.conditional_conversion()?;
     Ok(ae::Expression::new_rvalue(
       ae::Unary::prefix(operator, converted_operand, span).into(),
-      QualifiedType::bool(),
+      QualifiedType::bool_type(),
     ))
   }
 
@@ -1372,7 +1404,7 @@ impl<'session> Analyzer<'session> {
     let rhs = right.conditional_conversion()?;
     Ok(ae::Expression::new_rvalue(
       ae::Binary::new(operator, lhs, rhs, span).into(),
-      QualifiedType::bool(), // todo: this should be an `int` according to standard(?)
+      QualifiedType::bool_type(), // todo: this should be an `int` according to standard(?)
     ))
   }
 
@@ -1398,7 +1430,7 @@ impl<'session> Analyzer<'session> {
 
       return Ok(ae::Expression::new_rvalue(
         ae::Binary::new(operator, lhs, rhs, span).into(),
-        QualifiedType::bool(), // ditto
+        QualifiedType::bool_type(), // ditto
       ));
     }
     todo!()
@@ -1473,7 +1505,7 @@ impl<'session> Analyzer<'session> {
         match QualifiedType::compatible(&left_ptr.pointee, &right_ptr.pointee) {
           true => Ok(ae::Expression::new_rvalue(
             ae::Binary::new(operator, left, right, span).into(),
-            QualifiedType::intptr(), // no qual for pointer difference
+            QualifiedType::ptrdiff(), // no qual for pointer difference
           )),
           false => Err(
             IncompatiblePointerTypes(
@@ -1488,29 +1520,44 @@ impl<'session> Analyzer<'session> {
       (Type::Primitive(lhs), Type::Pointer(ptr))
         if lhs.is_integer() && operator == Operator::Plus =>
       {
-        todo!()
+        let ptrty = right.unqualified_type().clone();
+        Ok(ae::Expression::new_rvalue(
+          ae::Binary::new(
+            operator,
+            left.ptrdiff_conversion_unchecked(),
+            right,
+            span,
+          )
+          .into(),
+          ptrty.into(),
+        ))
       },
-      // ptr + int => ptr
+      // ptr + int, ptr - int => ptr
       (Type::Pointer(ptr), Type::Primitive(rhs))
-        if rhs.is_integer() && operator == Operator::Plus =>
+        if rhs.is_integer()
+          && matches!(operator, Operator::Plus | Operator::Minus) =>
       {
-        todo!()
-      },
-      // ptr - int => ptr
-      (Type::Pointer(ptr), Type::Primitive(rhs))
-        if rhs.is_integer() && operator == Operator::Minus =>
-      {
-        todo!()
+        let ptrty = left.unqualified_type().clone();
+        Ok(ae::Expression::new_rvalue(
+          ae::Binary::new(
+            operator,
+            left,
+            right.ptrdiff_conversion_unchecked(),
+            span,
+          )
+          .into(),
+          ptrty.into(),
+        ))
       },
       // relops
-      (Type::Pointer(left_ptr), Type::Pointer(right_ptr))
+      (Type::Pointer(_), Type::Pointer(_))
         if matches!(
           operator.category(),
           OperatorCategory::Logical | OperatorCategory::Relational
         ) =>
         Ok(ae::Expression::new_rvalue(
           ae::Binary::new(operator, left, right, span).into(),
-          QualifiedType::bool(),
+          QualifiedType::bool_type(),
         )),
       _ => Err(
         InvalidOprand(
@@ -1740,7 +1787,10 @@ impl<'session> Analyzer<'session> {
     let analyzed_condition = self
       .expression(condition)
       .and_then(|e| e.conditional_conversion())
-      .handle_with(self, ae::Expression::new_error_node(QualifiedType::bool()));
+      .handle_with(
+        self,
+        ae::Expression::new_error_node(QualifiedType::bool_type()),
+      );
     let analyzed_then_branch =
       self.statement(*then_branch).handle_or_default(self).into();
     let analyzed_else_branch = else_branch.map(|else_branch| {
@@ -1764,7 +1814,10 @@ impl<'session> Analyzer<'session> {
     let analyzed_condition = self
       .expression(condition)
       .and_then(|e| e.conditional_conversion())
-      .handle_with(self, ae::Expression::new_error_node(QualifiedType::bool()));
+      .handle_with(
+        self,
+        ae::Expression::new_error_node(QualifiedType::bool_type()),
+      );
     let analyzed_body = self.statement(*body).handle_or_default(self).into();
     Ok(astmt::While::new(
       analyzed_condition,
@@ -1785,7 +1838,10 @@ impl<'session> Analyzer<'session> {
     let analyzed_condition = self
       .expression(condition)
       .and_then(|e| e.conditional_conversion())
-      .handle_with(self, ae::Expression::new_error_node(QualifiedType::bool()));
+      .handle_with(
+        self,
+        ae::Expression::new_error_node(QualifiedType::bool_type()),
+      );
     Ok(astmt::DoWhile::new(
       analyzed_body,
       analyzed_condition,
@@ -1808,7 +1864,7 @@ impl<'session> Analyzer<'session> {
     let analyzed_condition = condition.map(|cond| {
       self.expression(cond).handle_with(
         self,
-        ae::Expression::new_error_node(QualifiedType::bool()),
+        ae::Expression::new_error_node(QualifiedType::bool_type()),
       )
     });
     let analyzed_increment =

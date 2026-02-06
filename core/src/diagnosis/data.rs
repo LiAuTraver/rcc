@@ -165,6 +165,8 @@ pub enum Data {
   AddressofOperandNotLvalue(Elem),
   #[error("Operand of indirection operator must be pointer type, got '{0}'")]
   DerefNonPtr(Elem),
+  #[error("Array subscript is not an integer, got '{0}'")]
+  NonIntegerSubscript(Elem),
   #[error("Cannot dereference void pointer of type '{0}'")]
   DerefVoidPtr(Elem),
   #[error("Expression '{0}' is not assignable")]
@@ -210,6 +212,8 @@ pub enum Data {
   ExternVariableWithInitializer(Elem),
   #[error("{0}")]
   VariableUninitialized(CustomMessage),
+  #[error("Left comma has no effect here; consider removing it")]
+  LeftCommaNoEffect,
   #[error(
     "Function declarations without prototypes(e.g., int main()) are \
      deprecated and removed in C23. Please provide a prototype (e.g., int \
