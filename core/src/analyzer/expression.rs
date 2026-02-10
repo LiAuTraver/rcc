@@ -373,12 +373,12 @@ mod fmt {
 }
 
 mod test {
-
   #[test]
   fn int_float() {
     use ::rcc_utils::{Dummy, IntoWith};
 
     use super::*;
+    use crate::common::{ASTDumper, Dumper};
 
     let int_expr = Expression::new(
       RawExpr::Constant(
@@ -395,6 +395,7 @@ mod test {
       QualifiedType::float(),
       RValue,
     );
+    _ = ASTDumper::dump(&float_expr);
     let promoted_expr =
       Expression::usual_arithmetic_conversion(int_expr, float_expr)
         .unwrap()

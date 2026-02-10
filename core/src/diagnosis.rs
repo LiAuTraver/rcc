@@ -116,7 +116,3 @@ impl Diagnosis for NoOp {
   #[inline]
   fn add_warning(&self, _warning: DiagData, _span: SourceSpan) {}
 }
-#[derive(Default, Debug)]
-pub struct Session {
-  pub diagnosis: Operational,
-}

@@ -47,10 +47,12 @@ impl Dummy for Span {
   #[inline(always)]
   #[track_caller]
   fn dummy() -> Self {
-    eprintln!(
-      "Dummy Span created from caller {}",
-      ::std::panic::Location::caller(),
-    );
+    if !cfg!(test) {
+      eprintln!(
+        "Dummy Span created from caller {}",
+        ::std::panic::Location::caller(),
+      );
+    }
     Self {
       file_index: Id::dummy(),
       start: Index::dummy(),

@@ -1,4 +1,4 @@
-use ::rcc_utils::interconvert;
+use ::rcc_utils::{SmallString, interconvert};
 
 use super::{declaration::Declaration, expression::Expression};
 use crate::type_alias_stmt;
@@ -37,7 +37,7 @@ interconvert!(Break, Statement);
 interconvert!(Continue, Statement);
 
 impl Statement {
-  pub(super) fn new_loop_dummy_identifier(str: &'static str) -> String {
+  pub(super) fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
     RawStmt::new_loop_dummy_identifier(str)
   }
 }

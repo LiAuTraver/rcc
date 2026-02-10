@@ -88,6 +88,19 @@ impl Array {
     Self { element_type, size }
   }
 }
+impl FunctionProto {
+  pub fn new(
+    return_type: QualifiedType,
+    parameter_types: Vec<QualifiedType>,
+    is_variadic: bool,
+  ) -> Self {
+    Self {
+      return_type,
+      parameter_types,
+      is_variadic,
+    }
+  }
+}
 impl Enum {
   pub fn new(
     name: Option<String>,

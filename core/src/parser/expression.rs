@@ -1,5 +1,3 @@
-use ::rcc_utils::interconvert;
-
 use crate::{
   common::SourceSpan,
   parser::declaration::{DeclSpecs, Declarator},
@@ -23,18 +21,18 @@ pub enum Expression {
   CompoundLiteral(CompoundLiteral), // (struct Point){.x=1, .y=2}
 }
 type_alias_expr! {Expression, UnprocessedType, Variable}
-interconvert!(Variable, Expression);
-interconvert!(Constant, Expression);
-interconvert!(Unary, Expression);
-interconvert!(Binary, Expression);
-interconvert!(Call, Expression);
-interconvert!(Paren, Expression);
-interconvert!(MemberAccess, Expression);
-interconvert!(Ternary, Expression);
-interconvert!(SizeOf, Expression);
-interconvert!(CStyleCast, Expression);
-interconvert!(ArraySubscript, Expression);
-interconvert!(CompoundLiteral, Expression);
+::rcc_utils::interconvert!(Variable, Expression);
+::rcc_utils::interconvert!(Constant, Expression);
+::rcc_utils::interconvert!(Unary, Expression);
+::rcc_utils::interconvert!(Binary, Expression);
+::rcc_utils::interconvert!(Call, Expression);
+::rcc_utils::interconvert!(Paren, Expression);
+::rcc_utils::interconvert!(MemberAccess, Expression);
+::rcc_utils::interconvert!(Ternary, Expression);
+::rcc_utils::interconvert!(SizeOf, Expression);
+::rcc_utils::interconvert!(CStyleCast, Expression);
+::rcc_utils::interconvert!(ArraySubscript, Expression);
+::rcc_utils::interconvert!(CompoundLiteral, Expression);
 impl ::std::default::Default for Expression {
   #[inline(always)]
   fn default() -> Self {

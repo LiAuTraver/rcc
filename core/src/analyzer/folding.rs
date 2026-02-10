@@ -232,7 +232,7 @@ impl Folding for Unary {
       folded_operand.raw_expr().is_constant(),
       "only implemented for constant var of constant eval"
     );
-    match folded_operand.raw_expr().as_constant_unchecked().constant {
+    match folded_operand.raw_expr().as_constant_unchecked().value {
       crate::types::Constant::Integral(operand) =>
         Integral::handle_unary_op(self.operator, operand, self.span, diag)
           .map(Into::into)
@@ -344,11 +344,11 @@ impl Folding for Binary {
     let lhs = lhs_expr
       .into_constant()
       .expect("shall be constant")
-      .constant;
+      .value;
     let rhs = rhs_expr
       .into_constant()
       .expect("shall be constant")
-      .constant;
+      .value;
 
     use OperatorCategory::*;
     match (lhs, rhs) {
@@ -423,7 +423,7 @@ impl Folding for Ternary {
         match folded_condition
           .raw_expr()
           .as_constant_unchecked()
-          .constant
+          .value
           .is_zero()
         {
           true => self.else_expr.fold(diag),
@@ -536,7 +536,7 @@ impl Folding for ImplicitCast {
             )
           }
           Success(
-            c.constant
+            c.value
               .as_integral_unchecked()
               .cast(
                 target_primitive.size() as u8,
@@ -550,7 +550,7 @@ impl Folding for ImplicitCast {
       },
       // integral are promoted previously.
       IntegralToFloating => Success(
-        raw_expr.into_constant_unchecked().constant.to_floating(
+        raw_expr.into_constant_unchecked().value.to_floating(
           target_type
             .unqualified_type()
             .as_primitive_unchecked()
@@ -561,14 +561,14 @@ impl Folding for ImplicitCast {
       IntegralToBoolean | FloatingToBoolean => Success(
         raw_expr
           .into_constant_unchecked()
-          .constant
+          .value
           .to_boolean()
           .into_with(self.span),
       ),
       FloatingCast => Success(
         raw_expr
           .into_constant_unchecked()
-          .constant
+          .value
           .as_floating_unchecked()
           .cast(
             target_type
@@ -580,7 +580,7 @@ impl Folding for ImplicitCast {
       .map(Into::into)
       .map(|c: CL| c.into_with(self.span)),
       FloatingToIntegral => Success(
-        raw_expr.into_constant_unchecked().constant.to_integral(
+        raw_expr.into_constant_unchecked().value.to_integral(
           target_type.as_primitive_unchecked().integer_width(),
           target_type
             .as_primitive_unchecked()

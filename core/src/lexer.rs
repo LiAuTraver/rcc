@@ -10,7 +10,8 @@ use crate::{
     Operator::{self, *},
     SourceSpan, Token,
   },
-  diagnosis::{DiagData::*, Diagnosis, Session},
+  diagnosis::{DiagData::*, Diagnosis},
+  session::Session,
   // this isn't strictrly correct, i uses the same `Constant` type in lexer and the parser,
   //    yet the lexeer part distinguishes number and string, but the parser part does not
   types::Constant as NumberConstant,

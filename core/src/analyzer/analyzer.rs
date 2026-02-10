@@ -15,9 +15,10 @@ use crate::{
   diagnosis::{
     Diag,
     DiagData::{self, *},
-    Diagnosis, Session, Severity,
+    Diagnosis, Severity,
   },
   parser::{declaration as pd, expression as pe, statement as ps},
+  session::Session,
   types::{
     Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
     Primitive, QualifiedType, Type, TypeInfo,
@@ -182,7 +183,7 @@ impl<'session> Analyzer<'session> {
                   super::folding::FoldingResult::Success(v) =>
                     if v.is_integer_constant() {
                       ArraySize::Constant(
-                        match v.raw_expr().as_constant_unchecked().constant {
+                        match v.raw_expr().as_constant_unchecked().value {
                           ae::ConstantLiteral::Integral(integral) =>
                             integral.to_builtin(),
                           ae::ConstantLiteral::Floating(_) => unreachable!(),
@@ -502,7 +503,7 @@ impl<'session> Analyzer<'session> {
       .shall_ok("failed to apply modifiers for function declarator");
 
     if name == "main" {
-      FunctionProto::main_proto_validate(
+      FunctionProto::validate_main_proto(
         qualified_type
           .unqualified_type()
           .as_functionproto_unchecked(),
@@ -1012,7 +1013,10 @@ impl<'session> Analyzer<'session> {
   }
 
   fn constant(&self, constant: pe::Constant) -> ExprRes {
-    let pe::Constant { constant, span } = constant;
+    let pe::Constant {
+      value: constant,
+      span,
+    } = constant;
     let unqualified_type = constant.unqualified_type();
     let value_category = if constant.is_char_array() {
       ae::ValueCategory::LValue
@@ -1949,10 +1953,10 @@ impl<'session> Analyzer<'session> {
         .transform(|expr| {
           if let ae::RawExpr::Constant(constant) = expr.raw_expr() {
             if constant.is_integral() {
-              constant.constant.clone()
+              constant.value.clone()
             } else {
               self.add_error(
-                NonIntegerInCaseStmt(constant.constant.clone()),
+                NonIntegerInCaseStmt(constant.value.clone()),
                 expr.span(),
               );
               Integral::default().into()

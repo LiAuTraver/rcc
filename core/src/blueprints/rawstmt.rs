@@ -1,3 +1,5 @@
+use ::rcc_utils::SmallString;
+
 use super::Placeholder as Empty;
 use crate::common::SourceSpan;
 
@@ -65,7 +67,7 @@ pub struct RawIf<StmtTy, ExprTy> {
 pub struct RawWhile<StmtTy, ExprTy> {
   pub condition: ExprTy,
   pub body: Box<StmtTy>,
-  pub tag: String,
+  pub tag: SmallString,
   pub span: SourceSpan,
 }
 
@@ -73,7 +75,7 @@ pub struct RawWhile<StmtTy, ExprTy> {
 pub struct RawDoWhile<StmtTy, ExprTy> {
   pub body: Box<StmtTy>,
   pub condition: ExprTy,
-  pub tag: String,
+  pub tag: SmallString,
   pub span: SourceSpan,
 }
 
@@ -83,7 +85,7 @@ pub struct RawFor<StmtTy, ExprTy> {
   pub condition: Option<ExprTy>,
   pub increment: Option<ExprTy>,
   pub body: Box<StmtTy>,
-  pub tag: String,
+  pub tag: SmallString,
   pub span: SourceSpan,
 }
 
@@ -92,7 +94,7 @@ pub struct RawSwitch<StmtTy, ExprTy, ExprCaseTy = ExprTy> {
   pub condition: ExprTy,
   pub cases: Vec<RawCase<StmtTy, ExprCaseTy>>,
   pub default: Option<RawDefault<StmtTy>>,
-  pub tag: String,
+  pub tag: SmallString,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
@@ -132,13 +134,13 @@ pub struct RawCompound<StmtTy> {
 
 #[derive(Debug)]
 pub struct RawBreak {
-  pub tag: String,
+  pub tag: SmallString,
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawContinue {
-  pub tag: String,
+  pub tag: SmallString,
   pub span: SourceSpan,
 }
 
@@ -167,7 +169,7 @@ impl<StmtTy, ExprTy, ExprCaseTy> RawSwitch<StmtTy, ExprTy, ExprCaseTy> {
     condition: ExprTy,
     cases: Vec<RawCase<StmtTy, ExprCaseTy>>,
     default: Option<RawDefault<StmtTy>>,
-    tag: String,
+    tag: SmallString,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -222,7 +224,7 @@ impl<StmtTy, ExprTy> RawWhile<StmtTy, ExprTy> {
   pub fn new(
     condition: ExprTy,
     body: Box<StmtTy>,
-    tag: String,
+    tag: SmallString,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -238,7 +240,7 @@ impl<StmtTy, ExprTy> RawDoWhile<StmtTy, ExprTy> {
   pub fn new(
     body: Box<StmtTy>,
     condition: ExprTy,
-    tag: String,
+    tag: SmallString,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -256,7 +258,7 @@ impl<StmtTy, ExprTy> RawFor<StmtTy, ExprTy> {
     condition: Option<ExprTy>,
     increment: Option<ExprTy>,
     body: Box<StmtTy>,
-    tag: String,
+    tag: SmallString,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -277,24 +279,24 @@ impl<StmtTy> RawDefault<StmtTy> {
 }
 
 impl RawBreak {
-  pub fn new(tag: String, span: SourceSpan) -> Self {
+  pub fn new(tag: SmallString, span: SourceSpan) -> Self {
     Self { tag, span }
   }
 }
 
 impl RawContinue {
-  pub fn new(tag: String, span: SourceSpan) -> Self {
+  pub fn new(tag: SmallString, span: SourceSpan) -> Self {
     Self { tag, span }
   }
 }
 
 impl<StmtTy, DeclTy, ExprTy> RawStmt<StmtTy, DeclTy, ExprTy> {
-  pub fn new_loop_dummy_identifier(str: &'static str) -> String {
+  pub fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
     static LOOP_LABEL_COUNTER: ::std::sync::atomic::AtomicUsize =
       ::std::sync::atomic::AtomicUsize::new(0);
     let id =
       LOOP_LABEL_COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
-    format!("{}_{}", str, id)
+    SmallString::from(format!("{}_{}", str, id))
   }
 }
 #[allow(clippy::write_with_newline)]

@@ -88,6 +88,22 @@ macro_rules! make_trio_for {
     }
   };
 }
+#[macro_export]
+macro_rules! interconvert_all{
+  ($($variant:ident)* => $main:ident) => {
+    $(
+      $crate::interconvert!($variant, $main);
+    )*
+  };
+}
+#[macro_export]
+macro_rules! make_trio_for_all {
+  ($($variant:ident)* => $main:ident) => {
+    $(
+      $crate::make_trio_for!($variant, $main);
+    )*
+  };
+}
 
 #[macro_export]
 #[cfg(debug_assertions)]

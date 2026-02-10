@@ -84,10 +84,12 @@ impl Function {
     self.body.is_some()
   }
 
+  #[inline]
   pub fn proto(&self) -> Ref<'_, QualifiedType> {
     Ref::map(self.symbol.borrow(), |sym| &sym.qualified_type)
   }
 
+  #[inline]
   pub fn proto_unqual(&self) -> Ref<'_, Type> {
     Ref::map(self.symbol.borrow(), |sym| {
       sym.qualified_type.unqualified_type()

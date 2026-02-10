@@ -1,5 +1,4 @@
-
-// this is also... weird but valid
+// // this is also... weird but valid
 extern int k[10];
 int k[];
 extern int k[10];
@@ -36,13 +35,13 @@ label:
   goto label;
   return k;
 }
-// void ff(double (*restrict a)[5]);
-// void ff(double a[restrict][5]);
-// void ff(double a[restrict 3][5]);
-// void ff(double a[restrict static 3][5]);
-// int p(int a[*]);
-// int p(int a[static 10]) { return 0; }
+// // void ff(double (*restrict a)[5]);
+// // void ff(double a[restrict][5]);
+// // void ff(double a[restrict 3][5]);
+// // void ff(double a[restrict static 3][5]);
+// // int p(int a[*]);
+// // int p(int a[static 10]) { return 0; }
 
-// // Error: Second dimension mismatch
-// void f2(int a[][5]);
-// void f2(int a[][10]); // ERROR: 'int(*)[5]' vs 'int(*)[10]'
+// // // Error: Second dimension mismatch
+// // void f2(int a[][5]);
+// // void f2(int a[][10]); // ERROR: 'int(*)[5]' vs 'int(*)[10]'

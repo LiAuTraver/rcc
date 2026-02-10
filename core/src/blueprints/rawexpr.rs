@@ -146,7 +146,7 @@ macro_rules! type_alias_expr {
 }
 #[derive(Debug)]
 pub struct RawConstant {
-  pub constant: Constant,
+  pub value: Constant,
   pub span: SourceSpan,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ::strum_macros::Display)]
@@ -227,7 +227,10 @@ pub struct RawCompoundLiteral {
 
 impl RawConstant {
   pub fn new(constant: Constant, span: SourceSpan) -> Self {
-    Self { constant, span }
+    Self {
+      value: constant,
+      span,
+    }
   }
 }
 
@@ -235,7 +238,7 @@ impl ::std::ops::Deref for RawConstant {
   type Target = Constant;
 
   fn deref(&self) -> &Self::Target {
-    &self.constant
+    &self.value
   }
 }
 
@@ -384,7 +387,7 @@ mod fmt {
 
   impl Display for RawConstant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "{}", self.constant)
+      write!(f, "{}", self.value)
     }
   }
 
@@ -451,12 +454,12 @@ mod fmt {
   }
   impl Display for RawCompoundLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "<compound literal>")
+      write!(f, "<compound literal - not implemented>")
     }
   }
   impl<ExprTy: Display> Display for RawCStyleCast<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "<C-style cast>")
+      write!(f, "<C-style cast - not implemented>")
     }
   }
   impl<ExprTy: Display> Display for RawMemberAccess<ExprTy> {

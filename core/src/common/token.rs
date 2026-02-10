@@ -219,24 +219,20 @@ mod fmt {
   use super::{Literal, Token};
 
   impl Display for Token {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
         f,
-        "{} at loc {} {}",
+        "{} at loc [{} {})",
         self.literal, self.location.start, self.location.end
       )
     }
   }
 
   impl Display for Literal {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      match self {
-        Literal::Number(n) => write!(f, "Number({})", n),
-        Literal::Identifier(id) => write!(f, "Identifier({})", id),
-        Literal::String(s) => write!(f, "String({})", s),
-        Literal::Keyword(kw) => write!(f, "Keyword({})", kw),
-        Literal::Operator(op) => write!(f, "Operator({})", op),
-      }
+      ::rcc_utils::static_dispatch!(self.fmt(f), Operator Number String Identifier Keyword)
     }
   }
 }

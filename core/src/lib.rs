@@ -1,3 +1,5 @@
+// const for Box::new
+#![feature(const_convert)]
 // for `impl const` traits
 #![feature(const_trait_impl)]
 // operator `?` overloading
@@ -14,4 +16,5 @@ pub mod common;
 pub mod diagnosis;
 pub mod lexer;
 pub mod parser;
+pub mod session;
 pub mod types;

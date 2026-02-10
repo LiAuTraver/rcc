@@ -1,9 +1,10 @@
 use ::rcc_core::{
   analyzer::Analyzer,
-  common::SourceManager,
-  diagnosis::{Diagnosis, Session},
+  common::{ASTDumper, Dumper, SourceManager},
+  diagnosis::Diagnosis,
   lexer::Lexer,
   parser::Parser,
+  session::Session,
 };
 use ::rcc_utils::DisplayWith;
 enum Stage {
@@ -129,7 +130,9 @@ fn pipeline(
   if pretty_print {
     println!("{:#?}", translation_unit);
   }
+
   println!("{translation_unit}");
+  _ = ASTDumper::dump(&translation_unit);
 
   println!("Analyze succeeded.");
   0
@@ -227,5 +230,26 @@ int main(int argc, char **argv) { //
     let mut source_manager = SourceManager::default();
     source_manager.add_string(source.into());
     pipeline(&mut source_manager, Stage::Analyze, true)
+  }
+  #[test]
+  fn t4() {
+    use ::std::io::Write;
+    use termcolor::*;
+    // Create a stream for Standard Output (Stdout)
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
+    // 1. Create a Color Specification
+    let mut spec = ColorSpec::new();
+    spec.set_fg(Some(Color::Cyan)).set_bold(true);
+
+    // 2. Apply the spec to the stream
+    stdout.set_color(&spec).unwrap();
+
+    // 3. Write your text
+    write!(&mut stdout, "BinaryExpr").unwrap();
+
+    // 4. Reset to default colors
+    stdout.reset().unwrap();
+    writeln!(&mut stdout, ": +").unwrap();
   }
 }

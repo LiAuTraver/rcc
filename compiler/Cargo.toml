@@ -10,3 +10,4 @@ readme = "README.md"
 [dependencies]
 rcc-core = { path = "../core" }
 rcc-utils = { path = "../utils" }
+termcolor = "1.4.1"

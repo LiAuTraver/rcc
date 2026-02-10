@@ -1,4 +1,6 @@
-use ::rcc_utils::{IntoWith, contract_assert, not_implemented_feature};
+use ::rcc_utils::{
+  IntoWith, SmallString, contract_assert, not_implemented_feature,
+};
 
 use crate::{
   common::{
@@ -8,7 +10,7 @@ use crate::{
   },
   diagnosis::{
     DiagData::{self, *},
-    Diagnosis, Session,
+    Diagnosis,
   },
   parser::{
     declaration::{
@@ -25,13 +27,14 @@ use crate::{
       Return, Statement, Switch, While,
     },
   },
+  session::Session,
   types::{FunctionSpecifier, Qualifiers},
 };
 #[derive(Debug)]
 pub struct Parser<'session> {
   tokens: Vec<Token>,
   cursor: usize,
-  loop_labels: Vec<String>,
+  loop_labels: Vec<SmallString>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
   session: &'session Session,
@@ -1101,7 +1104,7 @@ impl<'session> Parser<'session> {
     self.recoverable_get::<{ Semicolon }>();
     let newloc = self.eloc(location);
     match self.loop_labels.last() {
-      Some(label) => Break::new(label.to_string(), newloc),
+      Some(label) => Break::new(label.clone(), newloc),
       None => {
         self.add_error(
           InvalidControlFlowStmt(
@@ -1109,7 +1112,7 @@ impl<'session> Parser<'session> {
           ),
           newloc,
         );
-        Break::new("invalid_loop".to_string(), newloc)
+        Break::new(SmallString::const_new("invalid_loop"), newloc)
       },
     }
   }
@@ -1121,10 +1124,10 @@ impl<'session> Parser<'session> {
     self.recoverable_get::<{ Semicolon }>();
     // we need to handle continus differently; since the continue cannot be used to `continue` a switch.
     // search reversely for the nearest loop label which does not start with 'switch_'
-    let mut found_label: Option<String> = None;
+    let mut found_label: Option<SmallString> = None;
     for label in self.loop_labels.iter().rev() {
       if !label.starts_with("switch_") {
-        found_label = Some(label.to_string());
+        found_label = Some(label.clone());
         break;
       }
     }
@@ -1138,7 +1141,7 @@ impl<'session> Parser<'session> {
           ),
           newloc,
         );
-        Continue::new("invalid_loop".to_string(), newloc)
+        Continue::new(SmallString::const_new("invalid_loop"), newloc)
       },
     }
   }
