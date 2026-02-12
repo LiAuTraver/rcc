@@ -74,12 +74,12 @@ impl Function {
     }
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_declaration(&self) -> bool {
     !self.is_definition()
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_definition(&self) -> bool {
     self.body.is_some()
   }
@@ -127,26 +127,25 @@ mod fmt {
   use crate::types::Type;
 
   impl Display for TranslationUnit {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      for decl in &self.declarations {
-        writeln!(f, "{}", decl)?;
-      }
-      Ok(())
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      self
+        .declarations
+        .iter()
+        .try_for_each(|decl| writeln!(f, "{}", decl))
     }
   }
 
   impl Display for ExternalDeclaration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      match self {
-        ExternalDeclaration::Function(func) =>
-          <Function as Display>::fmt(func, f),
-        ExternalDeclaration::Variable(var) => <VarDef as Display>::fmt(var, f),
-      }
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      ::rcc_utils::static_dispatch!(
+        self.fmt(f),
+        Function Variable
+      )
     }
   }
 
   impl Display for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       let sym = self.symbol.borrow();
 
       // For functions, sym.qualified_type is Type::FunctionProto
@@ -177,14 +176,14 @@ mod fmt {
   }
 
   impl Display for Parameter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       // Show only the type for brevity; names are optional.
       write!(f, "{}", self.symbol.borrow().qualified_type)
     }
   }
 
   impl Display for VarDef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       let sym = self.symbol.borrow();
       write!(
         f,
@@ -199,7 +198,7 @@ mod fmt {
   }
 
   impl Display for Initializer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         Initializer::Scalar(expr) => write!(f, "{}", expr),
         Initializer::Aggregate(_) => todo!(),

@@ -164,6 +164,15 @@ pub enum Data {
   StaticArrayWithoutBound,
   #[error("Operand of address-of operator must be lvalue, got '{0}'")]
   AddressofOperandNotLvalue(Elem),
+  /// TODO: implicit address-of, e.g., decay not handled.
+  #[error("variable '{0}' declared with 'register' cannot be taken address of")]
+  AddressofOperandRegVar(Elem),
+  #[error("Global variable cannot be declared with 'register', ignoring")]
+  GlobalRegVar(Elem),
+  #[error(
+    "variable declared with 'register' can only have pointer type, got '{0}'"
+  )]
+  InvalidRegVarDecl(QualifiedType),
   #[error("Operand of indirection operator must be pointer type, got '{0}'")]
   DerefNonPtr(Elem),
   #[error("Array subscript is not an integer, got '{0}'")]

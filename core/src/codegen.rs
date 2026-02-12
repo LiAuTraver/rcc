@@ -1,2 +1,2 @@
 mod codegen;
-mod desugar;
+mod module;

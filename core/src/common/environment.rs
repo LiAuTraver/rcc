@@ -23,7 +23,7 @@ pub struct Scope<T> {
 pub struct UnitScope {
   scopes: Vec<HashSet<String>>,
 }
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, ::strum_macros::Display)]
 pub enum VarDeclKind {
   /// declaration:
   ///   - file-scope: without initializer, with storage-class specifier(extern/static)
@@ -42,7 +42,7 @@ pub enum VarDeclKind {
   /// extern int a; // ok, still declaration
   /// // int a = 1; // error: redefinition
   /// ```
-  /// multiple tentative definitions are allowed.
+  /// Tentative declaration is C only, C++ has ODR. Multiple tentative definitions are allowed.
   ///
   /// if no complete definition is found, the tentative definition is treated as a complete definition uninitialized (initialized to zero)
   Tentative,
@@ -59,6 +59,14 @@ impl VarDeclKind {
 #[derive(Debug)]
 pub struct Symbol {
   pub qualified_type: QualifiedType,
+  /// for global variable, if the [`VarDeclKind`] is [`VarDeclKind::Definition`]
+  /// and the [`Symbol::storage_class`] is [`Storage::Extern`], the [`Storage::Extern`] has no effect
+  /// -- chossing not to wrap it into [`Option`] is just for convenience and now it's hard to change,
+  ///
+  /// That being said, during TAC gen,
+  /// - if the global vardef has both [`Storage::Extern`] and [`VarDeclKind::Definition`]
+  ///   or one [`VarDeclKind::Tentative`] (one tantative counts as definition), add it as definition
+  /// - else if only has [`Storage::Extern`] and [`VarDeclKind::Declaration`], it's declaration and let linker handle it.
   pub storage_class: Storage,
   pub name: String,
   /// declaration or definition

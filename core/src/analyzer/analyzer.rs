@@ -154,6 +154,8 @@ impl<'session> Analyzer<'session> {
   }
 }
 impl<'session> Analyzer<'session> {
+  /// TODO: caller shoould check whether the `restrict` is valid.
+  /// it's only valid for pointers and non-static local variable.
   fn apply_modifiers_for_varty(
     &self,
     mut qualified_type: QualifiedType,
@@ -256,9 +258,7 @@ impl<'session> Analyzer<'session> {
       },
     };
     // we need to build function type
-    let parameters = self
-      .parse_parameters(function_signature.parameters)
-      .shall_ok("failed to parse function parameters");
+    let parameters = self.parse_parameters(function_signature.parameters);
     let is_variadic = function_signature.is_variadic;
     let parameter_types = parameters
       .iter()
@@ -286,11 +286,9 @@ impl<'session> Analyzer<'session> {
           .parse_declspecs(declspecs)
           .shall_ok("Failed to parse declspecs for parameter");
         contract_assert!(
-          storage.is_none(),
-          "parameter cannot have storage class specifier; this should be \
-           handled in parser.
-          also, `register` is currently unimplemented"
+          storage.is_none() || storage.is_some_and(|s| s.is_register())
         );
+        // strictly speaking the names shall be unique but it doesnt matter here really.
         let pd::Declarator {
           modifiers,
           name: _,
@@ -304,7 +302,7 @@ impl<'session> Analyzer<'session> {
   fn parse_parameters(
     &self,
     parameters: Vec<pd::Parameter>,
-  ) -> DeclRes<Vec<ad::Parameter>> {
+  ) -> Vec<ad::Parameter> {
     parameters
       .into_iter()
       .map(|parameter| {
@@ -317,10 +315,7 @@ impl<'session> Analyzer<'session> {
           .parse_declspecs(declspecs)
           .shall_ok("Failed to parse declspecs for parameter");
         contract_assert!(
-          storage.is_none(),
-          "parameter cannot have storage class specifier; this should be \
-           handled in parser.
-          also, `register` is currently unimplemented"
+          storage.is_none() || storage.is_some_and(|s| s.is_register())
         );
         let pd::Declarator {
           modifiers,
@@ -335,7 +330,7 @@ impl<'session> Analyzer<'session> {
           name.unwrap_or_else(Self::unnamed_placeholder),
           VarDeclKind::Declaration,
         ));
-        Ok(ad::Parameter::new(symbol, span))
+        ad::Parameter::new(symbol, span)
       })
       .collect()
   }
@@ -847,15 +842,32 @@ impl<'session> Analyzer<'session> {
         ad::VarDef::new(symbol, Some(initializer), span)
       },
       (Some(storage), None) => {
-        let symbol = Symbol::decl(qualified_type, storage, name);
-        ad::VarDef::new(symbol, None, span)
+        let storage = if storage.is_register() {
+          self.add_error(GlobalRegVar(name.clone()), span);
+          Storage::Extern
+        } else {
+          storage
+        };
+        ad::VarDef::new(Symbol::decl(qualified_type, storage, name), None, span)
       },
       (Some(storage), Some(initializer)) => {
-        if storage == Storage::Extern {
-          self.add_warning(ExternVariableWithInitializer(name.clone()), span);
-        }
-        let symbol = Symbol::def(qualified_type, storage, name);
-        ad::VarDef::new(symbol, Some(initializer), span)
+        let storage = match storage {
+          Storage::Extern => {
+            self.add_warning(ExternVariableWithInitializer(name.clone()), span);
+            storage
+          },
+
+          Storage::Register => {
+            self.add_error(GlobalRegVar(name.clone()), span);
+            Storage::Extern
+          },
+          _ => storage,
+        };
+        ad::VarDef::new(
+          Symbol::def(qualified_type, storage, name),
+          Some(initializer),
+          span,
+        )
       },
     })
   }
@@ -1323,6 +1335,13 @@ impl<'session> Analyzer<'session> {
     if !operand.is_lvalue() {
       Err(
         AddressofOperandNotLvalue(operand.to_string())
+          .into_with(Severity::Error)
+          .into_with(span),
+      )
+    } else if matches!(operand.raw_expr(), ae::RawExpr::Variable(variable) if variable.name.borrow().storage_class.is_register())
+    {
+      Err(
+        AddressofOperandRegVar(operand.to_string())
           .into_with(Severity::Error)
           .into_with(span),
       )

@@ -116,8 +116,9 @@ impl Dumpable for Expression {
 
       ImplicitCast(cast) => {
         header!("ImplicitCast", cast);
-        dumper
-          .write_fmt(format_args!(" <{}>\n", cast.cast_type), &palette.kind)?;
+        dumper.write(" <", &palette.skeleton)?;
+        dumper.write_fmt(format_args!("{}", cast.cast_type), &palette.kind)?;
+        dumper.write(">\n", &palette.skeleton)?;
         cast.expr.dump(dumper, &subprefix, true, palette)
       },
 
@@ -227,18 +228,31 @@ impl Dumpable for VarDef {
       if borrowed.is_typedef() {
         "Typedef"
       } else {
-        "Variable"
+        "VarDef"
       },
       &palette.node_type,
     )?;
     dumper.write_fmt(format_args!(" {:p}", self), &palette.dim)?;
     self.span.dump(dumper, prefix, is_last, palette)?;
+
+    dumper.write(" <", &palette.skeleton)?;
+    dumper.write_fmt(format_args!("{}", borrowed.declkind), &palette.kind)?;
+    dumper.write(">", &palette.skeleton)?;
+
     dumper.write_fmt(format_args!(" '{}'", borrowed.name), &palette.literal)?;
 
     dumper.write_fmt(
-      format_args!(" '{}'\n", borrowed.qualified_type),
+      format_args!(" '{}'", borrowed.qualified_type),
       &palette.meta,
     )?;
+    // if !borrowed.storage_class.is_typedef() {
+    //   dumper.write_fmt(
+    //     format_args!(" {}", borrowed.storage_class),
+    //     &palette.meta,
+    //   )?;
+    // }
+
+    dumper.newline()?;
 
     if let Some(initializer) = &self.initializer {
       let subprefix = dumper.child_prefix(prefix, is_last);
@@ -537,13 +551,10 @@ impl Dumpable for Goto {
   ) -> DumpRes {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Goto", &palette.node_type)?;
-    dumper.write_fmt(
-      format_args!(
-        " {:p} <span [{} {})> '{}'\n",
-        self, self.span.start, self.span.end, self.label
-      ),
-      &palette.dim,
-    )
+    dumper.write_fmt(format_args!(" {:p}", self), &palette.dim)?;
+    self.span.dump(dumper, prefix, is_last, palette)?;
+    dumper.write_fmt(format_args!("{}", self.label), &palette.dim)?;
+    dumper.newline()
   }
 }
 
@@ -557,13 +568,16 @@ impl Dumpable for Label {
   ) -> DumpRes {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Label", &palette.node_type)?;
-    dumper.write_fmt(
-      format_args!(
-        " {:p} <span [{} {})> '{}'\n",
-        self, self.span.start, self.span.end, self.name
-      ),
-      &palette.dim,
-    )
+
+    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
+    self.span.dump(dumper, prefix, is_last, palette)?;
+    dumper.write_fmt(format_args!(" '{}'\n", self.name), &palette.literal)?;
+
+    if !matches!(*self.statement, Statement::Empty(_)) {
+      let subprefix = dumper.child_prefix(prefix, is_last);
+      self.statement.dump(dumper, &subprefix, true, palette)?;
+    }
+    Ok(())
   }
 }
 

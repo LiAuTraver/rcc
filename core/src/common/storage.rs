@@ -10,6 +10,13 @@ pub enum Storage {
   /// are considered to have automatic storage duration.
   #[strum(serialize = "auto")]
   Automatic,
+  /// 6.7.2.12: The implementation can treat any `register` declaration simply as an `auto` declaration.
+  /// However, \[...], the address of any part of an object declared with storage-class specifier `register` cannot be computed, \[...]
+  ///
+  /// Thus, the only operator that can be applied to an array declared with storage-class
+  /// specifier register is `sizeof` and the `typeof` operators.
+  ///
+  /// In here, we just keep is as sematic check, then convert variable declared with `register` into `auto` storage.
   #[strum(serialize = "register")]
   Register,
   /// - Function declarations with no storage-class specifier are always handled
