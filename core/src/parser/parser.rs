@@ -1224,13 +1224,11 @@ impl<'session> Parser<'session> {
     }
   }
 
+  /// this should return [`ae::SizeOf`].
   fn next_sizeof(&mut self) -> Expression {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Sizeof }>();
-    // maybe type or expression, assume expression for now
-    // let expr = self.parse_paren_expression();
-    // Expression::SizeOf(SizeOf::Expression(Box::new(expr)))
-    self.cursor -= 1;
+    // maybe type or expression
     if self.peek_lit() == LeftParen {
       self.must_get_op::<{ LeftParen }>();
       match self.parse_type_specifier() {

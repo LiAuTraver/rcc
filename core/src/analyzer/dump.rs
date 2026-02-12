@@ -149,9 +149,12 @@ impl Dumpable for Expression {
         header!("SizeOf", sof, "\n");
         match &sof.sizeof {
           SizeOfKind::Type(ty) => {
-            // Type child — just print it inline (no recursion needed)
+            // // Type child — just print it inline (no recursion needed)
+            // dumper.print_indent(&subprefix, true)?;
+            // dumper.write_fmt(format_args!("Type '{}'\n", ty), &palette.meta)
+
             dumper.print_indent(&subprefix, true)?;
-            dumper.write_fmt(format_args!("Type '{}'\n", ty), &palette.meta)
+            ty.dump(dumper, prefix, true, palette)
           },
           SizeOfKind::Expression(expr) =>
             expr.dump(dumper, &subprefix, true, palette),
@@ -245,12 +248,6 @@ impl Dumpable for VarDef {
       format_args!(" '{}'", borrowed.qualified_type),
       &palette.meta,
     )?;
-    // if !borrowed.storage_class.is_typedef() {
-    //   dumper.write_fmt(
-    //     format_args!(" {}", borrowed.storage_class),
-    //     &palette.meta,
-    //   )?;
-    // }
 
     dumper.newline()?;
 
