@@ -246,7 +246,7 @@ impl<'session> Parser<'session> {
       Literal::Keyword(keyword) => TypeSpecifier::try_from(keyword).ok(),
       Literal::Identifier(ident) =>
         if self.typedefs.contains(ident) {
-          Some(TypeSpecifier::Typedef(ident.to_string()))
+          Some(TypeSpecifier::Typedef(ident.clone()))
         } else {
           None
         },
@@ -1048,13 +1048,13 @@ impl<'session> Parser<'session> {
         self.next_declaration().into(),
       Literal::Identifier(ref ident)
         if self.peek_lit_with_offset(1) == Colon =>
-        self.next_labelstmt(ident.to_string()),
+        self.next_labelstmt(ident.clone()),
 
       _ => self.next_exprstmt().into(),
     }
   }
 
-  fn next_labelstmt(&mut self, ident: String) -> Statement {
+  fn next_labelstmt(&mut self, ident: SmallString) -> Statement {
     let location = *self.peek_loc();
     // 1. label at end of compound statement is not allowed until C23
     // 2. label can only jump to statements within the same function, not to mention cross file.
@@ -1075,7 +1075,7 @@ impl<'session> Parser<'session> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Goto }>();
     if let Literal::Identifier(ident) = self.peek_lit() {
-      let name = ident.to_string();
+      let name = ident.clone();
       self.get(); // consume ident
       self.recoverable_get::<{ Semicolon }>();
       Goto::new(name, self.eloc(location)).into()
@@ -1175,7 +1175,7 @@ impl<'session> Parser<'session> {
       },
       Literal::Identifier(ident) => {
         self.get();
-        Variable::new(ident.to_string(), self.eloc(location)).into()
+        Variable::new(ident, self.eloc(location)).into()
       },
       Literal::Keyword(keyword) => {
         self.get();

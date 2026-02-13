@@ -1,4 +1,4 @@
-use ::rcc_utils::interconvert;
+use ::rcc_utils::{SmallString, interconvert};
 
 use crate::{
   common::{Keyword, Literal, SourceSpan, Storage},
@@ -40,7 +40,7 @@ pub enum DeclaratorType {
 ///     pointer_opt direct-declarator
 #[derive(Debug)]
 pub struct Declarator {
-  pub name: Option<String>,
+  pub name: Option<SmallString>,
   pub modifiers: Vec<Modifier>, // pointer, array, function
   pub span: SourceSpan,
 }
@@ -80,7 +80,7 @@ pub struct Parameter {
 }
 #[derive(Debug)]
 pub struct Struct {
-  pub name: Option<String>,
+  pub name: Option<SmallString>,
   pub members: Vec<Member>,
 }
 /// type-specifier
@@ -98,7 +98,7 @@ pub enum TypeSpecifier {
   Unsigned,
   Bool,
   Complex,
-  Typedef(String),
+  Typedef(SmallString),
   // vvv below should be wrong, but now don't care
   Struct(Struct),
   Union(Struct),
@@ -200,26 +200,26 @@ pub struct InitializerListEntry {
 }
 #[derive(Debug)]
 pub enum Designator {
-  Member(String),
+  Member(SmallString),
   Index(Expression),
 }
 #[derive(Debug)]
 pub struct EnumSpecifier {
-  pub name: Option<String>,
+  pub name: Option<SmallString>,
   pub enumerators: Vec<Enumerator>,
 }
 #[derive(Debug)]
 pub struct Enumerator {
-  pub name: String,
+  pub name: SmallString,
   pub value: Option<Expression>,
 }
 impl Enumerator {
-  pub fn new(name: String, value: Option<Expression>) -> Self {
+  pub fn new(name: SmallString, value: Option<Expression>) -> Self {
     Self { name, value }
   }
 }
 impl EnumSpecifier {
-  pub fn new(name: Option<String>, enumerators: Vec<Enumerator>) -> Self {
+  pub fn new(name: Option<SmallString>, enumerators: Vec<Enumerator>) -> Self {
     Self { name, enumerators }
   }
 }
@@ -309,7 +309,7 @@ impl DeclSpecs {
 }
 impl Declarator {
   pub fn new(
-    name: Option<String>,
+    name: Option<SmallString>,
     modifiers: Vec<Modifier>,
     span: SourceSpan,
   ) -> Self {
@@ -327,17 +327,6 @@ impl Declarator {
     }
   }
 }
-// impl ::core::default::Default for DeclSpecs {
-//   fn default() -> Self {
-//     Self {
-//       function_specifiers: FunctionSpecifier::empty(),
-//       storage_class: None,
-//       qualifiers: Qualifiers::empty(),
-//       type_specifiers: Vec::default(),
-//       span: SourceSpan::default(),
-//     }
-//   }
-// }
 impl VarDef {
   pub fn new(
     declspecs: DeclSpecs,

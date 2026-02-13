@@ -277,7 +277,8 @@ impl<'session, 'source> Lexer<'session, 'source> {
       _ => {
         self.session.diagnosis.add_error(
           UnexpectedCharacter(
-            (Literal::Identifier(self.recall().into()), None).into(),
+            (Literal::Identifier(self.recall().to_string().into()), None)
+              .into(),
           ),
           self.span(start),
         );
@@ -304,7 +305,7 @@ impl<'session, 'source> Lexer<'session, 'source> {
     match Keyword::from_str(text) {
       Ok(keyword) =>
         Token::keyword(keyword, self.span(start)).transform_alternative(),
-      Err(_) => Token::identifier(text.to_string(), self.span(start)),
+      Err(_) => Token::identifier(text.into(), self.span(start)),
     }
   }
 
@@ -474,14 +475,14 @@ impl<'session, 'source> Lexer<'session, 'source> {
         .diagnosis
         .add_error(UnterminatedString, self.span(start));
       let text = self.slice(start, self.cursor);
-      return Token::string(text.to_string(), self.span(start));
+      return Token::string(text.into(), self.span(start));
     }
 
     let end = self.cursor;
     self.advance(); // consume closing quote
 
     let text = self.slice(start, end);
-    Token::string(text.to_string(), self.span(start))
+    Token::string(text.into(), self.span(start))
   }
 
   fn skip_block_comment(&mut self) {

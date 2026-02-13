@@ -1,3 +1,5 @@
+use ::rcc_utils::SmallString;
+
 use crate::{
   common::SourceSpan,
   parser::declaration::{DeclSpecs, Declarator},
@@ -41,7 +43,7 @@ impl ::std::default::Default for Expression {
 }
 
 impl Variable {
-  pub fn new(name: String, span: SourceSpan) -> Self {
+  pub fn new(name: SmallString, span: SourceSpan) -> Self {
     Self { name, span }
   }
 }
@@ -60,7 +62,7 @@ impl UnprocessedType {
 }
 #[derive(Debug)]
 pub struct Variable {
-  pub name: String,
+  pub name: SmallString,
   pub span: SourceSpan,
 }
 

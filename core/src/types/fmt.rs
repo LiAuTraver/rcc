@@ -107,7 +107,7 @@ impl Display for Constant {
     match self {
       Integral(i) => write!(f, "{i}"),
       Floating(d) => write!(f, "{d}"),
-      String(s) => write!(f, "\"{}\"", s),
+      String(s) | Address(s) => write!(f, "\"{}\"", s),
       Nullptr(_) => write!(f, "nullptr"),
     }
   }

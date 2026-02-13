@@ -1,3 +1,4 @@
+use ::rcc_utils::SmallString;
 use ::std::{cell::Ref, collections::HashSet};
 
 use crate::{
@@ -23,8 +24,8 @@ pub struct Function {
   pub parameters: Vec<Parameter>, // some duplication with symbol's qualified_type, but we need this for param names
   pub specifier: FunctionSpecifier,
   pub body: Option<Compound>,
-  pub labels: HashSet<String>, // just holds a name
-  pub gotos: HashSet<String>,  // just holds a name
+  pub labels: HashSet<SmallString>, // just holds a name
+  pub gotos: HashSet<SmallString>,  // just holds a name
   pub span: SourceSpan,
 }
 

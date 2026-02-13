@@ -141,6 +141,7 @@ impl Constant {
       Self::Floating(floating) => floating.unqualified_type(),
       Self::String(str) => Type::char_array(str.len() + 1),
       Self::Nullptr(_) => Type::nullptr(),
+      Self::Address(_) => Pointer::new(QualifiedType::void()).into(),
     }
   }
 }

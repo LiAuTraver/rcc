@@ -1,4 +1,4 @@
-use ::rcc_utils::interconvert;
+use ::rcc_utils::{SmallString, interconvert};
 use ::std::fmt::Debug;
 
 use super::{
@@ -12,8 +12,8 @@ use crate::types::Constant;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
   Number(Constant),
-  Identifier(String),
-  String(String),
+  Identifier(SmallString),
+  String(SmallString),
   Keyword(Keyword),
   Operator(Operator),
 }
@@ -25,7 +25,7 @@ pub struct Token {
 }
 
 impl Token {
-  pub fn string(literal: String, location: SourceSpan) -> Self {
+  pub fn string(literal: SmallString, location: SourceSpan) -> Self {
     Self {
       literal: Literal::String(literal),
       location,
@@ -39,7 +39,7 @@ impl Token {
     }
   }
 
-  pub fn identifier(identifier: String, location: SourceSpan) -> Self {
+  pub fn identifier(identifier: SmallString, location: SourceSpan) -> Self {
     Self {
       literal: Literal::Identifier(identifier),
       location,
@@ -60,10 +60,10 @@ impl Token {
     }
   }
 
-  pub fn to_owned_string(&self) -> String {
+  pub fn to_owned_string(&self) -> SmallString {
     match &self.literal {
       Literal::Identifier(str) | Literal::String(str) => str.clone(),
-      Literal::Keyword(kw) => kw.to_string(),
+      Literal::Keyword(kw) => kw.to_string().into(),
       _ => panic!("should not call this: {:?}", self.literal),
     }
   }
@@ -145,7 +145,7 @@ impl Keyword {
 interconvert!(Keyword, Literal);
 interconvert!(Operator, Literal);
 interconvert!(Constant, Literal, Number);
-interconvert!(String, Literal, Identifier);
+interconvert!(SmallString, Literal, Identifier);
 // interconvert!(String, Literal, String); // this one conflicts with the above
 mod cmp {
   use super::{Keyword, Literal, Operator};

@@ -10,12 +10,12 @@ pub trait TypeInfo {
 }
 
 impl TypeInfo for QualifiedType {
-  #[inline]
+  #[inline(always)]
   fn size(&self) -> usize {
     self.unqualified_type().size()
   }
 
-  #[inline]
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     self.unqualified_type().is_scalar()
   }
@@ -65,6 +65,7 @@ impl TypeInfo for Primitive {
     }
   }
 
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     !matches!(self, Void)
   }
@@ -80,6 +81,7 @@ impl TypeInfo for Array {
     }
   }
 
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     false
   }
@@ -94,7 +96,7 @@ impl TypeInfo for Record {
       .sum() // rough, padding and alignment not considered -- incomplete type has no members anyway so this handles it too
   }
 
-  #[inline]
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     false
   }
@@ -110,41 +112,41 @@ impl TypeInfo for Union {
       .unwrap_or(0) // ditto
   }
 
-  #[inline]
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     false
   }
 }
 impl TypeInfo for Pointer {
-  #[inline]
+  #[inline(always)]
   fn size(&self) -> usize {
     ULongLong.size() // x86_64 LLP64 Windows
   }
 
-  #[inline]
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     ULongLong.is_scalar() // shall always be true
   }
 }
 
 impl TypeInfo for FunctionProto {
-  #[inline]
+  #[inline(always)]
   fn size(&self) -> usize {
     0 // function types have no size
   }
 
-  #[inline]
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     false
   }
 }
 impl TypeInfo for Enum {
-  #[inline]
+  #[inline(always)]
   fn size(&self) -> usize {
     self.underlying_type.size()
   }
 
-  #[inline]
+  #[inline(always)]
   fn is_scalar(&self) -> bool {
     assert!(self.underlying_type.is_scalar(), "never fails");
     true

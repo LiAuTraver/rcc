@@ -115,14 +115,14 @@ pub struct RawDefault<StmtTy> {
 
 #[derive(Debug)]
 pub struct RawLabel<StmtTy> {
-  pub name: String,
+  pub name: SmallString,
   pub statement: Box<StmtTy>,
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawGoto {
-  pub label: String,
+  pub label: SmallString,
   pub span: SourceSpan,
 }
 
@@ -145,7 +145,7 @@ pub struct RawContinue {
 }
 
 impl RawGoto {
-  pub fn new(label: String, span: SourceSpan) -> Self {
+  pub fn new(label: SmallString, span: SourceSpan) -> Self {
     Self { label, span }
   }
 }
@@ -183,7 +183,7 @@ impl<StmtTy, ExprTy, ExprCaseTy> RawSwitch<StmtTy, ExprTy, ExprCaseTy> {
 }
 
 impl<StmtTy> RawLabel<StmtTy> {
-  pub fn new(name: String, statement: StmtTy, span: SourceSpan) -> Self {
+  pub fn new(name: SmallString, statement: StmtTy, span: SourceSpan) -> Self {
     Self {
       name,
       statement: Box::new(statement),

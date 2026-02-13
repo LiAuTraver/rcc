@@ -2,7 +2,7 @@
 //! [this article](https://blog.ezyang.com/2013/05/the-ast-typing-problem/),
 //! I probably used the Parametric Polymorphism to "tie the knot" of recursion.
 
-use ::rcc_utils::IntoWith;
+use ::rcc_utils::{IntoWith, SmallString};
 
 use crate::{
   common::{Operator, SourceSpan},
@@ -184,7 +184,7 @@ pub struct RawParen<ExprTy> {
 #[derive(Debug)]
 pub struct RawMemberAccess<ExprTy> {
   pub object: Box<ExprTy>,
-  pub member: String,
+  pub member: SmallString,
   pub span: SourceSpan,
 }
 #[derive(Debug)]

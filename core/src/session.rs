@@ -23,3 +23,6 @@ impl Session {
     }
   }
 }
+
+// #[derive(Debug)]
+// pub struct Context {}

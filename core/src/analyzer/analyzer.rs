@@ -1,5 +1,6 @@
 use ::rcc_utils::{
-  IntoWith, contract_assert, contract_violation, not_implemented_feature,
+  IntoWith, SmallString, contract_assert, contract_violation,
+  not_implemented_feature,
 };
 
 use crate::{
@@ -146,11 +147,11 @@ impl<'session> Analyzer<'session> {
     translation_unit
   }
 
-  pub fn unnamed_placeholder() -> String {
+  pub fn unnamed_placeholder() -> SmallString {
     static COUNTER: ::std::sync::atomic::AtomicUsize =
       ::std::sync::atomic::AtomicUsize::new(0);
     let id = COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
-    format!("<unnamed_{}>", id)
+    format!("<unnamed_{}>", id).into()
   }
 }
 impl<'session> Analyzer<'session> {
@@ -190,6 +191,7 @@ impl<'session> Analyzer<'session> {
                             integral.to_builtin(),
                           ae::ConstantLiteral::Floating(_) => unreachable!(),
                           ae::ConstantLiteral::String(_) => unreachable!(),
+                          ae::ConstantLiteral::Address(_) => unreachable!(),
                           ae::ConstantLiteral::Nullptr(_) => 0,
                         },
                       )
@@ -528,7 +530,7 @@ impl<'session> Analyzer<'session> {
         if !QualifiedType::compatible(&borrow.qualified_type, &qualified_type) {
           Err(
             IncompatibleType(
-              name.clone(),
+              name.to_string(),
               borrow.qualified_type.clone(),
               qualified_type.clone(),
             )
@@ -562,7 +564,7 @@ impl<'session> Analyzer<'session> {
             } else {
               Err(
                 IncompatibleType(
-                  name.clone(),
+                  name.to_string(),
                   prev_symbol_ref.borrow().qualified_type.clone(),
                   qualified_type.clone(),
                 )
@@ -571,7 +573,7 @@ impl<'session> Analyzer<'session> {
               )?
             },
           (Definition, Definition) => Err(
-            FunctionAlreadyDefined(name.clone())
+            FunctionAlreadyDefined(name.to_string())
               .into_with(Severity::Error)
               .into_with(span),
           )?,
@@ -722,7 +724,7 @@ impl<'session> Analyzer<'session> {
       ) {
         Err(
           IncompatibleType(
-            name,
+            name.into(),
             prev_symbol_ref.borrow().qualified_type.clone(),
             vardef.symbol.borrow().qualified_type.clone(),
           )
@@ -736,7 +738,7 @@ impl<'session> Analyzer<'session> {
       type VDK = VarDeclKind;
       match (&prev_declkind, &new_declkind) {
         (VDK::Definition, VDK::Definition) => Err(
-          VariableAlreadyDefined(vardef.symbol.borrow().name.clone())
+          VariableAlreadyDefined(vardef.symbol.borrow().name.to_string())
             .into_with(Severity::Error)
             .into_with(span),
         ),
@@ -828,7 +830,7 @@ impl<'session> Analyzer<'session> {
     &self,
     storage: Option<Storage>,
     qualified_type: QualifiedType,
-    name: String,
+    name: SmallString,
     initializer: Option<ad::Initializer>,
     span: SourceSpan,
   ) -> DeclRes<ad::VarDef> {
@@ -843,7 +845,7 @@ impl<'session> Analyzer<'session> {
       },
       (Some(storage), None) => {
         let storage = if storage.is_register() {
-          self.add_error(GlobalRegVar(name.clone()), span);
+          self.add_error(GlobalRegVar(name.to_string()), span);
           Storage::Extern
         } else {
           storage
@@ -853,12 +855,15 @@ impl<'session> Analyzer<'session> {
       (Some(storage), Some(initializer)) => {
         let storage = match storage {
           Storage::Extern => {
-            self.add_warning(ExternVariableWithInitializer(name.clone()), span);
+            self.add_warning(
+              ExternVariableWithInitializer(name.to_string()),
+              span,
+            );
             storage
           },
 
           Storage::Register => {
-            self.add_error(GlobalRegVar(name.clone()), span);
+            self.add_error(GlobalRegVar(name.to_string()), span);
             Storage::Extern
           },
           _ => storage,
@@ -876,12 +881,12 @@ impl<'session> Analyzer<'session> {
     &self,
     storage: Storage,
     qualified_type: QualifiedType,
-    name: String,
+    name: SmallString,
     initializer: Option<ad::Initializer>,
     span: SourceSpan,
   ) -> DeclRes<ad::VarDef> {
     if storage == Storage::Extern && initializer.is_some() {
-      self.add_error(LocalExternVarWithInitializer(name.clone()), span);
+      self.add_error(LocalExternVarWithInitializer(name.to_string()), span);
     }
     let symbol = Symbol::decl(qualified_type, storage, name);
     Ok(ad::VarDef::new(symbol, initializer, span))
@@ -1008,7 +1013,7 @@ impl<'session> Analyzer<'session> {
 
   fn variable(&self, variable: pe::Variable) -> ExprRes {
     let symbol = self.environment.find(&variable.name).ok_or(
-      UndefinedVariable(variable.name.clone())
+      UndefinedVariable(variable.name.into())
         .into_with(Severity::Error)
         .into_with(variable.span),
     )?;
@@ -2019,7 +2024,7 @@ impl<'session> Analyzer<'session> {
             span,
           )),
           false => Err(
-            DuplicateLabel(name)
+            DuplicateLabel(name.into())
               .into_with(Severity::Error)
               .into_with(span),
           ),

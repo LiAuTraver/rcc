@@ -1,4 +1,4 @@
-use ::rcc_utils::{shared_ptr, weak_ptr};
+use ::rcc_utils::{SmallString, shared_ptr, weak_ptr};
 use ::std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
@@ -12,7 +12,7 @@ pub type SymbolRef = shared_ptr<Symbol>;
 pub type WeakSymbolRef = weak_ptr<Symbol>;
 
 /// a lexical scope.
-type ScopeAssoc<T> = HashMap<String, shared_ptr<T>>;
+type ScopeAssoc<T> = HashMap<SmallString, shared_ptr<T>>;
 /// A lexical scope stack.
 #[derive(Debug)]
 pub struct Scope<T> {
@@ -21,7 +21,7 @@ pub struct Scope<T> {
 /// only tracks names
 #[derive(Debug, Default)]
 pub struct UnitScope {
-  scopes: Vec<HashSet<String>>,
+  scopes: Vec<HashSet<SmallString>>,
 }
 #[derive(Debug, Eq, PartialEq, Clone, Copy, ::strum_macros::Display)]
 pub enum VarDeclKind {
@@ -68,14 +68,13 @@ pub struct Symbol {
   ///   or one [`VarDeclKind::Tentative`] (one tantative counts as definition), add it as definition
   /// - else if only has [`Storage::Extern`] and [`VarDeclKind::Declaration`], it's declaration and let linker handle it.
   pub storage_class: Storage,
-  pub name: String,
-  /// declaration or definition
+  pub name: SmallString,
   pub declkind: VarDeclKind,
 }
 #[derive(Debug, Default)]
 pub struct Environment {
   symbols: Scope<Symbol>,
-  cache: RefCell<HashMap<String, WeakSymbolRef>>,
+  cache: RefCell<HashMap<SmallString, WeakSymbolRef>>,
 }
 impl Environment {
   pub fn new() -> Self {
@@ -109,7 +108,7 @@ impl Environment {
       self
         .cache
         .borrow_mut()
-        .insert(name.to_string(), Rc::downgrade(s));
+        .insert(name.into(), Rc::downgrade(s));
     }
     sym
   }
@@ -121,7 +120,7 @@ impl Environment {
       self
         .cache
         .borrow_mut()
-        .insert(name.to_string(), Rc::downgrade(s));
+        .insert(name.into(), Rc::downgrade(s));
     }
     sym
   }
@@ -129,7 +128,7 @@ impl Environment {
   /// note: if the symbol already exists, it'll be updated.
   pub fn declare_symbol(
     &mut self,
-    name: String,
+    name: SmallString,
     symbol: SymbolRef,
   ) -> SymbolRef {
     // overwrite cache
@@ -154,7 +153,7 @@ impl Symbol {
   pub fn new(
     qualified_type: QualifiedType,
     storage_class: Storage,
-    name: String,
+    name: SmallString,
     declkind: VarDeclKind,
   ) -> Self {
     Self {
@@ -168,7 +167,7 @@ impl Symbol {
   pub fn decl(
     qualified_type: QualifiedType,
     storage_class: Storage,
-    name: String,
+    name: SmallString,
   ) -> SymbolRef {
     Self::new_ref(Self::new(
       qualified_type,
@@ -181,7 +180,7 @@ impl Symbol {
   pub fn def(
     qualified_type: QualifiedType,
     storage_class: Storage,
-    name: String,
+    name: SmallString,
   ) -> SymbolRef {
     Self::new_ref(Self::new(
       qualified_type,
@@ -194,7 +193,7 @@ impl Symbol {
   pub fn tentative(
     qualified_type: QualifiedType,
     storage_class: Storage,
-    name: String,
+    name: SmallString,
   ) -> SymbolRef {
     Self::new_ref(Self::new(
       qualified_type,
@@ -234,7 +233,7 @@ impl UnitScope {
     false
   }
 
-  pub fn declare(&mut self, name: String) {
+  pub fn declare(&mut self, name: SmallString) {
     let current = self.scopes.last_mut();
     assert!(
       current.is_some(),
@@ -285,7 +284,11 @@ impl<T> Scope<T> {
     None
   }
 
-  pub fn declare(&mut self, name: String, val: shared_ptr<T>) -> shared_ptr<T> {
+  pub fn declare(
+    &mut self,
+    name: SmallString,
+    val: shared_ptr<T>,
+  ) -> shared_ptr<T> {
     let current = self.scopes.last_mut();
     assert!(
       current.is_some(),

@@ -1,4 +1,4 @@
-use ::rcc_utils::IntoWith;
+use ::rcc_utils::{IntoWith, SmallString};
 
 use crate::{
   blueprints::Placeholder as Nullptr,
@@ -17,12 +17,15 @@ use crate::{
 ///
 /// discrepancy: string literals are not constant values in C `char[N]`
 /// (but in C++, it is, though. verified by clangd's AST: `const char[N]`.)
+///
+/// TODO: named constants `constexpr` and AddressConstant +- constant integral
 #[derive(Debug, PartialEq, Clone)]
 pub enum Constant {
   Integral(Integral),
   Floating(Floating),
-  String(String),
+  String(SmallString),
   Nullptr(Nullptr),
+  Address(SmallString),
 }
 impl Constant {
   pub const FLOATING_SUFFIXES: &'static [&'static str] = &[
@@ -155,6 +158,7 @@ impl Constant {
       Self::Floating(floating) => floating.is_zero(),
       Self::String(_) => false,
       Self::Nullptr(_) => true,
+      Self::Address(_) => false,
     }
   }
 
@@ -166,6 +170,7 @@ impl Constant {
         Constant::Integral(Integral::from_bool(!floating.is_zero())),
       Self::String(_) => Constant::Integral(Integral::from_bool(true)),
       Self::Nullptr(_) => Constant::Integral(Integral::from_bool(false)),
+      Self::Address(_) => Constant::Integral(Integral::from_bool(true)),
     }
   }
 
@@ -190,10 +195,10 @@ impl Constant {
 }
 ::rcc_utils::interconvert!(Integral, Constant);
 ::rcc_utils::interconvert!(Floating, Constant);
-::rcc_utils::interconvert!(String, Constant);
+::rcc_utils::interconvert!(SmallString, Constant, String);
 ::rcc_utils::interconvert!(Nullptr, Constant);
 
 ::rcc_utils::make_trio_for!(Integral, Constant);
 ::rcc_utils::make_trio_for!(Floating, Constant);
 ::rcc_utils::make_trio_for!(Nullptr, Constant);
-::rcc_utils::make_trio_for!(String, Constant);
+::rcc_utils::make_trio_for!(SmallString, Constant, String);
