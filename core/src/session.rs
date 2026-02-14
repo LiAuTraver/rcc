@@ -1,7 +1,6 @@
-use ::bumpalo::Bump;
 use ::std::rc::Rc;
 
-use crate::{common::SourceManager, diagnosis::Operational, types::Type};
+use crate::{common::SourceManager, diagnosis::Operational};
 
 #[derive(Debug)]
 pub struct Session {
@@ -25,12 +24,5 @@ impl Session {
   }
 }
 
-#[derive(Default)]
-pub struct Context {
-  pub arena: Bump,
-}
-impl Context {
-  pub fn new() -> Self {
-    Default::default()
-  }
-}
+pub struct Context {}
+impl Context {}
