@@ -1,5 +1,7 @@
 //! this file would be furthur split into multiple files when more impls are added.
 
+use ::rcc_utils::SmallString;
+
 use super::{Primitive, QualifiedType, Type};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,7 +32,7 @@ pub struct Array {
   /// the actual element type's qualifiers are stored here.
   pub element_type: QualifiedType,
   pub size: ArraySize,
-  // These are not elem's, but the arraysize's. static is a hint for optimization;
+  // These are not elem's, but the arraysize's. static is a hint for optimization,etc. dont care it for now.
   // pub qualifiers: Qualifiers,
   // pub is_static: bool,
 }
@@ -46,33 +48,33 @@ pub struct FunctionProto {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Field {
-  pub name: String,
+  pub name: SmallString,
   pub field_type: QualifiedType,
 }
 
 // ignore unnamed/anonymous structs/unions for now
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
-  pub name: Option<String>,
+  pub name: Option<SmallString>,
   pub fields: Vec<Field>,
 }
 
 // seems not so much difference between struct and union here, but for convenience we keep them separate
 #[derive(Debug, Clone, PartialEq)]
 pub struct Union {
-  pub name: Option<String>,
+  pub name: Option<SmallString>,
   pub fields: Vec<Field>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumConstant {
-  pub name: String,
+  pub name: SmallString,
   pub value: Option<isize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
-  pub name: Option<String>,
+  pub name: Option<SmallString>,
   pub constants: Vec<EnumConstant>,
   pub underlying_type: Primitive, // must be integer type
 }
@@ -103,7 +105,7 @@ impl FunctionProto {
 }
 impl Enum {
   pub fn new(
-    name: Option<String>,
+    name: Option<SmallString>,
     constants: Vec<EnumConstant>,
     underlying_type: Primitive,
   ) -> Self {
