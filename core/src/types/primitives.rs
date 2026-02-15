@@ -2,7 +2,10 @@
 #[derive(
   Debug,
   Clone,
+  Copy,
   PartialEq,
+  Eq,
+  Hash,
   ::strum_macros::Display,
   ::strum_macros::IntoStaticStr,
   ::strum_macros::EnumString,
@@ -66,7 +69,7 @@ impl Primitive {
     // first: _Decimal types ignored
     // also, complex types ignored
     if lhs == rhs {
-      return (lhs.clone(), Noop, Noop);
+      return (*lhs, Noop, Noop);
     }
     if matches!(lhs, Self::Void | Self::Nullptr)
       || matches!(rhs, Self::Void | Self::Nullptr)
@@ -76,10 +79,10 @@ impl Primitive {
     // otherwise, if either operand is of some floating type, the other operand is converted to it.
     // Otherwise, if any of the two types is an enumeration, it is converted to its underlying type. - handled upstream
     match (lhs.is_floating_point(), rhs.is_floating_point()) {
-      (true, false) => (lhs.clone(), Noop, IntegralToFloating),
-      (false, true) => (rhs.clone(), IntegralToFloating, Noop),
-      (true, true) => Self::common_floating_rank(lhs.clone(), rhs.clone()),
-      (false, false) => Self::common_integer_rank(lhs.clone(), rhs.clone()),
+      (true, false) => (*lhs, Noop, IntegralToFloating),
+      (false, true) => (*rhs, IntegralToFloating, Noop),
+      (true, true) => Self::common_floating_rank(*lhs, *rhs),
+      (false, false) => Self::common_integer_rank(*lhs, *rhs),
     }
   }
 

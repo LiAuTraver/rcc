@@ -7,18 +7,20 @@ use crate::{
   common::SourceSpan,
   diagnosis::{Diag, DiagData::*, Severity},
   types::{
-    CastType, Compatibility, Pointer, Primitive, Promotion, QualifiedType, Type,
+    CastType, Compatibility, Context, Pointer, Primitive, Promotion,
+    QualifiedType, Type,
   },
 };
 
-impl Expression {
+impl<'context> Expression<'context> {
   /// 6.3.1.8 Usual arithmetic conversions, applied implicitly where arithmetic conversions are required
   #[must_use]
   #[inline]
   pub fn usual_arithmetic_conversion(
-    lhs: Expression,
-    rhs: Expression,
-  ) -> Result<(Expression, Expression, QualifiedType), Diag> {
+    lhs: Self,
+    rhs: Self,
+    context: &Context<'context>,
+  ) -> Result<(Self, Self, QualifiedType<'context>), Diag<'context>> {
     assert!(
       !lhs.is_lvalue() && !rhs.is_lvalue(),
       "perform lvalue conversion first"
@@ -33,12 +35,15 @@ impl Expression {
       ),
       "perform decay first"
     );
-    Self::usual_arithmetic_conversion_unchecked(lhs, rhs)
+    Self::usual_arithmetic_conversion_unchecked(lhs, rhs, context)
   }
 
   #[must_use]
   #[inline]
-  pub fn usual_arithmetic_conversion_unary(self) -> Result<Self, Diag> {
+  pub fn usual_arithmetic_conversion_unary(
+    self,
+    context: &Context<'context>,
+  ) -> Result<Self, Diag<'context>> {
     assert!(!self.is_lvalue(), "perform lvalue conversion first");
     assert!(
       !matches!(
@@ -47,7 +52,7 @@ impl Expression {
       ),
       "perform decay first"
     );
-    Self::usual_arithmetic_conversion_unary_unchecked(self)
+    Self::usual_arithmetic_conversion_unary_unchecked(self, context)
   }
 
   /// 6.3.1.2.1: When any scalar value is converted to bool, the result is false if:
@@ -64,7 +69,10 @@ impl Expression {
   /// Returned expression is always rvalue of type `int` -- well, cannot be `bool` since `sizeof` expression will be wrong!
   #[must_use]
   #[inline]
-  pub fn conditional_conversion(self) -> Result<Self, Diag> {
+  pub fn conditional_conversion(
+    self,
+    context: &'context Context,
+  ) -> Result<Self, Diag<'context>> {
     assert!(
       !matches!(
         self.unqualified_type(),
@@ -72,7 +80,7 @@ impl Expression {
       ),
       "perform decay first"
     );
-    Self::conditional_conversion_unchecked(self)
+    Self::conditional_conversion_unchecked(self, context)
   }
 
   /// If an expression of any other type is evaluated as a void expression, its value or designator is discarded.
@@ -81,11 +89,11 @@ impl Expression {
   /// unary.
   #[must_use]
   #[inline]
-  pub fn void_conversion(self) -> Self {
+  pub fn void_conversion(self, context: &'context Context) -> Self {
     let span = self.span();
     Self::new_rvalue(
       ImplicitCast::new(self.into(), CastType::ToVoid, span).into(),
-      QualifiedType::void(),
+      context.void_type().into(),
     )
   }
 
@@ -94,8 +102,8 @@ impl Expression {
   #[inline]
   pub fn assignment_conversion(
     self,
-    target_type: &QualifiedType,
-  ) -> Result<Self, Diag> {
+    target_type: &QualifiedType<'context>,
+  ) -> Result<Self, Diag<'context>> {
     assert!(
       !matches!(
         self.unqualified_type(),
@@ -121,7 +129,7 @@ impl Expression {
       self
     } else if self.is_lvalue() {
       // If the lvalue has qualified type, the value has the unqualified version of the type of the lvalue. perform cast from lvalue to rvalue
-      let old_unqual_type = self.unqualified_type().clone();
+      let old_unqual_type = self.unqualified_type();
       let span = self.span();
       Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::LValueToRValue, span).into(),
@@ -134,10 +142,10 @@ impl Expression {
 
   #[must_use]
   #[inline]
-  pub fn decay(self) -> Self {
+  pub fn decay(self, context: &Context<'context>) -> Self {
     match self.unqualified_type() {
-      Type::Array(_) => self.array_to_pointer_decay(),
-      Type::FunctionProto(_) => self.function_to_pointer_decay(),
+      Type::Array(_) => self.array_to_pointer_decay(context),
+      Type::FunctionProto(_) => self.function_to_pointer_decay(context),
       _ => self,
     }
   }
@@ -147,19 +155,14 @@ impl Expression {
   ///     "function returning type" is converted to an expression that has type "pointer to function returning
   ///     type"
   #[must_use]
-  pub fn function_to_pointer_decay(self) -> Self {
-    let function_type = match self.unqualified_type() {
-      Type::FunctionProto(f) => f,
-      _ => unreachable!(),
-    };
+  pub fn function_to_pointer_decay(self, context: &Context<'context>) -> Self {
     assert!(
       self.qualifiers().is_empty(),
       "function type should not have qualifiers: {:?}",
       self.qualified_type()
     );
-    let pointer_type = Pointer::new(QualifiedType::new_unqualified(
-      Type::FunctionProto(function_type.clone()).into(),
-    ));
+    let pointer_type =
+      Type::Pointer(Pointer::new(*self.qualified_type())).lookup(context);
     let span = self.span();
     Self::new_rvalue(
       ImplicitCast::new(self.into(), CastType::FunctionToPointerDecay, span)
@@ -174,7 +177,7 @@ impl Expression {
   ///       to an expression with type "pointer to type" that points to the initial element of the array object and
   ///       is not an lvalue.
   #[must_use]
-  pub fn array_to_pointer_decay(self) -> Self {
+  pub fn array_to_pointer_decay(self, context: &Context<'context>) -> Self {
     let array_type = match self.unqualified_type() {
       Type::Array(a) => a,
       _ => unreachable!(),
@@ -186,21 +189,24 @@ impl Expression {
     );
     let pointer_type = Type::from(Pointer::new(
       // array itself should not have qualifiers, but the element qualifiers are preserved
-      array_type.element_type.clone(),
+      array_type.element_type,
     ));
     let span = self.span();
     Self::new_rvalue(
       ImplicitCast::new(self.into(), CastType::ArrayToPointerDecay, span)
         .into(),
       // The pointer itself is never qualified
-      pointer_type.into(),
+      pointer_type.lookup(context).into(),
     )
   }
 
   /// I didnt find this in C standard, but it's a handy conversion for pointer arithmetic with numeric types (e.g. `ptr + 1`).
   #[must_use]
   #[inline]
-  pub fn uintptr_conversion(self) -> Result<Self, Diag> {
+  pub fn uintptr_conversion(
+    self,
+    context: &'context Context,
+  ) -> Result<Self, Diag<'context>> {
     debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
     debug_assert!(
       !matches!(
@@ -218,13 +224,16 @@ impl Expression {
         .into_with(self.span()),
       )
     } else {
-      Ok(Self::uintptr_conversion_unchecked(self))
+      Ok(Self::uintptr_conversion_unchecked(self, context))
     }
   }
 
   #[must_use]
   #[inline]
-  pub fn ptrdiff_conversion(self) -> Result<Self, Diag> {
+  pub fn ptrdiff_conversion(
+    self,
+    context: &'context Context,
+  ) -> Result<Self, Diag<'context>> {
     debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
     debug_assert!(
       !matches!(
@@ -242,27 +251,27 @@ impl Expression {
         .into_with(self.span()),
       )
     } else {
-      Ok(Self::ptrdiff_conversion_unchecked(self))
+      Ok(Self::ptrdiff_conversion_unchecked(self, context))
     }
   }
 }
 // unchecked version is requireds to use w.r.t. `&`, `sizeof`, `alignof`, etc.
-impl Expression {
+impl<'context> Expression<'context> {
   #[must_use]
   fn assignment_conversion_unchecked(
     self,
-    target_type: &QualifiedType,
-  ) -> Result<Self, Diag> {
+    target_type: &QualifiedType<'context>,
+  ) -> Result<Self, Diag<'context>> {
     let span = self.span();
 
-    match (target_type.unqualified_type(), self.unqualified_type()) {
+    match (target_type.unqualified_type, self.unqualified_type()) {
       //  the left operand has [...] arithmetic type, and the right operand has arithmetic type;
       (Type::Primitive(left), Type::Primitive(right))
         if left.is_arithmetic() && right.is_arithmetic() =>
       {
         let cast_type = Self::get_cast_type(
           self.unqualified_type(),
-          target_type.unqualified_type(),
+          target_type.unqualified_type,
         );
         Ok(Self::maybe_cast(self, cast_type, target_type))
       },
@@ -277,10 +286,10 @@ impl Expression {
       (Type::Pointer(lhs), Type::Pointer(rhs)) => {
         // can add qualifiers, but cannot remove them
         // error if removing qualifiers (const, volatile, etc.)
-        if !lhs.pointee.qualifiers().contains(*rhs.pointee.qualifiers()) {
+        if !lhs.pointee.qualifiers.contains(rhs.pointee.qualifiers) {
           Err(
             DiscardingQualifiers(
-              *rhs.pointee.qualifiers() - *lhs.pointee.qualifiers(),
+              rhs.pointee.qualifiers - lhs.pointee.qualifiers,
             )
             .into_with(Severity::Error)
             .into_with(span),
@@ -289,15 +298,15 @@ impl Expression {
 
         if lhs
           .pointee
-          .unqualified_type()
-          .compatible_with(rhs.pointee.unqualified_type())
-          || lhs.pointee.unqualified_type().is_void()
-          || rhs.pointee.unqualified_type().is_void()
+          .unqualified_type
+          .compatible_with(rhs.pointee.unqualified_type)
+          || lhs.pointee.unqualified_type.is_void()
+          || rhs.pointee.unqualified_type.is_void()
         {
           // no need to create composite type -- pointer types are the same except for qualifiers
           Ok(Self::new_rvalue(
             ImplicitCast::new(self.into(), CastType::BitCast, span).into(),
-            target_type.clone(),
+            *target_type,
           ))
         } else {
           Err(
@@ -320,7 +329,7 @@ impl Expression {
         Ok(Self::new_rvalue(
           ImplicitCast::new(self.into(), CastType::NullptrToPointer, span)
             .into(),
-          target_type.clone(),
+          *target_type,
         )),
 
       // the left operand has atomic, qualified, or unqualified bool, and the right operand is a pointer or its type is nullptr_t.
@@ -328,20 +337,20 @@ impl Expression {
         Ok(Self::new_rvalue(
           ImplicitCast::new(self.into(), CastType::PointerToBoolean, span)
             .into(),
-          target_type.clone(),
+          *target_type,
         )),
       (
         Type::Primitive(Primitive::Bool),
         Type::Primitive(Primitive::Nullptr),
       ) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::NullptrToBoolean, span).into(),
-        target_type.clone(),
+        *target_type,
       )),
       _ => Err(
         InvalidConversion(format!(
           "cannot convert from '{}' to '{}'",
           self.unqualified_type(),
-          target_type.unqualified_type()
+          target_type.unqualified_type
         ))
         .into_with(Severity::Error)
         .into_with(self.span()),
@@ -350,23 +359,26 @@ impl Expression {
   }
 
   #[must_use]
-  fn conditional_conversion_unchecked(self) -> Result<Self, Diag> {
+  fn conditional_conversion_unchecked(
+    self,
+    context: &'context Context,
+  ) -> Result<Self, Diag<'context>> {
     let span = self.span();
 
     match self.unqualified_type() {
       Type::Primitive(Primitive::Bool) =>
-        Ok(Self::cast_if_needed(self, &QualifiedType::bool_type())),
+        Ok(Self::cast_if_needed(self, &context.bool_type().into())),
       Type::Primitive(p) if p.is_integer() =>
-        Ok(self.cast_if_needed(&QualifiedType::bool_type())),
+        Ok(self.cast_if_needed(&context.bool_type().into())),
       Type::Primitive(p) if p.is_floating_point() => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::FloatingToIntegral, span)
           .into(),
-        QualifiedType::bool_type(),
+        context.bool_type().into(),
       )),
       Type::Primitive(Primitive::Nullptr) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::NullptrToIntegral, span)
           .into(),
-        QualifiedType::bool_type(),
+        context.bool_type().into(),
       )),
       Type::Primitive(Primitive::Void) => Err(
         InvalidConversion(
@@ -387,7 +399,7 @@ impl Expression {
       Type::Pointer(_) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::PointerToIntegral, span)
           .into(),
-        QualifiedType::bool_type(),
+        context.bool_type().into(),
       )),
 
       Type::Array(array) => panic!(
@@ -410,11 +422,12 @@ impl Expression {
 
   #[must_use]
   fn usual_arithmetic_conversion_unchecked(
-    lhs: Expression,
-    rhs: Expression,
-  ) -> Result<(Expression, Expression, QualifiedType), Diag> {
-    let lhs = lhs.promote();
-    let rhs = rhs.promote();
+    lhs: Self,
+    rhs: Self,
+    context: &Context<'context>,
+  ) -> Result<(Self, Self, QualifiedType<'context>), Diag<'context>> {
+    let lhs = lhs.promote(context);
+    let rhs = rhs.promote(context);
 
     let (common_type, lhs_cast, rhs_cast) =
       match (lhs.unqualified_type(), rhs.unqualified_type()) {
@@ -436,7 +449,7 @@ impl Expression {
         },
       };
 
-    let common_qtype = common_type.into();
+    let common_qtype = Type::Primitive(common_type).lookup(context).into();
     let lhs = Self::maybe_cast(lhs, lhs_cast, &common_qtype);
     let rhs = Self::maybe_cast(rhs, rhs_cast, &common_qtype);
     Ok((lhs, rhs, common_qtype))
@@ -446,8 +459,9 @@ impl Expression {
   #[must_use]
   pub(super) fn usual_arithmetic_conversion_unary_unchecked(
     self,
-  ) -> Result<Self, Diag> {
-    let promoted = self.promote();
+    context: &Context<'context>,
+  ) -> Result<Self, Diag<'context>> {
+    let promoted = self.promote(context);
     match promoted.unqualified_type() {
       Type::Primitive(p) if p.is_arithmetic() => Ok(promoted),
       _ => Err(
@@ -462,28 +476,36 @@ impl Expression {
   }
 
   #[must_use]
-  pub(super) fn uintptr_conversion_unchecked(self) -> Self {
+  pub(super) fn uintptr_conversion_unchecked(
+    self,
+    context: &'context Context,
+  ) -> Self {
     debug_assert!(self.unqualified_type().is_integer());
     let cast_type =
-      Self::get_cast_type(self.unqualified_type(), &Type::uintptr());
-    Self::maybe_cast(self, cast_type, &Type::uintptr().into())
+      Self::get_cast_type(self.unqualified_type(), context.uintptr_type());
+    Self::maybe_cast(self, cast_type, &context.uintptr_type().into())
   }
 
   #[must_use]
-  pub(super) fn ptrdiff_conversion_unchecked(self) -> Self {
+  pub(super) fn ptrdiff_conversion_unchecked(
+    self,
+    context: &'context Context,
+  ) -> Self {
     debug_assert!(self.unqualified_type().is_integer());
-    let cast_type =
-      Self::get_cast_type(self.unqualified_type(), &Type::ptrdiff());
-    Self::maybe_cast(self, cast_type, &Type::ptrdiff().into())
+    let cast_type = Self::get_cast_type(
+      self.unqualified_type(),
+      Context::ptrdiff_type(context),
+    );
+    Self::maybe_cast(self, cast_type, &context.ptrdiff_type().into())
   }
 }
 
 /// Heplers.
-impl Expression {
+impl<'context> Expression<'context> {
   #[must_use]
   fn get_cast_type(from: &Type, to: &Type) -> CastType {
     match (from, to) {
-      (from, to) if from == to => CastType::Noop,
+      (from, to) if ::std::ptr::eq(from, to) => CastType::Noop,
       (Type::Primitive(from_prim), Type::Primitive(to_prim)) => {
         if from_prim.is_integer() && to_prim.is_integer() {
           CastType::IntegralCast
@@ -506,39 +528,39 @@ impl Expression {
   fn maybe_cast(
     self,
     cast_type: CastType,
-    target_type: &QualifiedType,
-  ) -> Expression {
+    target_type: &QualifiedType<'context>,
+  ) -> Self {
     match cast_type {
       CastType::Noop => self,
       _ => {
         let span = self.span();
         Expression::new_rvalue(
           ImplicitCast::new(self.into(), cast_type, span).into(),
-          target_type.clone(),
+          *target_type,
         )
       },
     }
   }
 
   #[must_use]
-  fn cast_if_needed(self, target_type: &QualifiedType) -> Self {
+  fn cast_if_needed(self, target_type: &QualifiedType<'context>) -> Self {
     let cast_type = Self::get_cast_type(
       self.unqualified_type(),
-      target_type.unqualified_type(),
+      target_type.unqualified_type,
     );
     self.maybe_cast(cast_type, target_type)
   }
 
   #[must_use]
-  pub fn promote(self) -> Self {
-    let (promoted_type, cast_type) = self.qualified_type().clone().promote();
+  pub fn promote(self, context: &Context<'context>) -> Self {
+    let (promoted_type, cast_type) = self.unqualified_type().clone().promote();
     match cast_type {
       CastType::Noop => self,
       cast_type => {
         let span = self.span();
         Self::new_rvalue(
           ImplicitCast::new(self.into(), cast_type, span).into(),
-          promoted_type,
+          promoted_type.lookup(context).into(),
         )
       },
     }

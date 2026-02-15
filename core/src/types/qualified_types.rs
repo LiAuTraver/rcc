@@ -1,12 +1,14 @@
-use ::std::rc::Rc;
+use ::rcc_utils::ensure_is_pod;
 
-use super::Type;
+use super::{Type, TypeRef};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct QualifiedType {
-  qualifiers: Qualifiers,
-  unqualified_type: Rc<Type>,
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct QualifiedType<'context> {
+  pub qualifiers: Qualifiers,
+  pub unqualified_type: TypeRef<'context>,
 }
+
+ensure_is_pod!(QualifiedType);
 
 ::bitflags::bitflags! {
 /// type-specifier-qualifier:
@@ -15,7 +17,7 @@ pub struct QualifiedType {
 /// -    alignment-specifier (don't care)
 ///
 /// specifier would be merged into `Type` directly, so here only have qualifiers
-  #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+  #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
   pub struct Qualifiers: u8 {
     const Const = 0x01;
     const Volatile = 0x02;
@@ -31,63 +33,33 @@ pub struct QualifiedType {
   }
 }
 
-impl QualifiedType {
-  pub const fn new(qualifiers: Qualifiers, unqualified_type: Rc<Type>) -> Self {
+impl<'context> QualifiedType<'context> {
+  pub const fn new(
+    qualifiers: Qualifiers,
+    unqualified_type: TypeRef<'context>,
+  ) -> Self {
     Self {
       qualifiers,
       unqualified_type,
     }
   }
 
-  pub const fn new_unqualified(unqualified_type: Rc<Type>) -> Self {
+  pub const fn new_unqualified(unqualified_type: TypeRef<'context>) -> Self {
     Self {
       qualifiers: Qualifiers::empty(),
       unqualified_type,
     }
   }
-
-  pub fn void() -> Self {
-    Self::new_unqualified(Type::void().into())
-  }
-
-  /// Currently it returns an [`Primitive::Int`] instead of [`Primitive::Bool`].
-  pub fn bool_type() -> Self {
-    Self::new_unqualified(Type::bool_type().into())
-  }
-
-  pub fn int() -> Self {
-    Self::new_unqualified(Type::int().into())
-  }
-
-  pub fn float() -> Self {
-    Self::new_unqualified(Type::float().into())
-  }
-
-  pub fn nullptr() -> Self {
-    Self::new_unqualified(Type::nullptr().into())
-  }
-
-  pub fn uintptr() -> Self {
-    Self::new_unqualified(Type::uintptr().into())
-  }
-
-  pub fn ptrdiff() -> Self {
-    Self::new_unqualified(Type::ptrdiff().into())
-  }
-
-  pub fn char() -> Self {
-    Self::new_unqualified(Type::char().into())
-  }
 }
-impl ::std::ops::Deref for QualifiedType {
-  type Target = Type;
+impl<'context> ::std::ops::Deref for QualifiedType<'context> {
+  type Target = TypeRef<'context>;
 
   fn deref(&self) -> &Self::Target {
     &self.unqualified_type
   }
 }
 
-impl QualifiedType {
+impl<'context> QualifiedType<'context> {
   pub fn with_qualifiers(mut self, qualifiers: Qualifiers) -> Self {
     self.qualifiers |= qualifiers;
     self
@@ -102,21 +74,23 @@ impl QualifiedType {
     self.unqualified_type.is_void()
   }
 
-  pub fn qualifiers(&self) -> &Qualifiers {
-    &self.qualifiers
-  }
-
-  pub fn unqualified_type(&self) -> &Type {
-    &self.unqualified_type
-  }
-
-  pub fn destructure(self) -> (Qualifiers, Rc<Type>) {
+  pub fn destructure(self) -> (Qualifiers, TypeRef<'context>) {
     (self.qualifiers, self.unqualified_type)
   }
 }
-impl From<Type> for QualifiedType {
+impl<'context> const From<TypeRef<'context>> for QualifiedType<'context> {
   #[inline]
-  fn from(value: Type) -> Self {
-    QualifiedType::new_unqualified(value.into())
+  fn from(value: TypeRef<'context>) -> Self {
+    Self {
+      qualifiers: Qualifiers::empty(),
+      unqualified_type: value,
+    }
+  }
+}
+
+impl<'context> From<&'context mut Type<'context>> for QualifiedType<'context> {
+  #[inline(always)]
+  fn from(inner: &'context mut Type<'context>) -> Self {
+    Self::new_unqualified(inner)
   }
 }

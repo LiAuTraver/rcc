@@ -24,28 +24,34 @@ pub enum RawStmt<StmtTy, DeclTy, ExprTy, ExprCaseTy = ExprTy> {
 
 #[macro_export(local_inner_macros)]
 macro_rules! type_alias_stmt {
-  ($stmtty:ident, $declty:ident, $exprty:ident) => {
+  ($stmtty:ty, $declty:ty, $exprty:ty) => {
     $crate::type_alias_stmt!($stmtty, $declty, $exprty, $exprty);
   };
-  ($stmtty:ident, $declty:ident, $exprty:ident, $exprcasety:ident) => {
+  ($stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty) => {
+    $crate::type_alias_stmt!(@impl $stmtty, $declty, $exprty, $exprcasety: []);
+  };
+    ($stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty, $lt:lifetime) => {
+    $crate::type_alias_stmt!(@impl $stmtty, $declty, $exprty, $exprcasety: [<$lt>]);
+  };
+  (@impl $stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty : [$(<$lt:lifetime>)?]) => {
     #[allow(dead_code)]
-    pub type RawStmt = $crate::blueprints::RawStmt<$stmtty, $declty, $exprty>;
+    pub type RawStmt$(<$lt>)? = $crate::blueprints::RawStmt<$stmtty, $declty, $exprty>;
     #[allow(dead_code)]
     pub type Empty = $crate::blueprints::Placeholder;
-    pub type Return = $crate::blueprints::RawReturn<$exprty>;
-    pub type If = $crate::blueprints::RawIf<$stmtty, $exprty>;
-    pub type While = $crate::blueprints::RawWhile<$stmtty, $exprty>;
-    pub type DoWhile = $crate::blueprints::RawDoWhile<$stmtty, $exprty>;
-    pub type For = $crate::blueprints::RawFor<$stmtty, $exprty>;
-    pub type Switch =
+    pub type Return$(<$lt>)? = $crate::blueprints::RawReturn<$exprty>;
+    pub type If$(<$lt>)? = $crate::blueprints::RawIf<$stmtty, $exprty>;
+    pub type While$(<$lt>)? = $crate::blueprints::RawWhile<$stmtty, $exprty>;
+    pub type DoWhile$(<$lt>)? = $crate::blueprints::RawDoWhile<$stmtty, $exprty>;
+    pub type For$(<$lt>)? = $crate::blueprints::RawFor<$stmtty, $exprty>;
+    pub type Switch$(<$lt>)? =
       $crate::blueprints::RawSwitch<$stmtty, $exprty, $exprcasety>;
-    pub type Case = $crate::blueprints::RawCase<$stmtty, $exprcasety>;
-    pub type Default = $crate::blueprints::RawDefault<$stmtty>;
-    pub type Label = $crate::blueprints::RawLabel<$stmtty>;
-    pub type Goto = $crate::blueprints::RawGoto;
-    pub type Compound = $crate::blueprints::RawCompound<$stmtty>;
-    pub type Break = $crate::blueprints::RawBreak;
-    pub type Continue = $crate::blueprints::RawContinue;
+    pub type Case$(<$lt>)? = $crate::blueprints::RawCase<$stmtty, $exprcasety>;
+    pub type Default$(<$lt>)? = $crate::blueprints::RawDefault<$stmtty>;
+    pub type Label$(<$lt>)? = $crate::blueprints::RawLabel<$stmtty>;
+    pub type Goto$(<$lt>)? = $crate::blueprints::RawGoto;
+    pub type Compound $(<$lt>)?= $crate::blueprints::RawCompound<$stmtty>;
+    pub type Break$(<$lt>)? = $crate::blueprints::RawBreak;
+    pub type Continue$(<$lt>)? = $crate::blueprints::RawContinue;
   };
 }
 

@@ -55,11 +55,11 @@ impl Constant {
   ];
 
   /// parse a numeric literal with optional suffix, if fails, return an error message and the default value of the Constant
-  pub fn parse(
+  pub fn parse<'context>(
     num: &str,
     suffix: Option<&str>,
     is_floating: bool,
-  ) -> (Self, Option<DiagMeta>) {
+  ) -> (Self, Option<DiagMeta<'context>>) {
     macro_rules! int_conv {
       ($t:ty, $signess:ident) => {
         match num.parse::<$t>() {

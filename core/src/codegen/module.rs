@@ -11,9 +11,9 @@ use crate::types::{Constant, QualifiedType};
 pub type ilist_type<T> = Vec<T>;
 
 /// TODO: move counter inside a dedicated struct to decouple the module.
-pub struct Module {
-  pub functions: ilist_type<Function>,
-  pub globals: Vec<Variable>,
+pub struct Module<'context> {
+  pub functions: ilist_type<Function<'context>>,
+  pub globals: Vec<Variable<'context>>,
   /// counter for generating unique temporary names
   temp_counter: usize,
   /// counter for generating unique label names
@@ -21,26 +21,26 @@ pub struct Module {
 }
 
 /// **Global** function in TAC-SSA form
-pub struct Function {
+pub struct Function<'context> {
   pub name: SmallString,
   pub params: Vec<Operand>,
-  pub blocks: ilist_type<BasicBlock>,
-  pub return_type: QualifiedType,
+  pub blocks: ilist_type<BasicBlock<'context>>,
+  pub return_type: QualifiedType<'context>,
   pub is_variadic: bool,
 }
 
 /// **Global** Variable. Non-static local variable won't be stored here, but exists as [`Operand`].
-pub struct Variable {
+pub struct Variable<'context> {
   pub name: SmallString,
-  pub qualified_type: QualifiedType,
+  pub qualified_type: QualifiedType<'context>,
   // pub storage_class: Storage, // should either be extern or static?
   // pub declkind: VarDeclKind,
   pub initializer: Option<Initializer>,
 }
 
-pub struct BasicBlock {
+pub struct BasicBlock<'context> {
   pub label: SmallString,
-  pub instructions: ilist_type<Instruction>,
+  pub instructions: ilist_type<Instruction<'context>>,
 }
 
 /// **Static** initializer.

@@ -63,7 +63,7 @@ impl Palette {
   }
 }
 
-pub trait Dumper {
+pub trait Dumper<'context, 'source> {
   #[inline(always)]
   fn write(&mut self, text: &str, spec: &ColorSpec) -> DumpRes {
     self.write_fmt(format_args!("{}", text), spec)
@@ -90,16 +90,22 @@ pub trait Dumper {
   #[must_use]
   fn palette(&self) -> &Palette;
   #[must_use]
-  fn session(&self) -> &Session;
+  fn session(&self) -> &Session<'context, 'source>;
 }
-pub struct ASTDumper<'session> {
+pub struct ASTDumper<'session, 'context, 'source>
+where
+  'context: 'session,
+  'source: 'context,
+{
   pub(crate) stream: StandardStream,
   pub(crate) palette: Palette,
   /// currently no use, just keep maybe for future extensions.
   #[allow(dead_code)]
-  pub(crate) session: &'session Session,
+  pub(crate) session: &'session Session<'context, 'source>,
 }
-impl<'session> Dumper for ASTDumper<'session> {
+impl<'session, 'context, 'source> Dumper<'context, 'source>
+  for ASTDumper<'session, 'context, 'source>
+{
   #[inline]
   fn write_fmt(
     &mut self,
@@ -142,12 +148,15 @@ impl<'session> Dumper for ASTDumper<'session> {
   }
 
   #[inline(always)]
-  fn session(&self) -> &Session {
+  fn session(&self) -> &Session<'context, 'source> {
     self.session
   }
 }
-impl<'session> ASTDumper<'session> {
-  pub fn dump(dumpable: &impl Dumpable, session: &'session Session) -> DumpRes {
+impl<'session, 'context, 'source> ASTDumper<'session, 'context, 'source> {
+  pub fn dump(
+    dumpable: &impl Dumpable,
+    session: &'session Session<'context, 'source>,
+  ) -> DumpRes {
     let mut dumper = Self::new(
       session,
       StandardStream::stdout(ColorChoice::Auto),
@@ -158,9 +167,9 @@ impl<'session> ASTDumper<'session> {
     dumper.reset()
   }
 }
-impl<'session> ASTDumper<'session> {
+impl<'session, 'context, 'source> ASTDumper<'session, 'context, 'source> {
   pub fn new(
-    session: &'session Session,
+    session: &'session Session<'context, 'source>,
     stream: StandardStream,
     palette: Palette,
   ) -> Self {
@@ -181,23 +190,28 @@ pub trait Dumpable {
   /// 1. print the indent for **this** node. i.e., use [`Dumper::print_indent`] with the given `prefix` and `is_last`.
   /// 2. print the node header info like type name, address, span, etc. using [`Dumper::write_fmt`].
   /// 3. compute the prefix for children using [`Dumper::child_prefix`] and recurse into children with the new `prefix` and correct `is_last`.
-  fn dump(
+  fn dump<'context, 'source>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'context, 'source>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes;
+  ) -> DumpRes
+  where
+    'source: 'context;
 }
 
 impl Dumpable for SourceSpan {
-  fn dump(
+  fn dump<'context, 'source>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'context, 'source>,
     _prefix: &str,
     _is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    'source: 'context,
+  {
     dumper.write("<", &palette.skeleton)?;
     let (l, c) = dumper
       .session()

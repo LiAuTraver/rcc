@@ -33,16 +33,16 @@ impl Display for FunctionSpecifier {
     write!(f, "{}", specifiers.join(" "))
   }
 }
-impl Display for QualifiedType {
+impl<'context> Display for QualifiedType<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.qualifiers().is_empty() {
-      write!(f, "{}", self.unqualified_type())
+    if self.qualifiers.is_empty() {
+      write!(f, "{}", self.unqualified_type)
     } else {
-      write!(f, "{} {}", self.qualifiers(), self.unqualified_type())
+      write!(f, "{} {}", self.qualifiers, self.unqualified_type)
     }
   }
 }
-impl Display for Array {
+impl<'context> Display for Array<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}[", self.element_type)?;
     match &self.size {
@@ -54,7 +54,7 @@ impl Display for Array {
   }
 }
 
-impl Display for FunctionProto {
+impl<'context> Display for FunctionProto<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}(", self.return_type)?;
     for (i, param) in self.parameter_types.iter().enumerate() {
@@ -67,7 +67,7 @@ impl Display for FunctionProto {
   }
 }
 
-impl Display for Type {
+impl<'context> Display for Type<'context> {
   fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
     static_dispatch!(
       self.fmt(f),
@@ -76,28 +76,24 @@ impl Display for Type {
   }
 }
 
-impl Display for Pointer {
+impl<'context> Display for Pointer<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "*{}", self.pointee)
   }
 }
-impl Display for Enum {
+impl<'context> Display for Enum<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "<enum {}>", self.name.as_deref().unwrap_or("<unnamed>"))
+    write!(f, "<enum {}>", self.name.unwrap_or("<unnamed>"))
   }
 }
-impl Display for Record {
+impl<'context> Display for Record<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(
-      f,
-      "<struct {}>",
-      self.name.as_deref().unwrap_or("<unnamed>")
-    )
+    write!(f, "<struct {}>", self.name.unwrap_or("<unnamed>"))
   }
 }
-impl Display for Union {
+impl<'context> Display for Union<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "<union {}>", self.name.as_deref().unwrap_or("<unnamed>"))
+    write!(f, "<union {}>", self.name.unwrap_or("<unnamed>"))
   }
 }
 

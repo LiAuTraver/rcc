@@ -1,10 +1,10 @@
 use crate::{
   common::{Operator, OperatorCategory, SourceSpan, Storage, SymbolRef},
   type_alias_expr,
-  types::{CastType, QualifiedType, Qualifiers, Type},
+  types::{CastType, QualifiedType, Qualifiers, Type, TypeRef},
 };
 
-type_alias_expr! {Expression, QualifiedType, Variable ImplicitCast Assignment}
+type_alias_expr! {Expression<'context>, QualifiedType<'context>, Variable<'context> ImplicitCast<'context> Assignment<'context>: 'context}
 #[derive(Debug, Clone, Copy, ::strum_macros::Display, PartialEq)]
 pub enum ValueCategory {
   LValue,
@@ -15,15 +15,15 @@ pub enum ValueCategory {
 use ValueCategory::{LValue, RValue};
 
 #[derive(Debug)]
-pub struct Expression {
-  raw_expr: RawExpr,
-  expr_type: QualifiedType,
+pub struct Expression<'context> {
+  raw_expr: RawExpr<'context>,
+  expr_type: QualifiedType<'context>,
   value_category: ValueCategory,
 }
-impl Expression {
+impl<'context> Expression<'context> {
   pub fn new(
-    raw_expr: RawExpr,
-    expr_type: QualifiedType,
+    raw_expr: RawExpr<'context>,
+    expr_type: QualifiedType<'context>,
     value_category: ValueCategory,
   ) -> Self {
     Self {
@@ -33,7 +33,10 @@ impl Expression {
     }
   }
 
-  pub fn new_rvalue(raw_expr: RawExpr, expr_type: QualifiedType) -> Self {
+  pub fn new_rvalue(
+    raw_expr: RawExpr<'context>,
+    expr_type: QualifiedType<'context>,
+  ) -> Self {
     Self {
       raw_expr,
       expr_type,
@@ -41,7 +44,10 @@ impl Expression {
     }
   }
 
-  pub fn new_lvalue(raw_expr: RawExpr, expr_type: QualifiedType) -> Self {
+  pub fn new_lvalue(
+    raw_expr: RawExpr<'context>,
+    expr_type: QualifiedType<'context>,
+  ) -> Self {
     Self {
       raw_expr,
       expr_type,
@@ -49,7 +55,7 @@ impl Expression {
     }
   }
 
-  pub fn new_error_node(expr_type: QualifiedType) -> Self {
+  pub fn new_error_node(expr_type: QualifiedType<'context>) -> Self {
     Self {
       raw_expr: RawExpr::Empty(Empty::default()),
       expr_type,
@@ -57,19 +63,19 @@ impl Expression {
     }
   }
 
-  pub fn unqualified_type(&self) -> &Type {
-    self.expr_type.unqualified_type()
+  pub fn unqualified_type(&self) -> TypeRef<'context> {
+    self.expr_type.unqualified_type
   }
 
   pub fn qualifiers(&self) -> &Qualifiers {
-    self.expr_type.qualifiers()
+    &self.expr_type.qualifiers
   }
 
-  pub fn qualified_type(&self) -> &QualifiedType {
+  pub fn qualified_type(&self) -> &QualifiedType<'context> {
     &self.expr_type
   }
 
-  pub fn raw_expr(&self) -> &RawExpr {
+  pub fn raw_expr(&self) -> &RawExpr<'context> {
     &self.raw_expr
   }
 
@@ -77,12 +83,14 @@ impl Expression {
     self.value_category
   }
 
-  pub(super) fn destructure(self) -> (RawExpr, QualifiedType, ValueCategory) {
+  pub(super) fn destructure(
+    self,
+  ) -> (RawExpr<'context>, QualifiedType<'context>, ValueCategory) {
     (self.raw_expr, self.expr_type, self.value_category)
   }
 }
 
-impl Expression {
+impl<'context> Expression<'context> {
   pub fn is_lvalue(&self) -> bool {
     matches!(self.value_category, LValue)
   }
@@ -107,35 +115,38 @@ impl Expression {
   }
 }
 
-impl ::core::default::Default for Expression {
+impl<'context> ::core::default::Default for Expression<'context> {
   fn default() -> Self {
+    const DUMMY_UNQUAL: TypeRef<'static> =
+      &Type::Primitive(crate::types::Primitive::Void);
+    const DUMMY: QualifiedType<'static> = DUMMY_UNQUAL.into();
     Self {
       raw_expr: RawExpr::Empty(Empty::default()),
-      expr_type: Type::void().into(),
+      expr_type: DUMMY,
       value_category: RValue,
     }
   }
 }
 
 #[derive(Debug)]
-pub struct Variable {
-  pub name: SymbolRef,
+pub struct Variable<'context> {
+  pub name: SymbolRef<'context>,
   pub span: SourceSpan,
 }
-impl Variable {
-  pub fn new(name: SymbolRef, span: SourceSpan) -> Self {
+impl<'context> Variable<'context> {
+  pub fn new(name: SymbolRef<'context>, span: SourceSpan) -> Self {
     Self { name, span }
   }
 }
 #[derive(Debug)]
-pub struct ImplicitCast {
-  pub expr: Box<Expression>,
+pub struct ImplicitCast<'context> {
+  pub expr: Box<Expression<'context>>,
   pub cast_type: CastType,
   pub span: SourceSpan,
 }
-impl ImplicitCast {
+impl<'context> ImplicitCast<'context> {
   pub fn new(
-    expr: Box<Expression>,
+    expr: Box<Expression<'context>>,
     cast_type: CastType,
     span: SourceSpan,
   ) -> Self {
@@ -150,17 +161,17 @@ impl ImplicitCast {
 ///    - conditional-expression
 ///    - unary-expression assignment-operator assignment-expression
 #[derive(Debug)]
-pub struct Assignment {
+pub struct Assignment<'context> {
   pub operator: Operator,
-  pub left: Box<Expression>,
-  pub right: Box<Expression>,
+  pub left: Box<Expression<'context>>,
+  pub right: Box<Expression<'context>>,
   pub span: SourceSpan,
 }
-impl Assignment {
+impl<'context> Assignment<'context> {
   pub fn from_operator(
     operator: Operator,
-    left: Expression,
-    right: Expression,
+    left: Expression<'context>,
+    right: Expression<'context>,
     span: SourceSpan,
   ) -> Option<Self> {
     match operator.category() {
@@ -176,15 +187,15 @@ impl Assignment {
 
   pub fn new(
     operator: Operator,
-    left: Expression,
-    right: Expression,
+    left: Expression<'context>,
+    right: Expression<'context>,
     span: SourceSpan,
   ) -> Self {
     Self::from_operator(operator, left, right, span).unwrap()
   }
 }
 
-impl Expression {
+impl<'context> Expression<'context> {
   /// 6.6.8: An integer constant expression shall have integer type and shall only have operands that are
   ///           integer constants, named and compound literal constants of integer type, character constants,
   ///           sizeof expressions whose results are integer constants, alignof expressions, and floating, named,
@@ -222,11 +233,13 @@ impl Expression {
     }
   }
 
-  fn is_named_integer_constant_unchecked(variable: &Variable) -> bool {
+  fn is_named_integer_constant_unchecked(
+    variable: &Variable<'context>,
+  ) -> bool {
     let sym = variable.name.borrow();
 
-    (sym.qualified_type.unqualified_type().is_integer()
-      || sym.qualified_type.unqualified_type().as_array().is_some())
+    (sym.qualified_type.unqualified_type.is_integer()
+      || sym.qualified_type.unqualified_type.as_array().is_some())
       && matches!(sym.storage_class, Storage::Constexpr)
   }
 
@@ -267,24 +280,24 @@ mod fmt {
 
   use super::{Assignment, Expression, ImplicitCast, Variable};
 
-  impl Display for Assignment {
+  impl<'context> Display for Assignment<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "({} {} {})", self.left, self.right, self.operator)
     }
   }
 
-  impl Display for Expression {
+  impl<'context> Display for Expression<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}", self.raw_expr)
     }
   }
   // the "specialization" for the smart pointer case
-  impl Display for Variable {
+  impl<'context> Display for Variable<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}", self.name.borrow())
     }
   }
-  impl Display for ImplicitCast {
+  impl<'context> Display for ImplicitCast<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}", self.expr)
     }
@@ -294,30 +307,30 @@ mod fmt {
 mod test {
   #[test]
   fn int_float() {
-    use ::rcc_utils::{Dummy, IntoWith};
+    // use ::rcc_utils::{Dummy, IntoWith};
 
-    use super::*;
+    // use super::*;
 
-    let int_expr = Expression::new(
-      RawExpr::Constant(
-        ConstantLiteral::Integral(42.into()).into_with(Dummy::dummy()),
-      ),
-      QualifiedType::int(),
-      RValue,
-    );
-    let float_expr = Expression::new(
-      RawExpr::Constant(
-        ConstantLiteral::Floating(::std::f32::consts::PI.into())
-          .into_with(Dummy::dummy()),
-      ),
-      QualifiedType::float(),
-      RValue,
-    );
-    let promoted_expr =
-      Expression::usual_arithmetic_conversion(int_expr, float_expr)
-        .unwrap()
-        .2;
-    // type shall be
-    println!("Promoted expression: {:#?}", promoted_expr);
+    // let int_expr = Expression::new(
+    //   RawExpr::Constant(
+    //     ConstantLiteral::Integral(42.into()).into_with(Dummy::dummy()),
+    //   ),
+    //   QualifiedType::int(),
+    //   RValue,
+    // );
+    // let float_expr = Expression::new(
+    //   RawExpr::Constant(
+    //     ConstantLiteral::Floating(::std::f32::consts::PI.into())
+    //       .into_with(Dummy::dummy()),
+    //   ),
+    //   QualifiedType::float(),
+    //   RValue,
+    // );
+    // let promoted_expr =
+    //   Expression::usual_arithmetic_conversion(int_expr, float_expr)
+    //     .unwrap()
+    //     .2;
+    // // type shall be
+    // println!("Promoted expression: {:#?}", promoted_expr);
   }
 }

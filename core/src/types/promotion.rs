@@ -2,7 +2,11 @@
 
 use ::rcc_utils::breakpoint;
 
-use super::{CastType, Primitive, Primitive::*, QualifiedType, Type};
+use super::{
+  CastType,
+  Primitive::{self, *},
+  Type,
+};
 use crate::common::FloatFormat;
 
 pub trait Promotion {
@@ -149,7 +153,7 @@ impl Primitive {
     }
   }
 }
-impl Type {
+impl<'context> Type<'context> {
   pub fn is_unsigned(&self) -> bool {
     match self {
       Type::Primitive(p) => p.is_unsigned(),
@@ -176,7 +180,7 @@ impl Promotion for Primitive {
     }
   }
 }
-impl Promotion for Type {
+impl<'context> Promotion for Type<'context> {
   fn promote(self) -> (Self, CastType) {
     match self {
       Self::Primitive(p) => {
@@ -185,13 +189,5 @@ impl Promotion for Type {
       },
       _ => (self, CastType::Noop),
     }
-  }
-}
-impl Promotion for QualifiedType {
-  fn promote(self) -> (Self, CastType) {
-    let (qualifiers, unqualified_type) = self.destructure();
-    let (promoted, cast_type) = (*unqualified_type).clone().promote();
-
-    (Self::new(qualifiers, promoted.into()), cast_type)
   }
 }

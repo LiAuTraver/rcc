@@ -74,7 +74,10 @@ impl From<&Literal> for Storage {
 }
 
 impl Storage {
-  pub fn try_merge(lhs: &Storage, rhs: &Storage) -> Result<Storage, DiagMeta> {
+  pub fn try_merge<'context>(
+    lhs: &Storage,
+    rhs: &Storage,
+  ) -> Result<Storage, DiagMeta<'context>> {
     match (lhs, rhs) {
       (lhs, rhs) if lhs == rhs => Ok(*lhs),
       (Constexpr, _) | (_, Constexpr) => Err(

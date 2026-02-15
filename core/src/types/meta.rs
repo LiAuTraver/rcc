@@ -1,20 +1,18 @@
 //! this file would be furthur split into multiple files when more impls are added.
 
-use ::rcc_utils::SmallString;
-
 use super::{Primitive, QualifiedType, Type};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Pointer {
-  pub pointee: QualifiedType,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Pointer<'context> {
+  pub pointee: QualifiedType<'context>,
 }
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ExpressionId {
   id: usize,
 }
 
-#[derive(Debug, Clone, ::strum_macros::Display, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ::strum_macros::Display)]
 pub enum ArraySize {
   Constant(usize),
   /// unspecified size
@@ -25,12 +23,12 @@ pub enum ArraySize {
   Variable(ExpressionId),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Array {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Array<'context> {
   /// Array itself cannot have qualifiers,
   /// hence the QualifiedType::qualifiers of the whole array should be empty,
   /// the actual element type's qualifiers are stored here.
-  pub element_type: QualifiedType,
+  pub element_type: QualifiedType<'context>,
   pub size: ArraySize,
   // These are not elem's, but the arraysize's. static is a hint for optimization,etc. dont care it for now.
   // pub qualifiers: Qualifiers,
@@ -39,61 +37,61 @@ pub struct Array {
 
 /// function types themselves don't have qualifiers, but pointers to them can.
 /// so the functionproto's qualifiers must be dropped.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FunctionProto {
-  pub return_type: QualifiedType,
-  pub parameter_types: Vec<QualifiedType>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FunctionProto<'context> {
+  pub return_type: QualifiedType<'context>,
+  pub parameter_types: &'context [QualifiedType<'context>],
   pub is_variadic: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Field {
-  pub name: SmallString,
-  pub field_type: QualifiedType,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Field<'context> {
+  pub name: &'context str,
+  pub field_type: QualifiedType<'context>,
 }
 
 // ignore unnamed/anonymous structs/unions for now
-#[derive(Debug, Clone, PartialEq)]
-pub struct Record {
-  pub name: Option<SmallString>,
-  pub fields: Vec<Field>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Record<'context> {
+  pub name: Option<&'context str>,
+  pub fields: &'context [Field<'context>],
 }
 
 // seems not so much difference between struct and union here, but for convenience we keep them separate
-#[derive(Debug, Clone, PartialEq)]
-pub struct Union {
-  pub name: Option<SmallString>,
-  pub fields: Vec<Field>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Union<'context> {
+  pub name: Option<&'context str>,
+  pub fields: &'context [Field<'context>],
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct EnumConstant {
-  pub name: SmallString,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EnumConstant<'context> {
+  pub name: &'context str,
   pub value: Option<isize>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Enum {
-  pub name: Option<SmallString>,
-  pub constants: Vec<EnumConstant>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Enum<'context> {
+  pub name: Option<&'context str>,
+  pub constants: &'context [EnumConstant<'context>],
   pub underlying_type: Primitive, // must be integer type
 }
 
-impl Pointer {
-  pub fn new(pointee: QualifiedType) -> Self {
+impl<'context> Pointer<'context> {
+  pub fn new(pointee: QualifiedType<'context>) -> Self {
     Self { pointee }
   }
 }
 
-impl Array {
-  pub fn new(element_type: QualifiedType, size: ArraySize) -> Self {
+impl<'context> Array<'context> {
+  pub fn new(element_type: QualifiedType<'context>, size: ArraySize) -> Self {
     Self { element_type, size }
   }
 }
-impl FunctionProto {
+impl<'context> FunctionProto<'context> {
   pub fn new(
-    return_type: QualifiedType,
-    parameter_types: Vec<QualifiedType>,
+    return_type: QualifiedType<'context>,
+    parameter_types: &'context [QualifiedType<'context>],
     is_variadic: bool,
   ) -> Self {
     Self {
@@ -103,10 +101,10 @@ impl FunctionProto {
     }
   }
 }
-impl Enum {
+impl<'context> Enum<'context> {
   pub fn new(
-    name: Option<SmallString>,
-    constants: Vec<EnumConstant>,
+    name: Option<&'context str>,
+    constants: &'context [EnumConstant<'context>],
     underlying_type: Primitive,
   ) -> Self {
     assert!(underlying_type.is_integer());
@@ -122,42 +120,42 @@ impl Enum {
   }
 }
 
-macro_rules! to_qualified_type {
-  ($ty:ty) => {
-    impl From<$ty> for QualifiedType {
-      fn from(value: $ty) -> Self {
-        QualifiedType::new_unqualified(Type::from(value).into())
-      }
-    }
+// macro_rules! to_qualified_type {
+//   ($ty:ty) => {
+//     impl<'context> From<$ty> for QualifiedType<'context> {
+//       fn from(value: $ty) -> Self {
+//         QualifiedType::new_unqualified(Type::from(value).into())
+//       }
+//     }
 
-    impl From<$ty> for Box<QualifiedType> {
-      fn from(value: $ty) -> Self {
-        Box::new(QualifiedType::from(value))
-      }
-    }
-  };
-}
+//     impl<'context> From<$ty> for Box<QualifiedType<'context>> {
+//       fn from(value: $ty) -> Self {
+//         Box::new(QualifiedType::from(value))
+//       }
+//     }
+//   };
+// }
 
-to_qualified_type!(Primitive);
-to_qualified_type!(Array);
-to_qualified_type!(Pointer);
-to_qualified_type!(FunctionProto);
-to_qualified_type!(Enum);
-to_qualified_type!(Record);
-to_qualified_type!(Union);
+// to_qualified_type!(Primitive);
+// to_qualified_type!(Array<'context>);
+// to_qualified_type!(Pointer<'context>);
+// to_qualified_type!(FunctionProto<'context>);
+// to_qualified_type!(Enum<'context>);
+// to_qualified_type!(Record<'context>);
+// to_qualified_type!(Union<'context>);
 
-::rcc_utils::interconvert!(Primitive, Type);
-::rcc_utils::interconvert!(Array, Type);
-::rcc_utils::interconvert!(Pointer, Type);
-::rcc_utils::interconvert!(FunctionProto, Type);
-::rcc_utils::interconvert!(Enum, Type);
-::rcc_utils::interconvert!(Record, Type);
-::rcc_utils::interconvert!(Union, Type);
+::rcc_utils::interconvert!(Primitive, Type<'context>);
+::rcc_utils::interconvert!(Array, Type, 'context);
+::rcc_utils::interconvert!(Pointer, Type, 'context);
+::rcc_utils::interconvert!(FunctionProto, Type, 'context);
+::rcc_utils::interconvert!(Enum, Type, 'context);
+::rcc_utils::interconvert!(Record, Type, 'context);
+::rcc_utils::interconvert!(Union, Type, 'context);
 
-::rcc_utils::make_trio_for!(Primitive, Type);
-::rcc_utils::make_trio_for!(Array, Type);
-::rcc_utils::make_trio_for!(Pointer, Type);
-::rcc_utils::make_trio_for!(FunctionProto, Type);
-::rcc_utils::make_trio_for!(Enum, Type);
-::rcc_utils::make_trio_for!(Record, Type);
-::rcc_utils::make_trio_for!(Union, Type);
+::rcc_utils::make_trio_for!(Primitive, Type<'context>);
+::rcc_utils::make_trio_for!(Array, Type, 'context);
+::rcc_utils::make_trio_for!(Pointer, Type, 'context);
+::rcc_utils::make_trio_for!(FunctionProto, Type, 'context);
+::rcc_utils::make_trio_for!(Enum, Type, 'context);
+::rcc_utils::make_trio_for!(Record, Type, 'context);
+::rcc_utils::make_trio_for!(Union, Type, 'context);

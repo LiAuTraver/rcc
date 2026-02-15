@@ -17,8 +17,12 @@ use crate::{
   types::Constant as NumberConstant,
 };
 
-pub struct Lexer<'session, 'source> {
-  /// the SourceManager owns the String.
+pub struct Lexer<'session, 'source, 'context>
+where
+  'source: 'context,
+  'context: 'session,
+{
+  /// the [`SourceManager`] owns the [`String`].
   source: &'source str,
 
   /// maybe 1~4 bytes
@@ -31,10 +35,13 @@ pub struct Lexer<'session, 'source> {
   coords: Coordinate,
 
   /// Context.
-  session: &'session Session,
+  session: &'session Session<'context, 'source>,
 }
-impl<'session, 'source> Lexer<'session, 'source> {
-  pub fn new(source: &'source str, session: &'session Session) -> Self {
+impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
+  pub fn new(
+    source: &'source str,
+    session: &'session Session<'context, 'source>,
+  ) -> Self {
     Self {
       source,
       chars: source.chars().peekable(),

@@ -1,6 +1,7 @@
 mod cast_type;
 mod compatible;
 mod constant;
+mod context;
 mod dump;
 mod fmt;
 mod meta;
@@ -14,6 +15,7 @@ pub use self::{
   cast_type::CastType,
   compatible::Compatibility,
   constant::Constant,
+  context::{ArenaVec, Context},
   meta::{
     Array, ArraySize, Enum, ExpressionId, FunctionProto, Pointer, Record, Union,
   },
@@ -21,5 +23,5 @@ pub use self::{
   promotion::Promotion,
   qualified_types::{FunctionSpecifier, QualifiedType, Qualifiers},
   type_info::TypeInfo,
-  types::Type,
+  types::{Type, TypeRef},
 };

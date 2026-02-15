@@ -11,3 +11,4 @@ readme = "README.md"
 rcc-core = { path = "../core" }
 rcc-utils = { path = "../utils" }
 termcolor = "1.4.1"
+bumpalo = { version = "3.19.1", features = ["collections"] }

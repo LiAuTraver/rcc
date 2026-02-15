@@ -4,38 +4,44 @@ use super::{
 };
 use crate::common::{DumpRes, Dumpable, Dumper, Palette};
 
-impl Dumpable for QualifiedType {
-  fn dump(
+impl<'context> Dumpable for QualifiedType<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("QualifiedType", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
 
     dumper.write_fmt(
-      format_args!("{} {}\n", self.unqualified_type(), self.qualifiers()),
+      format_args!("{} {}\n", self.unqualified_type, self.qualifiers),
       &palette.meta,
     )?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
     self
-      .unqualified_type()
+      .unqualified_type
       .dump(dumper, &subprefix, true, palette)
   }
 }
 
-impl Dumpable for Type {
-  fn dump(
+impl<'context> Dumpable for Type<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     ::rcc_utils::static_dispatch!(
       self.dump(dumper, prefix, is_last, palette),
       Primitive Pointer Array FunctionProto Union Enum Record
@@ -43,13 +49,16 @@ impl Dumpable for Type {
   }
 }
 impl Dumpable for Primitive {
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Primitive", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
@@ -57,14 +66,17 @@ impl Dumpable for Primitive {
   }
 }
 
-impl Dumpable for Pointer {
-  fn dump(
+impl<'context> Dumpable for Pointer<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Pointer", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
@@ -74,14 +86,17 @@ impl Dumpable for Pointer {
     self.pointee.dump(dumper, &subprefix, true, palette)
   }
 }
-impl Dumpable for Array {
-  fn dump(
+impl<'context> Dumpable for Array<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Array", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
@@ -95,54 +110,66 @@ impl Dumpable for Array {
   }
 }
 
-impl Dumpable for FunctionProto {
-  fn dump(
+impl<'context> Dumpable for FunctionProto<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("FunctionProto", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
     dumper.write_fmt(format_args!("{}\n", self), &palette.meta)
   }
 }
-impl Dumpable for Enum {
+impl<'context> Dumpable for Enum<'context> {
   #[allow(unused)]
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     todo!()
   }
 }
 
-impl Dumpable for Record {
+impl<'context> Dumpable for Record<'context> {
   #[allow(unused)]
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     todo!()
   }
 }
-impl Dumpable for Union {
+impl<'context> Dumpable for Union<'context> {
   #[allow(unused)]
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     todo!()
   }
 }

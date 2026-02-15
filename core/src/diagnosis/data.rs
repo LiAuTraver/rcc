@@ -23,24 +23,24 @@
 ///
 /// See module documentation for details.
 #[derive(Debug)]
-pub struct Diag {
-  pub(crate) metadata: Meta,
+pub struct Diag<'context> {
+  pub(crate) metadata: Meta<'context>,
   pub(crate) span: SourceSpan,
 }
 /// Message with [`Severity`].
 #[derive(Debug)]
-pub struct Meta {
+pub struct Meta<'context> {
   pub(crate) severity: Severity,
-  pub(crate) data: Data,
+  pub(crate) data: Data<'context>,
 }
-impl Meta {
-  pub fn new(severity: Severity, data: Data) -> Self {
+impl<'context> Meta<'context> {
+  pub fn new(severity: Severity, data: Data<'context>) -> Self {
     Self { severity, data }
   }
 }
-impl IntoWith<SourceSpan, Diag> for Meta {
+impl<'context> IntoWith<SourceSpan, Diag<'context>> for Meta<'context> {
   #[inline]
-  fn into_with(self, span: SourceSpan) -> Diag {
+  fn into_with(self, span: SourceSpan) -> Diag<'context> {
     Diag::new(span, self.severity, self.data)
   }
 }
@@ -70,7 +70,7 @@ type Elem = String;
 ///
 /// TODO: reduce the size of this enum.
 #[derive(Debug, ::thiserror::Error)]
-pub enum Data {
+pub enum Data<'context> {
   #[error("Unexpected character '{}'{expected}", &.0.0, expected = format_expected(&.0.1))]
   UnexpectedCharacter(Box<(Literal, Option<Literal>)>),
   #[error("Unterminated string literal")]
@@ -132,7 +132,7 @@ pub enum Data {
   #[error("Local extern variable '{0}' cannot have initializer")]
   LocalExternVarWithInitializer(Elem),
   #[error("expression '{0}' is not callable")]
-  InvalidCallee(QualifiedType),
+  InvalidCallee(QualifiedType<'context>),
   #[error("'{0}' is not a variable")]
   NotVariable(Elem),
   #[error("Variable '{0}' is not defined")]
@@ -172,7 +172,7 @@ pub enum Data {
   #[error(
     "variable declared with 'register' can only have pointer type, got '{0}'"
   )]
-  InvalidRegVarDecl(QualifiedType),
+  InvalidRegVarDecl(QualifiedType<'context>),
   #[error("Operand of indirection operator must be pointer type, got '{0}'")]
   DerefNonPtr(Elem),
   #[error("Array subscript is not an integer, got '{0}'")]
@@ -189,7 +189,7 @@ pub enum Data {
     "Incompatible types in declaration of '{0}': '{1}' is not compatible with \
      '{2}'"
   )]
-  IncompatibleType(Elem, QualifiedType, QualifiedType),
+  IncompatibleType(Elem, QualifiedType<'context>, QualifiedType<'context>),
   #[error("Incompatible pointer types '{0}' and '{1}'")]
   IncompatiblePointerTypes(Elem, Elem),
   #[error("Cannot merge storage classes '{0}' and '{1}'")]
@@ -203,7 +203,7 @@ pub enum Data {
   #[error("{0}")]
   InvalidConversion(CustomMessage),
   #[error("Cannot apply operator '{2}' to types '{0}' and '{1}'")]
-  InvalidOprand(QualifiedType, QualifiedType, Operator),
+  InvalidOprand(QualifiedType<'context>, QualifiedType<'context>, Operator),
   #[error("{0}")]
   Placeholder(CustomMessage),
   #[error("{0}")]
@@ -250,7 +250,7 @@ pub enum Data {
   )]
   LogicalOpMisuse(Operator /* got */, Option<Operator> /* suggest */),
   #[error("Possible data loss in implicit cast from '{0}' to '{1}'")]
-  CastDown(QualifiedType, QualifiedType),
+  CastDown(QualifiedType<'context>, QualifiedType<'context>),
   #[error("Operation '{}' between '{}' and '{}' results in NaN", &.0.2, &.0.0, &.0.1)]
   NotANumber(Box<(Constant, Constant, Operator)>),
   #[error("Division by zero")]
@@ -273,9 +273,9 @@ static_assert!(
   "Diagnostic Data too large!"
 );
 
-impl IntoWith<Severity, Meta> for Data {
+impl<'context> IntoWith<Severity, Meta<'context>> for Data<'context> {
   #[inline]
-  fn into_with(self, severity: Severity) -> Meta {
+  fn into_with(self, severity: Severity) -> Meta<'context> {
     Meta::new(severity, self)
   }
 }
@@ -287,9 +287,9 @@ fn format_expected(expected: &Option<Literal>) -> String {
   }
 }
 
-impl Diag {
+impl<'context> Diag<'context> {
   #[inline]
-  pub fn new(span: SourceSpan, severity: Severity, data: Data) -> Self {
+  pub fn new(span: SourceSpan, severity: Severity, data: Data<'context>) -> Self {
     Self {
       metadata: Meta::new(severity, data),
       span,
@@ -298,11 +298,11 @@ impl Diag {
 }
 
 pub struct DiagDisplay<'a> {
-  diag: &'a Diag,
+  diag: &'a Diag<'a>,
   source_manager: &'a SourceManager,
 }
 
-impl<'a> DisplayWith<'a, SourceManager, DiagDisplay<'a>> for Diag {
+impl<'a> DisplayWith<'a, SourceManager, DiagDisplay<'a>> for Diag<'a> {
   fn display_with(
     &'a self,
     source_manager: &'a SourceManager,

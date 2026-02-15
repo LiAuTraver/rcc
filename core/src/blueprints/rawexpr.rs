@@ -6,54 +6,60 @@ use ::rcc_utils::{IntoWith, SmallString};
 
 use crate::{
   common::{Operator, SourceSpan},
-  types::{Constant, QualifiedType},
+  types::Constant,
 };
 
 #[macro_export(local_inner_macros)]
 macro_rules! type_alias_expr {
-  ($exprty:ident, $typety:ident, $($extra:ident)*) => {
+  ($exprty:ty, $typety:ty, $($extra:ident)*) => {
+    $crate::type_alias_expr!(@impl $exprty, $typety, $($extra)*: []);
+  };
+  ($exprty:ty, $typety:ty, $($extra:ident $(<$lts:lifetime>)*)*: $lt:lifetime) =>{
+    $crate::type_alias_expr!(@impl $exprty, $typety, $($extra $(<$lts>)*)*: [<$lt>]);
+  };
+  (@impl $exprty:ty, $typety:ty, $($extra:ident $(<$lts:lifetime>)?)*: [$(<$lt:lifetime>)*]) => {
     #[derive(Debug)]
-    pub enum RawExpr {
+    pub enum RawExpr $(<$lt>)* {
       // no-op for error recovery; for empty expr should use Option<ExprTy> instead
       Empty(Empty),
       Constant(Constant),
-      Unary(Unary),
-      Binary(Binary),
-      Call(Call),
-      Paren(Paren),
-      MemberAccess(MemberAccess),
-      Ternary(Ternary),
-      SizeOf(SizeOf),
-      CStyleCast(CStyleCast),
-      ArraySubscript(ArraySubscript),
+      Unary(Unary$(<$lt>)*),
+      Binary(Binary$(<$lt>)*),
+      Call(Call$(<$lt>)*),
+      Paren(Paren$(<$lt>)*),
+      MemberAccess(MemberAccess$(<$lt>)*),
+      Ternary(Ternary$(<$lt>)*),
+      SizeOf(SizeOf$(<$lt>)*),
+      CStyleCast(CStyleCast$(<$lt>)*),
+      ArraySubscript(ArraySubscript$(<$lt>)*),
       CompoundLiteral(CompoundLiteral),
       $(
         // Generate a variant for each extra type
-        $extra($extra),
+        $extra($extra $(<$lts>)?),
       )*
     }
     pub type Empty = $crate::blueprints::Placeholder;
     /// exists to avoid name clash with `Constant` in this module; this is a design mistake
     pub type ConstantLiteral = $crate::types::Constant;
     /// type or expression
-    pub type SizeOfKind = $crate::blueprints::RawSizeOfKind<$exprty, $typety>;
+    pub type SizeOfKind$(<$lt>)* = $crate::blueprints::RawSizeOfKind<$exprty, $typety>;
     /// unary kind
     pub type UnaryKind = $crate::blueprints::RawUnaryKind;
     pub type Constant = $crate::blueprints::RawConstant;
-    pub type Unary = $crate::blueprints::RawUnary<$exprty>;
-    pub type Binary = $crate::blueprints::RawBinary<$exprty>;
-    pub type Call = $crate::blueprints::RawCall<$exprty>;
-    pub type Paren = $crate::blueprints::RawParen<$exprty>;
-    pub type MemberAccess = $crate::blueprints::RawMemberAccess<$exprty>;
-    pub type Ternary = $crate::blueprints::RawTernary<$exprty>;
-    pub type SizeOf = $crate::blueprints::RawSizeOf<$exprty, $typety>;
-    pub type CStyleCast = $crate::blueprints::RawCStyleCast<$exprty>;
-    pub type ArraySubscript = $crate::blueprints::RawArraySubscript<$exprty>;
+    pub type Unary$(<$lt>)* = $crate::blueprints::RawUnary<$exprty>;
+    pub type Binary$(<$lt>)* = $crate::blueprints::RawBinary<$exprty>;
+    pub type Call$(<$lt>)* = $crate::blueprints::RawCall<$exprty>;
+    pub type Paren$(<$lt>)* = $crate::blueprints::RawParen<$exprty>;
+    pub type MemberAccess$(<$lt>)* = $crate::blueprints::RawMemberAccess<$exprty>;
+    pub type Ternary$(<$lt>)* = $crate::blueprints::RawTernary<$exprty>;
+    pub type SizeOf$(<$lt>)* = $crate::blueprints::RawSizeOf<$exprty, $typety>;
+    pub type CStyleCast$(<$lt>)* = $crate::blueprints::RawCStyleCast<$exprty>;
+    pub type ArraySubscript$(<$lt>)* = $crate::blueprints::RawArraySubscript<$exprty>;
     pub type CompoundLiteral = $crate::blueprints::RawCompoundLiteral;
 
     mod fmtrawexpr {
       use super::*;
-      impl ::std::fmt::Display for RawExpr {
+      impl$(<$lt>)* ::std::fmt::Display for RawExpr$(<$lt>)* {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
           ::rcc_utils::static_dispatch!(
             self.fmt(f),
@@ -66,46 +72,46 @@ macro_rules! type_alias_expr {
     mod cvtrawexpr {
       use super::*;
 
-      ::rcc_utils::interconvert!(Empty, RawExpr);
-      ::rcc_utils::interconvert!(Constant, RawExpr);
-      ::rcc_utils::interconvert!(Unary, RawExpr);
-      ::rcc_utils::interconvert!(Binary, RawExpr);
-      ::rcc_utils::interconvert!(Call, RawExpr);
-      ::rcc_utils::interconvert!(Paren, RawExpr);
-      ::rcc_utils::interconvert!(MemberAccess, RawExpr);
-      ::rcc_utils::interconvert!(Ternary, RawExpr);
-      ::rcc_utils::interconvert!(SizeOf, RawExpr);
-      ::rcc_utils::interconvert!(CStyleCast, RawExpr);
-      ::rcc_utils::interconvert!(ArraySubscript, RawExpr);
-      ::rcc_utils::interconvert!(CompoundLiteral, RawExpr);
+      ::rcc_utils::interconvert!(Empty, RawExpr<$($lt)*>);
+      ::rcc_utils::interconvert!(Constant, RawExpr<$($lt)*>);
+      ::rcc_utils::interconvert!(Unary, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(Binary, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(Call, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(Paren, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(MemberAccess, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(Ternary, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(SizeOf, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(CStyleCast, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(ArraySubscript, RawExpr, $($lt)*);
+      ::rcc_utils::interconvert!(CompoundLiteral, RawExpr<$($lt)*>);
       $(
-        ::rcc_utils::interconvert!($extra, RawExpr);
+        ::rcc_utils::interconvert!($extra, RawExpr, $($lts)?);
       )*
 
-      ::rcc_utils::make_trio_for!(Empty, RawExpr);
-      ::rcc_utils::make_trio_for!(Constant, RawExpr);
-      ::rcc_utils::make_trio_for!(Unary, RawExpr);
-      ::rcc_utils::make_trio_for!(Binary, RawExpr);
-      ::rcc_utils::make_trio_for!(Call, RawExpr);
-      ::rcc_utils::make_trio_for!(Paren, RawExpr);
-      ::rcc_utils::make_trio_for!(MemberAccess, RawExpr);
-      ::rcc_utils::make_trio_for!(Ternary, RawExpr);
-      ::rcc_utils::make_trio_for!(SizeOf, RawExpr);
-      ::rcc_utils::make_trio_for!(CStyleCast, RawExpr);
-      ::rcc_utils::make_trio_for!(ArraySubscript, RawExpr);
-      ::rcc_utils::make_trio_for!(CompoundLiteral, RawExpr);
+      ::rcc_utils::make_trio_for!(Empty, RawExpr$(<$lt>)*);
+      ::rcc_utils::make_trio_for!(Constant, RawExpr$(<$lt>)*);
+      ::rcc_utils::make_trio_for!(Unary, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(Binary, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(Call, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(Paren, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(MemberAccess, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(Ternary, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(SizeOf, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(CStyleCast, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(ArraySubscript, RawExpr, $($lt)*);
+      ::rcc_utils::make_trio_for!(CompoundLiteral, RawExpr$(<$lt>)*);
       $(
-        ::rcc_utils::make_trio_for!($extra, RawExpr);
+        ::rcc_utils::make_trio_for!($extra, RawExpr, $($lts)?);
       )*
 
-      impl ::rcc_utils::IntoWith<SourceSpan, RawExpr> for ConstantLiteral {
-        fn into_with(self, span: SourceSpan) -> RawExpr {
+      impl$(<$lt>)* ::rcc_utils::IntoWith<SourceSpan, RawExpr$(<$lt>)*> for ConstantLiteral {
+        fn into_with(self, span: SourceSpan) -> RawExpr$(<$lt>)* {
           RawExpr::Constant(self.into_with(span))
         }
       }
 
-      impl ::rcc_utils::IntoWith<SourceSpan, RawExpr> for SizeOfKind {
-        fn into_with(self, span: SourceSpan) -> RawExpr {
+      impl$(<$lt>)* ::rcc_utils::IntoWith<SourceSpan, RawExpr$(<$lt>)*> for SizeOfKind$(<$lt>)* {
+        fn into_with(self, span: SourceSpan) -> RawExpr$(<$lt>)* {
           RawExpr::SizeOf(self.into_with(span))
         }
       }
@@ -114,7 +120,7 @@ macro_rules! type_alias_expr {
     mod getspan {
       use super::*;
       use $crate::common::SourceSpan;
-      impl RawExpr {
+      impl$(<$lt>)* RawExpr$(<$lt>)* {
         pub fn span(&self) -> SourceSpan {
           match self {
             RawExpr::Empty(_) => SourceSpan::default(),
@@ -208,7 +214,7 @@ pub struct RawSizeOf<ExprTy, TypeTy> {
 
 #[derive(Debug)]
 pub struct RawCStyleCast<ExprTy> {
-  pub target_type: Box<QualifiedType>,
+  // pub target_type: Box<QualifiedType>,
   pub expr: Box<ExprTy>,
   pub span: SourceSpan,
 }
@@ -220,7 +226,7 @@ pub struct RawArraySubscript<ExprTy> {
 }
 #[derive(Debug)]
 pub struct RawCompoundLiteral {
-  pub target_type: Box<QualifiedType>,
+  // pub target_type: Box<QualifiedType>,
   // pub initializer: Initializer,
   pub span: SourceSpan,
 }

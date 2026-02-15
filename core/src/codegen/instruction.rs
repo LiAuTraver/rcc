@@ -48,11 +48,11 @@ pub enum Terminator {
 }
 
 /// result = unary_op operand
-pub struct Unary {
+pub struct Unary<'context> {
   pub result: Operand,
   pub operator: UnaryOp,
   pub operand: Operand,
-  pub qualified_type: QualifiedType,
+  pub qualified_type: QualifiedType<'context>,
 }
 pub enum UnaryOp {
   Neg,
@@ -60,12 +60,12 @@ pub enum UnaryOp {
   Compl,
 }
 /// result = binary_op lhs, rhs
-pub struct Binary {
+pub struct Binary<'context> {
   pub result: Operand,
   pub operator: BinaryOp,
   pub lhs: Operand,
   pub rhs: Operand,
-  pub qualified_type: QualifiedType,
+  pub qualified_type: QualifiedType<'context>,
 }
 // arithematic ops only consider integer for now
 pub enum BinaryOp {
@@ -81,12 +81,12 @@ pub enum BinaryOp {
   RightShift,
 }
 
-pub struct ICmp {
+pub struct ICmp<'context> {
   pub result: Operand,
   pub predicate: ICmpPredicate,
   pub lhs: Operand,
   pub rhs: Operand,
-  pub qualified_type: QualifiedType, // type of operands.
+  pub qualified_type: QualifiedType<'context>, // type of operands.
 }
 #[derive(Debug, Clone, Copy)]
 pub enum ICmpPredicate {
@@ -102,29 +102,29 @@ pub enum ICmpPredicate {
   Uge,
 }
 /// Store value to address: *addr = value
-pub struct Store {
+pub struct Store<'context> {
   pub addr: Operand,
   pub value: Operand,
-  pub qualified_type: QualifiedType,
+  pub qualified_type: QualifiedType<'context>,
 }
 
 /// Load value from address: result = *addr
-pub struct Load {
+pub struct Load<'context> {
   pub result: Operand,
   pub addr: Operand,
-  pub qualified_type: QualifiedType,
+  pub qualified_type: QualifiedType<'context>,
 }
-pub enum Memory {
-  Store(Store),
-  Load(Load),
-  Alloca(Alloca),
+pub enum Memory<'context> {
+  Store(Store<'context>),
+  Load(Load<'context>),
+  Alloca(Alloca<'context>),
 }
 /// Stack allocation.
 /// result = alloca typeof(type)
 /// Used for local variables that must live in memory (e.g., if their address is taken).
-pub struct Alloca {
+pub struct Alloca<'context> {
   pub result: Operand,
-  pub qualified_type: QualifiedType,
+  pub qualified_type: QualifiedType<'context>,
 }
 
 pub enum Cast {
@@ -139,14 +139,14 @@ pub struct Call {
 }
 
 /// This mimics LLVM ir's catagory.
-pub enum Instruction {
+pub enum Instruction<'context> {
   Phi(Phi),
   Terminator(Terminator),
-  Unary(Unary),
-  Binary(Binary),
-  Memory(Memory),
+  Unary(Unary<'context>),
+  Binary(Binary<'context>),
+  Memory(Memory<'context>),
   Cast(Cast),
   Call(Call),
-  ICmp(ICmp),
+  ICmp(ICmp<'context>),
   // etc...
 }

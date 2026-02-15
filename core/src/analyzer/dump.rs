@@ -10,14 +10,17 @@ use super::{
 };
 use crate::common::{DumpRes, Dumpable, Dumper, Palette};
 
-impl Dumpable for Expression {
-  fn dump(
+impl<'context> Dumpable for Expression<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     use super::expression::{RawExpr::*, *};
 
     dumper.print_indent(prefix, is_last)?;
@@ -163,10 +166,10 @@ impl Dumpable for Expression {
 
       CStyleCast(cast) => {
         header!("CStyleCast", cast);
-        dumper.write_fmt(
-          format_args!(" '{}'\n", cast.target_type),
-          &palette.meta,
-        )?;
+        // dumper.write_fmt(
+        //   format_args!(" '{}'\n", cast.target_type),
+        //   &palette.meta,
+        // )?;
         cast.expr.dump(dumper, &subprefix, true, palette)
       },
 
@@ -177,14 +180,17 @@ impl Dumpable for Expression {
     }
   }
 }
-impl Dumpable for TranslationUnit {
-  fn dump(
+impl<'context> Dumpable for TranslationUnit<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.write("TranslationUnit", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p}\n", self), &palette.dim)?;
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -202,14 +208,17 @@ impl Dumpable for TranslationUnit {
       })
   }
 }
-impl Dumpable for ExternalDeclaration {
-  fn dump(
+impl<'context> Dumpable for ExternalDeclaration<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     ::rcc_utils::static_dispatch!(
       self.dump(dumper, prefix, is_last, palette),
       Variable Function
@@ -217,14 +226,17 @@ impl Dumpable for ExternalDeclaration {
   }
 }
 
-impl Dumpable for VarDef {
-  fn dump(
+impl<'context> Dumpable for VarDef<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     let borrowed = self.symbol.borrow();
     dumper.write(
@@ -242,14 +254,20 @@ impl Dumpable for VarDef {
     dumper.write_fmt(format_args!("{}", borrowed.declkind), &palette.kind)?;
     dumper.write(">", &palette.skeleton)?;
 
-    dumper.write_fmt(format_args!(" '{}'", borrowed.name), &palette.literal)?;
+    dumper
+      .write_fmt(format_args!(" '{}' ", borrowed.name), &palette.literal)?;
 
+    dumper.write("[", &palette.skeleton)?;
     dumper.write_fmt(
-      format_args!(" '{}'", borrowed.qualified_type),
+      format_args!("'{}'", borrowed.qualified_type),
       &palette.meta,
     )?;
 
-    dumper.newline()?;
+    dumper.write_fmt(
+      format_args!(" {:p}", borrowed.qualified_type.unqualified_type),
+      &palette.skeleton,
+    )?;
+    dumper.write("]\n", &palette.skeleton)?;
 
     if let Some(initializer) = &self.initializer {
       let subprefix = dumper.child_prefix(prefix, is_last);
@@ -258,27 +276,45 @@ impl Dumpable for VarDef {
     Ok(())
   }
 }
-impl Dumpable for Function {
-  fn dump(
+impl<'context> Dumpable for Function<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Function", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p}", self), &palette.dim)?;
     self.span.dump(dumper, prefix, is_last, palette)?;
+
+    dumper.write("<", &palette.skeleton)?;
     dumper.write_fmt(
-      format_args!(
-        " {} {} '{}'\n",
-        self.specifier,
-        self.symbol.borrow().name,
-        self.symbol.borrow().qualified_type
-      ),
+      format_args!("{}", self.symbol.borrow().declkind),
+      &palette.kind,
+    )?;
+    dumper.write(">", &palette.skeleton)?;
+    dumper.write_fmt(
+      format_args!(" '{}' ", self.symbol.borrow().name),
       &palette.literal,
     )?;
+    dumper.write("[", &palette.skeleton)?;
+    dumper.write_fmt(
+      format_args!("'{}'", self.symbol.borrow().qualified_type),
+      &palette.meta,
+    )?;
+    dumper.write_fmt(
+      format_args!(
+        " {:p}",
+        self.symbol.borrow().qualified_type.unqualified_type
+      ),
+      &palette.skeleton,
+    )?;
+    dumper.write("]\n", &palette.skeleton)?;
 
     if let Some(body) = &self.body {
       let subprefix = dumper.child_prefix(prefix, is_last);
@@ -288,14 +324,17 @@ impl Dumpable for Function {
   }
 }
 
-impl Dumpable for Initializer {
-  fn dump(
+impl<'context> Dumpable for Initializer<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Initializer", &palette.node_type)?;
     match self {
@@ -311,14 +350,17 @@ impl Dumpable for Initializer {
   }
 }
 
-impl Dumpable for Statement {
-  fn dump(
+impl<'context> Dumpable for Statement<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     ::rcc_utils::static_dispatch!(
       self.dump(dumper, prefix, is_last, palette),
       Empty Return Expression Declaration Compound If While DoWhile For Switch Goto Label Break Continue
@@ -327,13 +369,16 @@ impl Dumpable for Statement {
 }
 
 impl Dumpable for statement::Empty {
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("EmptyStmt", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p}\n", self), &palette.dim)
@@ -357,14 +402,17 @@ macro_rules! headers {
   }};
 }
 
-impl Dumpable for Return {
-  fn dump(
+impl<'context> Dumpable for Return<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Return")?;
 
     if let Some(expr) = &self.expression {
@@ -375,14 +423,17 @@ impl Dumpable for Return {
   }
 }
 
-impl Dumpable for Compound {
-  fn dump(
+impl<'context> Dumpable for Compound<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Compound")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -396,14 +447,17 @@ impl Dumpable for Compound {
   }
 }
 
-impl Dumpable for If {
-  fn dump(
+impl<'context> Dumpable for If<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "If")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -421,14 +475,17 @@ impl Dumpable for If {
   }
 }
 
-impl Dumpable for While {
-  fn dump(
+impl<'context> Dumpable for While<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "While")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -437,14 +494,17 @@ impl Dumpable for While {
   }
 }
 
-impl Dumpable for DoWhile {
-  fn dump(
+impl<'context> Dumpable for DoWhile<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "DoWhile")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -453,14 +513,17 @@ impl Dumpable for DoWhile {
   }
 }
 
-impl Dumpable for For {
-  fn dump(
+impl<'context> Dumpable for For<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "For")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -477,14 +540,17 @@ impl Dumpable for For {
   }
 }
 
-impl Dumpable for Switch {
-  fn dump(
+impl<'context> Dumpable for Switch<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Switch")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -503,14 +569,17 @@ impl Dumpable for Switch {
     Ok(())
   }
 }
-impl Dumpable for Case {
-  fn dump(
+impl<'context> Dumpable for Case<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Case")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -521,14 +590,17 @@ impl Dumpable for Case {
     })
   }
 }
-impl Dumpable for statement::Default {
-  fn dump(
+impl<'context> Dumpable for statement::Default<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Default")?;
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -538,14 +610,17 @@ impl Dumpable for statement::Default {
   }
 }
 
-impl Dumpable for Goto {
-  fn dump(
+impl<'context> Dumpable for Goto<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Goto", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
@@ -555,14 +630,17 @@ impl Dumpable for Goto {
   }
 }
 
-impl Dumpable for Label {
-  fn dump(
+impl<'context> Dumpable for Label<'context> {
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Label", &palette.node_type)?;
 
@@ -578,28 +656,34 @@ impl Dumpable for Label {
   }
 }
 
-impl Dumpable for Break {
+impl<'context> Dumpable for Break<'context> {
   #[inline]
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Break")
   }
 }
 
-impl Dumpable for Continue {
+impl<'context> Dumpable for Continue<'context> {
   #[inline]
-  fn dump(
+  fn dump<'t, 's>(
     &self,
-    dumper: &mut impl Dumper,
+    dumper: &mut impl Dumper<'t, 's>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes {
+  ) -> DumpRes
+  where
+    's: 't,
+  {
     headers!(self, dumper, prefix, is_last, palette, "Continue")
   }
 }

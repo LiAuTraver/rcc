@@ -1,21 +1,31 @@
+use ::rcc_utils::ensure_is_pod;
+
 use super::{
-  Array, ArraySize, Constant, Enum, FunctionProto, Pointer, Primitive,
-  QualifiedType, Record, TypeInfo, Union,
+  Array, ArraySize, Constant, Context, Enum, FunctionProto, Pointer, Primitive,
+  Record, TypeInfo, Union,
 };
 use crate::common::{FloatFormat, Floating, Integral, Signedness};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum Type<'context> {
   Primitive(Primitive),
-  Array(Array),
-  Pointer(Pointer),
-  FunctionProto(FunctionProto),
-  Enum(Enum),
-  Record(Record),
-  Union(Union),
+  Pointer(Pointer<'context>),
+  Array(Array<'context>),
+  FunctionProto(FunctionProto<'context>),
+  Enum(Enum<'context>),
+  Record(Record<'context>),
+  Union(Union<'context>),
 }
+/// TODO: it's HARD and I tried 4 times...
+/// make a wrapprt [`TypeRef`] and use [`Eq`] for comparison.
+///
+/// If so, it's INVORRECT to store the new [`TypeRef`] wrapper inside [`QualifiedType`], [`Hash`] would FAIL.
+pub type TypeRef<'context> = &'context Type<'context>;
 
-impl Type {
+ensure_is_pod!(Type);
+ensure_is_pod!(TypeRef);
+
+impl<'context> Type<'context> {
   pub fn is_modifiable(&self) -> bool {
     if self.size() == 0 {
       false
@@ -51,97 +61,66 @@ impl Type {
       _ => false,
     }
   }
-}
-impl Type {
-  pub const fn void() -> Self {
-    Type::Primitive(Primitive::Void)
-  }
 
-  pub const fn bool_type() -> Self {
-    // Type::Primitive(Primitive::Bool)
-    Self::int()
-  }
-
-  pub const fn int() -> Self {
-    Type::Primitive(Primitive::Int)
-  }
-
-  pub const fn float() -> Self {
-    Type::Primitive(Primitive::Float)
-  }
-
-  pub const fn double() -> Self {
-    Type::Primitive(Primitive::Double)
-  }
-
-  pub const fn nullptr() -> Self {
-    Type::Primitive(Primitive::Nullptr)
-  }
-
-  pub const fn uintptr() -> Self {
-    Type::Primitive(Primitive::ULongLong)
-  }
-
-  pub const fn ptrdiff() -> Self {
-    Type::Primitive(Primitive::LongLong)
-  }
-
-  pub const fn char() -> Self {
-    Type::Primitive(Primitive::Char)
-  }
-
-  pub fn char_array(length: usize) -> Self {
-    Type::Array(Array {
-      element_type: QualifiedType::new_unqualified(
-        Type::Primitive(Primitive::Char).into(),
-      ),
-      size: ArraySize::Constant(length),
-    })
+  pub fn lookup(self, context: &Context<'context>) -> TypeRef<'context> {
+    context.intern_type(self)
   }
 }
-
 impl Integral {
-  pub fn unqualified_type(&self) -> Type {
+  pub fn unqualified_type<'context>(
+    &self,
+    context: &'context Context,
+  ) -> TypeRef<'context> {
     if self.signedness() == Signedness::Signed {
       match self.width() {
-        Self::WIDTH_CHAR => Type::Primitive(Primitive::SChar),
-        Self::WIDTH_SHORT => Type::Primitive(Primitive::Short),
-        Self::WIDTH_INT => Type::Primitive(Primitive::Int),
+        Self::WIDTH_CHAR => Context::char_type(context),
+        Self::WIDTH_SHORT => Context::short_type(context),
+        Self::WIDTH_INT => Context::int_type(context),
         // Self::WIDTH_LONG => Type::Primitive(Primitive::Long),
-        Self::WIDTH_LONG_LONG => Type::Primitive(Primitive::LongLong),
-        _ => Type::Primitive(Primitive::Int), // default
+        Self::WIDTH_LONG_LONG => Context::long_long_type(context),
+        _ => Context::int_type(context), // default
       }
     } else {
       match self.width() {
-        Self::WIDTH_CHAR => Type::Primitive(Primitive::UChar),
-        Self::WIDTH_SHORT => Type::Primitive(Primitive::UShort),
-        Self::WIDTH_INT => Type::Primitive(Primitive::UInt),
+        Self::WIDTH_CHAR => Context::uchar_type(context),
+        Self::WIDTH_SHORT => Context::ushort_type(context),
+        Self::WIDTH_INT => Context::uint_type(context),
         // Self::WIDTH_LONG => Type::Primitive(Primitive::ULong),
-        Self::WIDTH_LONG_LONG => Type::Primitive(Primitive::ULongLong),
-        _ => Type::Primitive(Primitive::UInt), // default
+        Self::WIDTH_LONG_LONG => Context::ulong_long_type(context),
+        _ => Context::uint_type(context), // default
       }
     }
   }
 }
 
 impl Floating {
-  pub const fn unqualified_type(&self) -> Type {
+  pub fn unqualified_type<'context>(
+    &self,
+    context: &'context Context,
+  ) -> TypeRef<'context> {
     use FloatFormat::*;
     match self.format() {
-      IEEE32 => Type::float(),
-      IEEE64 => Type::double(),
+      IEEE32 => Context::float_type(context),
+      IEEE64 => Context::double_type(context),
     }
   }
 }
 
 impl Constant {
-  pub fn unqualified_type(&self) -> Type {
+  pub fn unqualified_type<'context>(
+    &self,
+    context: &'context Context,
+  ) -> TypeRef<'context> {
     match self {
-      Self::Integral(integral) => integral.unqualified_type(),
-      Self::Floating(floating) => floating.unqualified_type(),
-      Self::String(str) => Type::char_array(str.len() + 1),
-      Self::Nullptr(_) => Type::nullptr(),
-      Self::Address(_) => Pointer::new(QualifiedType::void()).into(),
+      Self::Integral(integral) => integral.unqualified_type(context),
+      Self::Floating(floating) => floating.unqualified_type(context),
+      Self::String(str) => Context::make_array(
+        context,
+        context.char_type().into(),
+        ArraySize::Constant(str.len()),
+      ),
+      Self::Nullptr(_) => Context::nullptr_type(context),
+      Self::Address(_) => Context::voidptr_type(context),
     }
   }
 }

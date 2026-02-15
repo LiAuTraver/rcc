@@ -8,8 +8,8 @@ use ::std::{
 use super::Storage;
 use crate::types::QualifiedType;
 
-pub type SymbolRef = shared_ptr<Symbol>;
-pub type WeakSymbolRef = weak_ptr<Symbol>;
+pub type SymbolRef<'context> = shared_ptr<Symbol<'context>>;
+pub type WeakSymbolRef<'context> = weak_ptr<Symbol<'context>>;
 
 /// a lexical scope.
 type ScopeAssoc<T> = HashMap<SmallString, shared_ptr<T>>;
@@ -57,8 +57,8 @@ impl VarDeclKind {
   }
 }
 #[derive(Debug)]
-pub struct Symbol {
-  pub qualified_type: QualifiedType,
+pub struct Symbol<'context> {
+  pub qualified_type: QualifiedType<'context>,
   /// for global variable, if the [`VarDeclKind`] is [`VarDeclKind::Definition`]
   /// and the [`Symbol::storage_class`] is [`Storage::Extern`], the [`Storage::Extern`] has no effect
   /// -- chossing not to wrap it into [`Option`] is just for convenience and now it's hard to change,
@@ -72,11 +72,11 @@ pub struct Symbol {
   pub declkind: VarDeclKind,
 }
 #[derive(Debug, Default)]
-pub struct Environment {
-  symbols: Scope<Symbol>,
-  cache: RefCell<HashMap<SmallString, WeakSymbolRef>>,
+pub struct Environment<'context> {
+  symbols: Scope<Symbol<'context>>,
+  cache: RefCell<HashMap<SmallString, WeakSymbolRef<'context>>>,
 }
-impl Environment {
+impl<'context> Environment<'context> {
   pub fn new() -> Self {
     Self::default()
   }
@@ -97,7 +97,7 @@ impl Environment {
   }
 
   /// look up symbol and potentially cache it
-  pub fn find(&self, name: &str) -> Option<SymbolRef> {
+  pub fn find(&self, name: &str) -> Option<SymbolRef<'context>> {
     if let Some(sym) = self.cache.borrow().get(name) {
       // upgrade weak ref, this already handles whether the ref is dead or not
       return sym.upgrade();
@@ -114,7 +114,7 @@ impl Environment {
   }
 
   // we dont provide cache layer for shallow find, since it'll contain non-local symbols
-  pub fn shallow_find(&self, name: &str) -> Option<SymbolRef> {
+  pub fn shallow_find(&self, name: &str) -> Option<SymbolRef<'context>> {
     let sym = self.symbols.shallow_get(name);
     if let Some(s) = &sym {
       self
@@ -129,8 +129,8 @@ impl Environment {
   pub fn declare_symbol(
     &mut self,
     name: SmallString,
-    symbol: SymbolRef,
-  ) -> SymbolRef {
+    symbol: SymbolRef<'context>,
+  ) -> SymbolRef<'context> {
     // overwrite cache
     self
       .cache
@@ -139,7 +139,7 @@ impl Environment {
     self.symbols.declare(name, symbol.clone())
   }
 }
-impl Symbol {
+impl<'context> Symbol<'context> {
   #[inline]
   pub fn is_typedef(&self) -> bool {
     self.storage_class.is_typedef()
@@ -151,7 +151,7 @@ impl Symbol {
   }
 
   pub fn new(
-    qualified_type: QualifiedType,
+    qualified_type: QualifiedType<'context>,
     storage_class: Storage,
     name: SmallString,
     declkind: VarDeclKind,
@@ -165,10 +165,10 @@ impl Symbol {
   }
 
   pub fn decl(
-    qualified_type: QualifiedType,
+    qualified_type: QualifiedType<'context>,
     storage_class: Storage,
     name: SmallString,
-  ) -> SymbolRef {
+  ) -> SymbolRef<'context> {
     Self::new_ref(Self::new(
       qualified_type,
       storage_class,
@@ -178,10 +178,10 @@ impl Symbol {
   }
 
   pub fn def(
-    qualified_type: QualifiedType,
+    qualified_type: QualifiedType<'context>,
     storage_class: Storage,
     name: SmallString,
-  ) -> SymbolRef {
+  ) -> SymbolRef<'context> {
     Self::new_ref(Self::new(
       qualified_type,
       storage_class,
@@ -191,10 +191,10 @@ impl Symbol {
   }
 
   pub fn tentative(
-    qualified_type: QualifiedType,
+    qualified_type: QualifiedType<'context>,
     storage_class: Storage,
     name: SmallString,
-  ) -> SymbolRef {
+  ) -> SymbolRef<'context> {
     Self::new_ref(Self::new(
       qualified_type,
       storage_class,
@@ -308,7 +308,7 @@ mod fmt {
 
   use super::*;
 
-  impl Display for Symbol {
+  impl<'context> Display for Symbol<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}: {}", self.name, self.qualified_type)
     }

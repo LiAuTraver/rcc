@@ -1,28 +1,19 @@
-use ::std::rc::Rc;
-
 use crate::{common::SourceManager, diagnosis::Operational};
 
 #[derive(Debug)]
-pub struct Session {
-  pub diagnosis: Operational,
-  pub manager: Rc<SourceManager>,
+pub struct Session<'context, 'source>
+where
+  'source: 'context,
+{
+  pub diagnosis: Operational<'context>,
+  pub manager: &'source SourceManager,
 }
 
-impl Session {
-  pub fn new(manager: Rc<SourceManager>) -> Self {
+impl<'context, 'source> Session<'context, 'source> {
+  pub fn new(manager: &'source SourceManager) -> Self {
     Self {
       diagnosis: Operational::default(),
       manager,
     }
   }
-
-  pub fn no_manager() -> Self {
-    Self {
-      diagnosis: Operational::default(),
-      manager: Rc::new(SourceManager::default()),
-    }
-  }
 }
-
-pub struct Context {}
-impl Context {}

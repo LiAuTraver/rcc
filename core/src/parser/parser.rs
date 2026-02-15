@@ -31,19 +31,26 @@ use crate::{
   types::{FunctionSpecifier, Qualifiers},
 };
 #[derive(Debug)]
-pub struct Parser<'session> {
+pub struct Parser<'session, 'context, 'source>
+where
+  'context: 'session,
+  'source: 'context,
+{
   tokens: Vec<Token>,
   cursor: usize,
   loop_labels: Vec<SmallString>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope,
-  session: &'session Session,
+  session: &'session Session<'context, 'source>,
 }
 
 /// utility functions -- allow unused to suppress those annoying warnings.
 #[allow(unused)]
-impl<'session> Parser<'session> {
-  pub fn new(tokens: Vec<Token>, session: &'session Session) -> Self {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
+  pub fn new(
+    tokens: Vec<Token>,
+    session: &'session Session<'context, 'source>,
+  ) -> Self {
     assert_eq!(
       tokens.last().map(|t| &t.literal),
       Some(&Literal::Operator(EOF))
@@ -219,17 +226,17 @@ impl<'session> Parser<'session> {
   }
 }
 /// diagnostic functions
-impl<'session> Parser<'session> {
-  fn add_error(&self, data: DiagData, span: SourceSpan) {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
+  fn add_error(&self, data: DiagData<'context>, span: SourceSpan) {
     self.session.diagnosis.add_error(data, span);
   }
 
-  fn add_warning(&self, data: DiagData, span: SourceSpan) {
+  fn add_warning(&self, data: DiagData<'context>, span: SourceSpan) {
     self.session.diagnosis.add_warning(data, span);
   }
 }
 /// opt checks
-impl<'session> Parser<'session> {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn ios_c_strict_check_for_decl(&self, statement: &Statement) {
     if matches!(statement, Statement::Declaration(_)) {
       self.add_warning(DeprecatedStmtDeclCvt, *self.peek_loc());
@@ -237,7 +244,7 @@ impl<'session> Parser<'session> {
   }
 }
 /// meta parse
-impl<'session> Parser<'session> {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn parse_type_specifier(&self) -> Option<TypeSpecifier> {
     match self.peek_lit() {
       Literal::Keyword(Keyword::Struct) => todo!(),
@@ -673,7 +680,7 @@ impl<'session> Parser<'session> {
   }
 }
 /// declarations
-impl<'session> Parser<'session> {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn next_vardef(
     &mut self,
     declspecs: DeclSpecs,
@@ -778,7 +785,7 @@ impl<'session> Parser<'session> {
   }
 }
 /// statements
-impl<'session> Parser<'session> {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn next_function_body(
     &mut self,
     declspecs: DeclSpecs,
@@ -1147,7 +1154,7 @@ impl<'session> Parser<'session> {
   }
 }
 /// expressions
-impl<'session> Parser<'session> {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn next_factor(&mut self) -> Expression {
     let location = *self.peek_loc();
     match self.peek_lit().clone() {
@@ -1262,7 +1269,7 @@ impl<'session> Parser<'session> {
     }
   }
 }
-impl<'session> Parser<'session> {
+impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// I refactored the expression parser to use **Pratt Parsing** technique instead of
   /// the previous precedence climbing method.
   ///

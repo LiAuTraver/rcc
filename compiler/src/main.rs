@@ -1,3 +1,4 @@
+use ::bumpalo::Bump;
 use ::rcc_core::{
   analyzer::Analyzer,
   common::{ASTDumper, SourceManager},
@@ -5,9 +6,9 @@ use ::rcc_core::{
   lexer::Lexer,
   parser::Parser,
   session::Session,
+  types::Context,
 };
 use ::rcc_utils::DisplayWith;
-use ::std::rc::Rc;
 enum Stage {
   Lex,
   Parse,
@@ -44,7 +45,7 @@ fn main() {
       ::std::process::exit(1);
     },
   };
-  let session = Session::new(Rc::new(source_manager));
+  let session = Session::new(&source_manager);
   pipeline(session, stage, false);
 }
 
@@ -68,14 +69,14 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
       .diagnosis
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&session.manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
     return 1;
   }
   if let Stage::Lex = stage {
     println!("Lex succeeded.");
     return 0;
   }
-  let session = Session::new(session.manager.clone());
+  let session = Session::new(session.manager);
   let mut parser = Parser::new(tokens, &session);
   let program = parser.parse();
   println!("{program}");
@@ -85,7 +86,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
       .diagnosis
       .warnings()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&session.manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
   }
   if session.diagnosis.has_errors() {
     eprintln!("Parser errors:");
@@ -93,7 +94,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
       .diagnosis
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&session.manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
     return 1;
   }
   if let Stage::Parse = stage {
@@ -104,8 +105,10 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
   assert!(matches!(stage, Stage::Analyze));
-  let session = Session::new(session.manager.clone());
-  let mut analyzer = Analyzer::new(program, &session);
+  let session = Session::new(session.manager);
+  let arena = Bump::new();
+  let context = Context::new(&arena);
+  let mut analyzer = Analyzer::new(program, &session, &context);
   let translation_unit = analyzer.analyze();
   if session.diagnosis.has_warnings() {
     eprintln!("Analyzer warnings:");
@@ -113,7 +116,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
       .diagnosis
       .warnings()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&session.manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
   }
   if session.diagnosis.has_errors() {
     eprintln!("Analyzer errors:");
@@ -121,7 +124,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
       .diagnosis
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(&session.manager)));
+      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
     return 1;
   }
   if pretty_print {
@@ -129,9 +132,9 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
   }
 
   println!("{translation_unit}");
-  ASTDumper::dump(&translation_unit, &session).unwrap();
-
   println!("Analyze succeeded.");
+
+  ASTDumper::dump(&translation_unit, &session).unwrap();
   0
 }
 
@@ -224,7 +227,7 @@ int main(int argc, char **argv) { //
   fn test_str(source: &str) -> i32 {
     let mut manager = SourceManager::default();
     manager.add_string(source.into());
-    let session = Session::new(Rc::new(manager));
+    let session = Session::new(&manager);
     pipeline(session, Stage::Analyze, true)
   }
   #[test]

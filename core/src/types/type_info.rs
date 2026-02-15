@@ -9,18 +9,18 @@ pub trait TypeInfo {
   fn is_scalar(&self) -> bool;
 }
 
-impl TypeInfo for QualifiedType {
+impl<'context> TypeInfo for QualifiedType<'context> {
   #[inline(always)]
   fn size(&self) -> usize {
-    self.unqualified_type().size()
+    self.unqualified_type.size()
   }
 
   #[inline(always)]
   fn is_scalar(&self) -> bool {
-    self.unqualified_type().is_scalar()
+    self.unqualified_type.is_scalar()
   }
 }
-impl TypeInfo for Type {
+impl<'context> TypeInfo for Type<'context> {
   #[inline]
   fn size(&self) -> usize {
     ::rcc_utils::static_dispatch!(
@@ -71,11 +71,10 @@ impl TypeInfo for Primitive {
   }
 }
 
-impl TypeInfo for Array {
+impl<'context> TypeInfo for Array<'context> {
   fn size(&self) -> usize {
     match &self.size {
-      ArraySize::Constant(sz) =>
-        sz * self.element_type.unqualified_type().size(),
+      ArraySize::Constant(sz) => sz * self.element_type.unqualified_type.size(),
       ArraySize::Incomplete => 0,
       ArraySize::Variable(_id) => todo!(), // ignore for now
     }
@@ -87,12 +86,12 @@ impl TypeInfo for Array {
   }
 }
 
-impl TypeInfo for Record {
+impl<'context> TypeInfo for Record<'context> {
   fn size(&self) -> usize {
     self
       .fields
       .iter()
-      .map(|f| f.field_type.unqualified_type().size())
+      .map(|f| f.field_type.unqualified_type.size())
       .sum() // rough, padding and alignment not considered -- incomplete type has no members anyway so this handles it too
   }
 
@@ -102,12 +101,12 @@ impl TypeInfo for Record {
   }
 }
 
-impl TypeInfo for Union {
+impl<'context> TypeInfo for Union<'context> {
   fn size(&self) -> usize {
     self
       .fields
       .iter()
-      .map(|f| f.field_type.unqualified_type().size())
+      .map(|f| f.field_type.unqualified_type.size())
       .max()
       .unwrap_or(0) // ditto
   }
@@ -117,7 +116,7 @@ impl TypeInfo for Union {
     false
   }
 }
-impl TypeInfo for Pointer {
+impl<'context> TypeInfo for Pointer<'context> {
   #[inline(always)]
   fn size(&self) -> usize {
     ULongLong.size() // x86_64 LLP64 Windows
@@ -129,7 +128,7 @@ impl TypeInfo for Pointer {
   }
 }
 
-impl TypeInfo for FunctionProto {
+impl<'context> TypeInfo for FunctionProto<'context> {
   #[inline(always)]
   fn size(&self) -> usize {
     0 // function types have no size
@@ -140,7 +139,7 @@ impl TypeInfo for FunctionProto {
     false
   }
 }
-impl TypeInfo for Enum {
+impl<'context> TypeInfo for Enum<'context> {
   #[inline(always)]
   fn size(&self) -> usize {
     self.underlying_type.size()

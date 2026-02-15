@@ -8,60 +8,60 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct TranslationUnit {
-  pub declarations: Vec<ExternalDeclaration>,
+pub struct TranslationUnit<'context> {
+  pub declarations: Vec<ExternalDeclaration<'context>>,
 }
 #[derive(Debug)]
-pub enum ExternalDeclaration {
-  Function(Function),
-  Variable(VarDef),
+pub enum ExternalDeclaration<'context> {
+  Function(Function<'context>),
+  Variable(VarDef<'context>),
 }
 
 #[derive(Debug)]
-pub struct Function {
+pub struct Function<'context> {
   /// contains name, storage, definition flag, and full QualifiedType.
-  pub symbol: SymbolRef, // function type is included in symbol's qualified_type
-  pub parameters: Vec<Parameter>, // some duplication with symbol's qualified_type, but we need this for param names
+  pub symbol: SymbolRef<'context>, // function type is included in symbol's qualified_type
+  pub parameters: Vec<Parameter<'context>>, // some duplication with symbol's qualified_type, but we need this for param names
   pub specifier: FunctionSpecifier,
-  pub body: Option<Compound>,
+  pub body: Option<Compound<'context>>,
   pub labels: HashSet<SmallString>, // just holds a name
   pub gotos: HashSet<SmallString>,  // just holds a name
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
-pub struct VarDef {
-  pub symbol: SymbolRef,
-  pub initializer: Option<Initializer>,
+pub struct VarDef<'context> {
+  pub symbol: SymbolRef<'context>,
+  pub initializer: Option<Initializer<'context>>,
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
-pub struct Parameter {
+pub struct Parameter<'context> {
   /// If the parameter is named, point to the symbol; otherwise the name was set to `<unnamed_n>`.
-  pub symbol: SymbolRef,
+  pub symbol: SymbolRef<'context>,
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
-pub enum Initializer {
+pub enum Initializer<'context> {
   /// Simple scalar initialization: `int x = val;`
-  Scalar(Expression),
+  Scalar(Expression<'context>),
   /// Aggregate initialization: `int arr[] = { 1, 2, 3 };`
   /// unimplemented: todo.
-  Aggregate(Vec<Initializer>),
+  Aggregate(Vec<Initializer<'context>>),
 }
-impl TranslationUnit {
-  pub fn new(declarations: Vec<ExternalDeclaration>) -> Self {
+impl<'context> TranslationUnit<'context> {
+  pub fn new(declarations: Vec<ExternalDeclaration<'context>>) -> Self {
     Self { declarations }
   }
 }
-impl Function {
+impl<'context> Function<'context> {
   pub fn new(
-    symbol: SymbolRef,
-    parameters: Vec<Parameter>,
+    symbol: SymbolRef<'context>,
+    parameters: Vec<Parameter<'context>>,
     specifier: FunctionSpecifier,
-    body: Option<Compound>,
+    body: Option<Compound<'context>>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -86,21 +86,21 @@ impl Function {
   }
 
   #[inline]
-  pub fn proto(&self) -> Ref<'_, QualifiedType> {
+  pub fn proto(&self) -> Ref<'_, QualifiedType<'_>> {
     Ref::map(self.symbol.borrow(), |sym| &sym.qualified_type)
   }
 
   #[inline]
-  pub fn proto_unqual(&self) -> Ref<'_, Type> {
+  pub fn proto_unqual(&self) -> Ref<'_, Type<'_>> {
     Ref::map(self.symbol.borrow(), |sym| {
-      sym.qualified_type.unqualified_type()
+      sym.qualified_type.unqualified_type
     })
   }
 }
-impl VarDef {
+impl<'context> VarDef<'context> {
   pub fn new(
-    symbol: SymbolRef,
-    initializer: Option<Initializer>,
+    symbol: SymbolRef<'context>,
+    initializer: Option<Initializer<'context>>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -111,8 +111,8 @@ impl VarDef {
   }
 }
 
-impl Parameter {
-  pub fn new(symbol: SymbolRef, span: SourceSpan) -> Self {
+impl<'context> Parameter<'context> {
+  pub fn new(symbol: SymbolRef<'context>, span: SourceSpan) -> Self {
     Self { symbol, span }
   }
 }
@@ -127,7 +127,7 @@ mod fmt {
   };
   use crate::types::Type;
 
-  impl Display for TranslationUnit {
+  impl<'context> Display for TranslationUnit<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       self
         .declarations
@@ -136,7 +136,7 @@ mod fmt {
     }
   }
 
-  impl Display for ExternalDeclaration {
+  impl<'context> Display for ExternalDeclaration<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       ::rcc_utils::static_dispatch!(
         self.fmt(f),
@@ -145,13 +145,13 @@ mod fmt {
     }
   }
 
-  impl Display for Function {
+  impl<'context> Display for Function<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       let sym = self.symbol.borrow();
 
       // For functions, sym.qualified_type is Type::FunctionProto
       // We want: return_type name(params)
-      match sym.qualified_type.unqualified_type() {
+      match *sym.qualified_type.unqualified_type {
         Type::FunctionProto(proto) => {
           write!(f, "{} {}(", proto.return_type, sym.name)?;
           for (i, param) in self.parameters.iter().enumerate() {
@@ -176,14 +176,14 @@ mod fmt {
     }
   }
 
-  impl Display for Parameter {
+  impl<'context> Display for Parameter<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       // Show only the type for brevity; names are optional.
       write!(f, "{}", self.symbol.borrow().qualified_type)
     }
   }
 
-  impl Display for VarDef {
+  impl<'context> Display for VarDef<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       let sym = self.symbol.borrow();
       write!(
@@ -198,7 +198,7 @@ mod fmt {
     }
   }
 
-  impl Display for Initializer {
+  impl<'context> Display for Initializer<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         Initializer::Scalar(expr) => write!(f, "{}", expr),

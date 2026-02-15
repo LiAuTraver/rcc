@@ -4,18 +4,18 @@ use ::std::cell::{Ref, RefCell};
 pub use self::data::{Data as DiagData, Diag, Meta as DiagMeta, Severity};
 use crate::common::SourceSpan;
 
-pub trait Diagnosis {
+pub trait Diagnosis<'context> {
   #[must_use]
   fn has_errors(&self) -> bool;
   #[must_use]
   fn has_warnings(&self) -> bool;
   #[must_use]
-  fn errors(&self) -> Ref<'_, Vec<Diag>>;
+  fn errors(&self) -> Ref<'_, Vec<Diag<'_>>>;
   #[must_use]
-  fn warnings(&self) -> Ref<'_, Vec<Diag>>;
-  fn add_error(&self, error: DiagData, span: SourceSpan);
-  fn add_warning(&self, warning: DiagData, span: SourceSpan);
-  fn add_diag(&self, diag: Diag) {
+  fn warnings(&self) -> Ref<'_, Vec<Diag<'_>>>;
+  fn add_error(&self, error: DiagData<'context>, span: SourceSpan);
+  fn add_warning(&self, warning: DiagData<'context>, span: SourceSpan);
+  fn add_diag(&self, diag: Diag<'context>) {
     match diag.metadata.severity {
       Severity::Error => self.add_error(diag.metadata.data, diag.span),
       Severity::Warning => self.add_warning(diag.metadata.data, diag.span),
@@ -26,12 +26,12 @@ pub trait Diagnosis {
 
 #[derive(Default, Debug)]
 
-pub struct Operational {
-  warnings: RefCell<Vec<Diag>>,
-  errors: RefCell<Vec<Diag>>,
+pub struct Operational<'context> {
+  warnings: RefCell<Vec<Diag<'context>>>,
+  errors: RefCell<Vec<Diag<'context>>>,
 }
 
-impl Diagnosis for Operational {
+impl<'context> Diagnosis<'context> for Operational<'context> {
   #[inline]
   fn has_errors(&self) -> bool {
     !self.errors.borrow().is_empty()
@@ -43,17 +43,17 @@ impl Diagnosis for Operational {
   }
 
   #[inline]
-  fn errors(&self) -> Ref<'_, Vec<Diag>> {
+  fn errors(&self) -> Ref<'_, Vec<Diag<'_>>> {
     self.errors.borrow()
   }
 
   #[inline]
-  fn warnings(&self) -> Ref<'_, Vec<Diag>> {
+  fn warnings(&self) -> Ref<'_, Vec<Diag<'_>>> {
     self.warnings.borrow()
   }
 
   #[inline]
-  fn add_error(&self, error: DiagData, span: SourceSpan) {
+  fn add_error(&self, error: DiagData<'context>, span: SourceSpan) {
     self
       .errors
       .borrow_mut()
@@ -61,7 +61,7 @@ impl Diagnosis for Operational {
   }
 
   #[inline]
-  fn add_warning(&self, data: DiagData, span: SourceSpan) {
+  fn add_warning(&self, data: DiagData<'context>, span: SourceSpan) {
     self
       .warnings
       .borrow_mut()
@@ -72,7 +72,7 @@ impl Diagnosis for Operational {
 pub struct NoOp {
   /// rust strict rules w.r.t. thread safety(!Sync)
   /// and lifetime issues makes it difficult to just create a dummmy noop struct.
-  idk: RefCell<Vec<Diag>>,
+  idk: RefCell<Vec<Diag<'static>>>,
 }
 impl ::std::default::Default for NoOp {
   #[inline]
@@ -89,7 +89,7 @@ impl NoOp {
     Self::default()
   }
 }
-impl Diagnosis for NoOp {
+impl Diagnosis<'_> for NoOp {
   #[inline]
   fn has_errors(&self) -> bool {
     false
@@ -101,12 +101,12 @@ impl Diagnosis for NoOp {
   }
 
   #[inline]
-  fn errors(&self) -> Ref<'_, Vec<Diag>> {
+  fn errors(&self) -> Ref<'_, Vec<Diag<'_>>> {
     self.idk.borrow()
   }
 
   #[inline]
-  fn warnings(&self) -> Ref<'_, Vec<Diag>> {
+  fn warnings(&self) -> Ref<'_, Vec<Diag<'_>>> {
     self.idk.borrow()
   }
 
