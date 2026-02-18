@@ -164,7 +164,7 @@ pub enum Data<'context> {
   StaticArrayWithoutBound,
   #[error("Operand of address-of operator must be lvalue, got '{0}'")]
   AddressofOperandNotLvalue(Elem),
-  /// TODO: implicit address-of, e.g., decay not handled.
+  /// TODO: `register` with implicit address-of, e.g., decay not handled.
   #[error("variable '{0}' declared with 'register' cannot be taken address of")]
   AddressofOperandRegVar(Elem),
   #[error("Global variable cannot be declared with 'register', ignoring")]
@@ -289,7 +289,11 @@ fn format_expected(expected: &Option<Literal>) -> String {
 
 impl<'context> Diag<'context> {
   #[inline]
-  pub fn new(span: SourceSpan, severity: Severity, data: Data<'context>) -> Self {
+  pub fn new(
+    span: SourceSpan,
+    severity: Severity,
+    data: Data<'context>,
+  ) -> Self {
     Self {
       metadata: Meta::new(severity, data),
       span,

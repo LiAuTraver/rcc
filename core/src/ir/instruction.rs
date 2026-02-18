@@ -27,17 +27,21 @@ pub struct Phi {
   pub incomings: Vec<(Operand, SmallString)>, // (Value, From_Block_Label)
 }
 
+#[derive(Debug)]
 pub struct Jump {
   pub label: SmallString,
 }
+#[derive(Debug)]
 pub struct Branch {
   pub cond: Operand,
   pub true_label: SmallString,
   pub false_label: SmallString,
 }
+#[derive(Debug)]
 pub struct Return {
   pub returne: Option<Operand>,
 }
+#[derive(Debug)]
 pub enum Terminator {
   /// Unconditional jump
   Jump(Jump),
@@ -48,18 +52,21 @@ pub enum Terminator {
 }
 
 /// result = unary_op operand
+#[derive(Debug)]
 pub struct Unary<'context> {
   pub result: Operand,
   pub operator: UnaryOp,
   pub operand: Operand,
   pub qualified_type: QualifiedType<'context>,
 }
+#[derive(Debug)]
 pub enum UnaryOp {
   Neg,
   Not,
   Compl,
 }
 /// result = binary_op lhs, rhs
+#[derive(Debug)]
 pub struct Binary<'context> {
   pub result: Operand,
   pub operator: BinaryOp,
@@ -68,6 +75,7 @@ pub struct Binary<'context> {
   pub qualified_type: QualifiedType<'context>,
 }
 // arithematic ops only consider integer for now
+#[derive(Debug, Clone, Copy, ::strum_macros::Display)]
 pub enum BinaryOp {
   Add,
   Sub,
@@ -81,6 +89,7 @@ pub enum BinaryOp {
   RightShift,
 }
 
+#[derive(Debug)]
 pub struct ICmp<'context> {
   pub result: Operand,
   pub predicate: ICmpPredicate,
@@ -102,6 +111,7 @@ pub enum ICmpPredicate {
   Uge,
 }
 /// Store value to address: *addr = value
+#[derive(Debug)]
 pub struct Store<'context> {
   pub addr: Operand,
   pub value: Operand,
@@ -109,11 +119,13 @@ pub struct Store<'context> {
 }
 
 /// Load value from address: result = *addr
+#[derive(Debug)]
 pub struct Load<'context> {
   pub result: Operand,
   pub addr: Operand,
   pub qualified_type: QualifiedType<'context>,
 }
+#[derive(Debug)]
 pub enum Memory<'context> {
   Store(Store<'context>),
   Load(Load<'context>),
@@ -122,23 +134,37 @@ pub enum Memory<'context> {
 /// Stack allocation.
 /// result = alloca typeof(type)
 /// Used for local variables that must live in memory (e.g., if their address is taken).
+#[derive(Debug)]
 pub struct Alloca<'context> {
   pub result: Operand,
   pub qualified_type: QualifiedType<'context>,
 }
 
+#[derive(Debug)]
 pub enum Cast {
   // add later.
 }
 
 /// Function call: result = call func(args)
+#[derive(Debug)]
 pub struct Call {
   pub result: Option<Operand>,
   pub func: Operand,
   pub args: Vec<Operand>,
 }
 
+impl Call {
+  pub fn new(
+    result: Option<Operand>,
+    func: Operand,
+    args: Vec<Operand>,
+  ) -> Self {
+    Self { result, func, args }
+  }
+}
+
 /// This mimics LLVM ir's catagory.
+#[derive(Debug)]
 pub enum Instruction<'context> {
   Phi(Phi),
   Terminator(Terminator),
@@ -150,3 +176,12 @@ pub enum Instruction<'context> {
   ICmp(ICmp<'context>),
   // etc...
 }
+
+::rcc_utils::interconvert!(Phi, Instruction<'context>);
+::rcc_utils::interconvert!(Terminator, Instruction<'context>);
+::rcc_utils::interconvert!(Unary, Instruction,'context);
+::rcc_utils::interconvert!(Binary, Instruction,'context);
+::rcc_utils::interconvert!(Memory, Instruction,'context);
+::rcc_utils::interconvert!(Cast, Instruction<'context>);
+::rcc_utils::interconvert!(Call, Instruction<'context>);
+::rcc_utils::interconvert!(ICmp, Instruction,'context);

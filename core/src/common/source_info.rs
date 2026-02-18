@@ -1,11 +1,11 @@
-use ::rcc_utils::{DisplayWith, static_assert};
+use ::rcc_utils::{DisplayWith, ensure_is_pod};
 use ::std::path::PathBuf;
 
 pub trait Display<'a, DisplayHelperType: ::std::fmt::Display>:
   DisplayWith<'a, Manager, DisplayHelperType>
 {
 }
-/// if a type implements DisplayWith for a Manager, automatically give it the Display trait.
+/// if a type implements [`DisplayWith`] for a [`Manager`], automatically give it the [`Display`][std::fmt::Display] trait.
 impl<'a, T, DisplayHelperType: ::std::fmt::Display>
   Display<'a, DisplayHelperType> for T
 where
@@ -14,17 +14,10 @@ where
 }
 
 pub type Id = u32;
-static_assert!(
-  ::std::mem::needs_drop::<Id>() == false,
-  "Id should be a POD type"
-);
+ensure_is_pod!(Id);
 
 pub type Index = u32;
-static_assert!(
-  ::std::mem::needs_drop::<Index>() == false,
-  "Index should be a POD type"
-);
-
+ensure_is_pod!(Index);
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Span {
   pub file_index: Id,
@@ -60,20 +53,14 @@ impl Dummy for Span {
     }
   }
 }
-static_assert!(
-  ::std::mem::needs_drop::<Span>() == false,
-  "Span should be a POD type"
-);
+ensure_is_pod!(Span);
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Coordinate {
   pub line: Index,
   pub column: Index,
 }
-static_assert!(
-  ::std::mem::needs_drop::<Coordinate>() == false,
-  "Coordinate should be a POD type"
-);
+ensure_is_pod!(Coordinate);
 impl Coordinate {
   #[inline(always)]
   pub fn destructure(self) -> (Index, Index) {

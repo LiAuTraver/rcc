@@ -3,6 +3,7 @@ use ::rcc_core::{
   analyzer::Analyzer,
   common::{ASTDumper, SourceManager},
   diagnosis::Diagnosis,
+  ir::ModuleBuilder,
   lexer::Lexer,
   parser::Parser,
   session::Session,
@@ -13,6 +14,7 @@ enum Stage {
   Lex,
   Parse,
   Analyze,
+  Ir,
 }
 fn main() {
   let args = ::std::env::args().collect::<Vec<String>>();
@@ -37,9 +39,10 @@ fn main() {
     });
 
   let stage = match kind {
-    "all" | "--all" => Stage::Analyze,
+    "all" | "--all" => Stage::Ir,
     "lex" | "--lex" => Stage::Lex,
     "parse" | "--parse" => Stage::Parse,
+    "analyze" | "--analyze" => Stage::Analyze,
     _ => {
       eprintln!("Unknown stage: {}", kind);
       ::std::process::exit(1);
@@ -104,7 +107,6 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     println!("Parse succeeded.");
     return 0;
   }
-  assert!(matches!(stage, Stage::Analyze));
   let session = Session::new(session.manager);
   let arena = Bump::new();
   let context = Context::new(&arena);
@@ -127,14 +129,23 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
       .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
     return 1;
   }
-  if pretty_print {
-    println!("{:#?}", translation_unit);
+  if let Stage::Analyze = stage {
+    if pretty_print {
+      println!("{:#?}", translation_unit);
+    }
+    println!("{translation_unit}");
+    println!("Analyze succeeded.");
   }
-
-  println!("{translation_unit}");
-  println!("Analyze succeeded.");
-
   ASTDumper::dump(&translation_unit, &session).unwrap();
+  if let Stage::Analyze = stage {
+    return 0;
+  }
+  assert!(matches!(stage, Stage::Ir));
+  let session = Session::new(session.manager);
+  let mut builder = ModuleBuilder::new(&session, &context);
+  let m = builder.build(translation_unit);
+  println!("{m:#?}");
+
   0
 }
 

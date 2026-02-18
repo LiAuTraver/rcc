@@ -83,7 +83,7 @@ impl<'context> Expression<'context> {
     self.value_category
   }
 
-  pub(super) fn destructure(
+  pub(crate) fn destructure(
     self,
   ) -> (RawExpr<'context>, QualifiedType<'context>, ValueCategory) {
     (self.raw_expr, self.expr_type, self.value_category)

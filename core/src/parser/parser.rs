@@ -1270,7 +1270,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 }
 impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
-  /// I refactored the expression parser to use **Pratt Parsing** technique instead of
+  /// I refactored the expression parser to use *Pratt Parsing* technique instead of
   /// the previous precedence climbing method.
   ///
   /// In short, Pratt parsing was built
@@ -1278,16 +1278,18 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// decide whether to continue parsing or not, it uses two binding power values:
   /// **left binding power** and **right binding power**.
   ///
-  /// The left binding power is much like the precedence value in precedence climbing,
-  /// whereas the right binding power is used to decide how far to parse the right-hand side,
+  /// The *left binding power* is much like the precedence value in precedence climbing,
+  /// whereas the *right binding power* is used to decide how far to parse the right-hand side,
   /// such as in the case of right-associative operators -- which would be tricky to implement
   /// using precedence climbing. Both methods reduce the complexity of recursive descent parsing.
   ///
-  /// [rustc](https://github.com/rust-lang/rust-analyzer/blob/master/crates/parser/src/grammar/expressions.rs#L246)
-  /// also uses Pratt parsing for its expression parser(it's far more complicated than this one tho).
+  /// rustc also uses Pratt parsing for its expression parser; the relavent part see
+  /// [here](https://github.com/rust-lang/rust-analyzer/blob/3cf298f9a92cb4fd0999859821b578bd361d5da2/crates/parser/src/grammar/expressions.rs#L246)
+  /// (it's far more complicated than this one, tho).
   ///
-  /// For more information, read the excellent blog post by
-  /// [Matklad](https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html).
+  /// For more information, read this excellent blog
+  /// [post](https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html)
+  /// by Matklad.
   fn next_expression(&mut self, min_bp: u8) -> Expression {
     let location = *self.peek_loc();
     let mut lhs = self.next_factor();

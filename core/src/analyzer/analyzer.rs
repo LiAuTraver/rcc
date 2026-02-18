@@ -622,7 +622,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
               // TODO: nasty exceptions w.r.t. array compatibility in function params,
               //       like `int f(int a[restrict 5])` vs `int f(int a[5])`,
               //       even with `int f(int a[*])` and `int f(int a[restrict])`
-              let composite = QualifiedType::composite_unchecked(
+              let composite = Compatibility::composite_unchecked(
                 &prev_symbol_ref.borrow().qualified_type,
                 &qualified_type,
                 self.context,
@@ -962,7 +962,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     if storage == Storage::Extern && initializer.is_some() {
       self.add_error(LocalExternVarWithInitializer(name.to_string()), span);
     }
-    let symbol = Symbol::decl(qualified_type, storage, name);
+    let symbol = Symbol::def(qualified_type, storage, name);
     Ok(ad::VarDef::new(symbol, initializer, span))
   }
 }
@@ -1130,15 +1130,10 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       span,
     } = constant;
     let unqualified_type = constant.unqualified_type(self.context);
-    let value_category = if constant.is_char_array() {
-      ae::ValueCategory::LValue
-    } else {
-      ae::ValueCategory::RValue
-    };
-    Ok(ae::Expression::new(
+
+    Ok(ae::Expression::new_rvalue(
       ae::Constant::new(constant, span).into(),
       unqualified_type.into(),
-      value_category,
     ))
   }
 
