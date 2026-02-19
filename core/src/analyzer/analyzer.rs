@@ -112,7 +112,7 @@ where
   'context: 'session,
   'source: 'context,
 {
-  program: pd::Program,
+  program: pd::Program<'context>,
   environment: Environment<'context>,
   current_function: Option<ad::Function<'context>>,
   session: &'session Session<'context, 'source>,
@@ -120,7 +120,7 @@ where
 
 impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   pub fn new(
-    program: pd::Program,
+    program: pd::Program<'context>,
     session: &'session Session<'context, 'source>,
   ) -> Self {
     Self {
@@ -168,7 +168,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   fn apply_modifiers_for_varty(
     &self,
     mut qualified_type: QualifiedType<'context>,
-    modifiers: Vec<pd::Modifier>,
+    modifiers: Vec<pd::Modifier<'context>>,
   ) -> QualifiedType<'context> {
     // reverse order
     for modifier in modifiers.into_iter().rev() {
@@ -253,7 +253,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   fn apply_modifiers_for_functiondecl(
     &self,
     return_type: QualifiedType<'context>,
-    modifiers: Vec<pd::Modifier>,
+    modifiers: Vec<pd::Modifier<'context>>,
   ) -> Result<
     (
       QualifiedType<'context>,
@@ -291,7 +291,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn parse_parameter_types(
     &self,
-    parameters: Vec<pd::Parameter>,
+    parameters: Vec<pd::Parameter<'context>>,
   ) -> ArenaVec<'context, QualifiedType<'context>> {
     parameters
       .into_iter()
@@ -320,7 +320,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn parse_parameters(
     &self,
-    parameters: Vec<pd::Parameter>,
+    parameters: Vec<pd::Parameter<'context>>,
   ) -> Vec<ad::Parameter<'context>> {
     parameters
       .into_iter()
@@ -378,7 +378,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     assert!(!type_specifiers.is_empty());
     assert!(type_specifiers.len() <= 5); // unsigned long long int complex (integer complex not in standard) is the max
     type_specifiers.sort_by_key(|s| s.sort_key());
-    type TS = pd::TypeSpecifier;
+    type TS<'a> = pd::TypeSpecifier<'a>;
     // 6.7.3.1
     match type_specifiers.as_slice() {
       [TS::Nullptr] => Ok(
@@ -553,7 +553,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   pub fn declarations(
     &mut self,
-    declaration: pd::Declaration,
+    declaration: pd::Declaration<'context>,
   ) -> Result<ad::ExternalDeclaration<'context>, Diag<'context>> {
     match declaration {
       pd::Declaration::Function(function) => Ok(
@@ -566,7 +566,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   pub fn functiondecl(
     &mut self,
-    function: pd::Function,
+    function: pd::Function<'context>,
   ) -> Result<ad::Function<'context>, Diag<'context>> {
     let pd::Function {
       body,
@@ -700,7 +700,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn function_with_body(
     &mut self,
-    body: ps::Compound,
+    body: ps::Compound<'context>,
     function: ad::Function<'context>,
   ) -> Result<ad::Function<'context>, Diag<'context>> {
     self.current_function = Some(function);
@@ -751,7 +751,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   pub fn vardef(
     &mut self,
-    vardef: pd::VarDef,
+    vardef: pd::VarDef<'context>,
   ) -> Result<ad::VarDef<'context>, Diag<'context>> {
     let pd::VarDef {
       declarator,
@@ -882,7 +882,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn initializer(
     &self,
-    initializer: pd::Initializer,
+    initializer: pd::Initializer<'context>,
     target_type: &QualifiedType<'context>,
     requires_folding: bool,
   ) -> Option<ad::Initializer<'context>> {
@@ -991,7 +991,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   fn expression(
     &self,
-    expression: pe::Expression,
+    expression: pe::Expression<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     match expression {
       pe::Expression::Empty(_) => Ok(Default::default()),
@@ -1015,7 +1015,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn sizeof(
     &self,
-    sizeof: pe::SizeOf,
+    sizeof: pe::SizeOf<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     match sizeof.sizeof {
       pe::SizeOfKind::Expression(expression) => {
@@ -1059,7 +1059,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn call(
     &self,
-    call: pe::Call,
+    call: pe::Call<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let pe::Call {
       arguments,
@@ -1105,7 +1105,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn paren(
     &self,
-    paren: pe::Paren,
+    paren: pe::Paren<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let pe::Paren { expr, span } = paren;
     let analyzed_expr = self.expression(*expr)?;
@@ -1127,7 +1127,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     &self,
     variable: pe::Variable,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
-    let symbol = self.environment.find(&variable.name).ok_or(
+    let symbol = self.environment.find(variable.name).ok_or(
       UndefinedVariable(variable.name.into())
         .into_with(Severity::Error)
         .into_with(variable.span),
@@ -1146,7 +1146,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn constant(
     &self,
-    constant: pe::Constant,
+    constant: pe::Constant<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let pe::Constant {
       value: constant,
@@ -1162,7 +1162,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn unary(
     &self,
-    unary: pe::Unary,
+    unary: pe::Unary<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let pe::Unary {
       operator,
@@ -1186,7 +1186,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn binary(
     &self,
-    binary: pe::Binary,
+    binary: pe::Binary<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let pe::Binary {
       left: pe_left,
@@ -1211,7 +1211,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn ternary(
     &self,
-    ternary: pe::Ternary,
+    ternary: pe::Ternary<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let pe::Ternary {
       condition: pe_condition,
@@ -1306,7 +1306,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn array_subscript(
     &self,
-    array_subscript: pe::ArraySubscript,
+    array_subscript: pe::ArraySubscript<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     // a[i] = *(a + i)
     let pe::ArraySubscript {
@@ -1856,7 +1856,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   fn statements(
     &mut self,
-    statements: Vec<ps::Statement>,
+    statements: Vec<ps::Statement<'context>>,
   ) -> Vec<astmt::Statement<'context>> {
     statements
       .into_iter()
@@ -1872,7 +1872,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn statement(
     &mut self,
-    statement: ps::Statement,
+    statement: ps::Statement<'context>,
   ) -> Result<astmt::Statement<'context>, Diag<'context>> {
     match statement {
       ps::Statement::Expression(expression) => self.exprstmt(expression),
@@ -1902,14 +1902,14 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   #[inline]
   fn compound(
     &mut self,
-    compound: ps::Compound,
+    compound: ps::Compound<'context>,
   ) -> Result<astmt::Compound<'context>, Diag<'context>> {
     self.compound_with(compound, |_| {})
   }
 
   fn compound_with<Fn>(
     &mut self,
-    compound: ps::Compound,
+    compound: ps::Compound<'context>,
     callback: Fn,
   ) -> Result<astmt::Compound<'context>, Diag<'context>>
   where
@@ -1928,7 +1928,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn exprstmt(
     &self,
-    expr_stmt: pe::Expression,
+    expr_stmt: pe::Expression<'context>,
   ) -> Result<astmt::Statement<'context>, Diag<'context>> {
     // todo: unused expression result warning
     Ok(self.expression(expr_stmt)?.into())
@@ -1936,7 +1936,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn returnstmt(
     &self,
-    return_stmt: ps::Return,
+    return_stmt: ps::Return<'context>,
   ) -> Result<astmt::Return<'context>, Diag<'context>> {
     let ps::Return { expression, span } = return_stmt;
     let analyzed_expr = match expression {
@@ -1988,7 +1988,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn ifstmt(
     &mut self,
-    if_stmt: ps::If,
+    if_stmt: ps::If<'context>,
   ) -> Result<astmt::If<'context>, Diag<'context>> {
     let ps::If {
       condition,
@@ -2018,7 +2018,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn whilestmt(
     &mut self,
-    while_stmt: ps::While,
+    while_stmt: ps::While<'context>,
   ) -> Result<astmt::While<'context>, Diag<'context>> {
     let ps::While {
       condition,
@@ -2044,7 +2044,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn dowhilestmt(
     &mut self,
-    do_while: ps::DoWhile,
+    do_while: ps::DoWhile<'context>,
   ) -> Result<astmt::DoWhile<'context>, Diag<'context>> {
     let ps::DoWhile {
       body,
@@ -2070,7 +2070,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn forstmt(
     &mut self,
-    for_stmt: ps::For,
+    for_stmt: ps::For<'context>,
   ) -> Result<astmt::For<'context>, Diag<'context>> {
     let ps::For {
       initializer,
@@ -2103,7 +2103,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn switchstmt(
     &mut self,
-    switch: ps::Switch,
+    switch: ps::Switch<'context>,
   ) -> Result<astmt::Switch<'context>, Diag<'context>> {
     let ps::Switch {
       cases,
@@ -2147,7 +2147,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn casestmt(
     &mut self,
-    case: ps::Case,
+    case: ps::Case<'context>,
   ) -> Result<astmt::Case<'context>, Diag<'context>> {
     let ps::Case { body, value, span } = case;
     let analyzed_value = self.expression(value).handle_with(
@@ -2181,7 +2181,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn defaultstmt(
     &mut self,
-    default: ps::Default,
+    default: ps::Default<'context>,
   ) -> Result<astmt::Default<'context>, Diag<'context>> {
     let ps::Default { body, span } = default;
     let analyzed_body = self.statements(body);
@@ -2190,7 +2190,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn labelstmt(
     &mut self,
-    label: ps::Label,
+    label: ps::Label<'context>,
   ) -> Result<astmt::Label<'context>, Diag<'context>> {
     match self.environment.is_global() {
       true => contract_violation!(
@@ -2207,7 +2207,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           .as_mut()
           .unwrap()
           .labels
-          .insert(name.clone())
+          .insert(name.into())
         {
           true => Ok(astmt::Label::new(
             name,
@@ -2226,7 +2226,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn gotostmt(
     &mut self,
-    goto: ps::Goto,
+    goto: ps::Goto<'context>,
   ) -> Result<astmt::Goto<'context>, Diag<'context>> {
     match self.environment.is_global() {
       true => contract_violation!(
@@ -2238,7 +2238,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           .as_mut()
           .unwrap()
           .gotos
-          .insert(goto.label.clone());
+          .insert(goto.label.into());
         Ok(astmt::Goto::new(goto.label, goto.span))
       },
     }

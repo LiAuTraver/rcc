@@ -204,7 +204,7 @@ impl<'context> Folding<'context> for Assignment<'context> {
     Failure(Expression::new(self.into(), target_type, value_category))
   }
 }
-impl<'context> Folding<'context> for Constant {
+impl<'context> Folding<'context> for Constant<'context> {
   #[inline(always)]
   fn fold(
     self,

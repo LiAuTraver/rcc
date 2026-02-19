@@ -64,7 +64,7 @@ impl From<&Keyword> for Storage {
   }
 }
 
-impl From<&Literal> for Storage {
+impl<'context> From<&Literal<'context>> for Storage {
   fn from(literal: &Literal) -> Self {
     match literal {
       Literal::Keyword(kw) => Storage::from(kw),

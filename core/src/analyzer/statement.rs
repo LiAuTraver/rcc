@@ -5,7 +5,7 @@ use crate::{
     declaration::ExternalDeclaration,
     expression::{ConstantLiteral, Expression},
   },
-  type_alias_stmt,
+  blueprints::type_alias_stmt,
 };
 // no additional info like that one we do in Expression?
 // alright, just repeat the same structure again -- stop abstracting here
@@ -31,8 +31,7 @@ type_alias_stmt!(
   Statement<'context>,
   ExternalDeclaration<'context>,
   Expression<'context>,
-  ConstantLiteral,
-  'context
+  ConstantLiteral<'context>
 );
 interconvert!(ExternalDeclaration, Statement, 'context, Declaration);
 interconvert!(Expression, Statement,'context);

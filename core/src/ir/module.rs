@@ -10,7 +10,7 @@ use crate::types::{Constant, QualifiedType};
 #[allow(non_camel_case_types)]
 pub type ilist_type<T> = Vec<T>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Module<'context> {
   pub functions: ilist_type<Function<'context>>,
   pub globals: Vec<Variable<'context>>,
@@ -20,7 +20,7 @@ pub struct Module<'context> {
 #[derive(Debug)]
 pub struct Function<'context> {
   pub name: SmallString,
-  pub params: Vec<Operand>,
+  pub params: Vec<Operand<'context>>,
   pub blocks: ilist_type<BasicBlock<'context>>,
   pub return_type: QualifiedType<'context>,
   pub is_variadic: bool,
@@ -31,7 +31,7 @@ pub struct Function<'context> {
 pub struct Variable<'context> {
   pub name: SmallString,
   pub qualified_type: QualifiedType<'context>,
-  pub initializer: Option<Initializer>,
+  pub initializer: Option<Initializer<'context>>,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ pub struct BasicBlock<'context> {
 
 /// **Static** initializer.
 #[derive(Debug, Clone)]
-pub enum Initializer {
-  Scalar(Constant),
-  Aggregate(Vec<Initializer>),
+pub enum Initializer<'context> {
+  Scalar(Constant<'context>),
+  Aggregate(Vec<Initializer<'context>>),
 }

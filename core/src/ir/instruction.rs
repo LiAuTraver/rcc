@@ -3,7 +3,7 @@ use ::rcc_utils::SmallString;
 use crate::types::{Constant, QualifiedType};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Operand {
+pub enum Operand<'context> {
   /// A Virtual Register (vreg).
   ///
   /// Covers **both** user variables (`int x`) and compiler temps (`%1`).
@@ -17,14 +17,14 @@ pub enum Operand {
   Label(SmallString),
 
   /// A Fixed Constyant (Immediate).
-  Imm(Constant),
+  Imm(Constant<'context>),
 }
 
 /// result = phi [val1, label1], [val2, label2]
 #[derive(Debug, Clone)]
-pub struct Phi {
-  pub result: Operand, // The register defining the merged value
-  pub incomings: Vec<(Operand, SmallString)>, // (Value, From_Block_Label)
+pub struct Phi<'context> {
+  pub result: Operand<'context>, // The register defining the merged value
+  pub incomings: Vec<(Operand<'context>, SmallString)>, // (Value, From_Block_Label)
 }
 
 #[derive(Debug)]
@@ -32,31 +32,31 @@ pub struct Jump {
   pub label: SmallString,
 }
 #[derive(Debug)]
-pub struct Branch {
-  pub cond: Operand,
+pub struct Branch<'context> {
+  pub cond: Operand<'context>,
   pub true_label: SmallString,
   pub false_label: SmallString,
 }
 #[derive(Debug)]
-pub struct Return {
-  pub returne: Option<Operand>,
+pub struct Return<'context> {
+  pub returne: Option<Operand<'context>>,
 }
 #[derive(Debug)]
-pub enum Terminator {
+pub enum Terminator<'context> {
   /// Unconditional jump
   Jump(Jump),
   /// Conditional branch: if cond goto true_label else goto false_label
-  Branch(Branch),
+  Branch(Branch<'context>),
   /// Return from function
-  Return(Return),
+  Return(Return<'context>),
 }
 
 /// result = unary_op operand
 #[derive(Debug)]
 pub struct Unary<'context> {
-  pub result: Operand,
+  pub result: Operand<'context>,
   pub operator: UnaryOp,
-  pub operand: Operand,
+  pub operand: Operand<'context>,
   pub qualified_type: QualifiedType<'context>,
 }
 #[derive(Debug)]
@@ -68,10 +68,10 @@ pub enum UnaryOp {
 /// result = binary_op lhs, rhs
 #[derive(Debug)]
 pub struct Binary<'context> {
-  pub result: Operand,
+  pub result: Operand<'context>,
   pub operator: BinaryOp,
-  pub lhs: Operand,
-  pub rhs: Operand,
+  pub lhs: Operand<'context>,
+  pub rhs: Operand<'context>,
   pub qualified_type: QualifiedType<'context>,
 }
 // arithematic ops only consider integer for now
@@ -91,10 +91,10 @@ pub enum BinaryOp {
 
 #[derive(Debug)]
 pub struct ICmp<'context> {
-  pub result: Operand,
+  pub result: Operand<'context>,
   pub predicate: ICmpPredicate,
-  pub lhs: Operand,
-  pub rhs: Operand,
+  pub lhs: Operand<'context>,
+  pub rhs: Operand<'context>,
   pub qualified_type: QualifiedType<'context>, // type of operands.
 }
 #[derive(Debug, Clone, Copy)]
@@ -113,16 +113,16 @@ pub enum ICmpPredicate {
 /// Store value to address: *addr = value
 #[derive(Debug)]
 pub struct Store<'context> {
-  pub addr: Operand,
-  pub value: Operand,
+  pub addr: Operand<'context>,
+  pub value: Operand<'context>,
   pub qualified_type: QualifiedType<'context>,
 }
 
 /// Load value from address: result = *addr
 #[derive(Debug)]
 pub struct Load<'context> {
-  pub result: Operand,
-  pub addr: Operand,
+  pub result: Operand<'context>,
+  pub addr: Operand<'context>,
   pub qualified_type: QualifiedType<'context>,
 }
 #[derive(Debug)]
@@ -136,7 +136,7 @@ pub enum Memory<'context> {
 /// Used for local variables that must live in memory (e.g., if their address is taken).
 #[derive(Debug)]
 pub struct Alloca<'context> {
-  pub result: Operand,
+  pub result: Operand<'context>,
   pub qualified_type: QualifiedType<'context>,
 }
 
@@ -147,17 +147,17 @@ pub enum Cast {
 
 /// Function call: result = call func(args)
 #[derive(Debug)]
-pub struct Call {
-  pub result: Option<Operand>,
-  pub func: Operand,
-  pub args: Vec<Operand>,
+pub struct Call<'context> {
+  pub result: Option<Operand<'context>>,
+  pub func: Operand<'context>,
+  pub args: Vec<Operand<'context>>,
 }
 
-impl Call {
+impl<'context> Call<'context> {
   pub fn new(
-    result: Option<Operand>,
-    func: Operand,
-    args: Vec<Operand>,
+    result: Option<Operand<'context>>,
+    func: Operand<'context>,
+    args: Vec<Operand<'context>>,
   ) -> Self {
     Self { result, func, args }
   }
@@ -166,22 +166,22 @@ impl Call {
 /// This mimics LLVM ir's catagory.
 #[derive(Debug)]
 pub enum Instruction<'context> {
-  Phi(Phi),
-  Terminator(Terminator),
+  Phi(Phi<'context>),
+  Terminator(Terminator<'context>),
   Unary(Unary<'context>),
   Binary(Binary<'context>),
   Memory(Memory<'context>),
   Cast(Cast),
-  Call(Call),
+  Call(Call<'context>),
   ICmp(ICmp<'context>),
   // etc...
 }
 
-::rcc_utils::interconvert!(Phi, Instruction<'context>);
-::rcc_utils::interconvert!(Terminator, Instruction<'context>);
+::rcc_utils::interconvert!(Phi, Instruction,'context);
+::rcc_utils::interconvert!(Terminator, Instruction,'context);
 ::rcc_utils::interconvert!(Unary, Instruction,'context);
 ::rcc_utils::interconvert!(Binary, Instruction,'context);
 ::rcc_utils::interconvert!(Memory, Instruction,'context);
 ::rcc_utils::interconvert!(Cast, Instruction<'context>);
-::rcc_utils::interconvert!(Call, Instruction<'context>);
+::rcc_utils::interconvert!(Call, Instruction,'context);
 ::rcc_utils::interconvert!(ICmp, Instruction,'context);

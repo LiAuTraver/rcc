@@ -97,7 +97,7 @@ impl<'context> Display for Union<'context> {
   }
 }
 
-impl Display for Constant {
+impl<'context> Display for Constant<'context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     use Constant::*;
     match self {

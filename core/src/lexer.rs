@@ -6,7 +6,7 @@ use ::std::{
 
 use crate::{
   common::{
-    Coordinate, Keyword, Literal,
+    Coordinate, Keyword,
     Operator::{self, *},
     SourceSpan, Token,
   },
@@ -135,7 +135,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     &self.source[start..end]
   }
 
-  pub fn lex(&mut self) -> Vec<Token> {
+  pub fn lex(&mut self) -> Vec<Token<'context>> {
     let mut tokens = Vec::new();
     while !self.is_at_end() {
       if let Some(token) = self.next_token() {
@@ -147,7 +147,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     tokens
   }
 
-  fn next_token(&mut self) -> Option<Token> {
+  fn next_token(&mut self) -> Option<Token<'context>> {
     let start = self.cursor;
 
     match self.advance() {
@@ -283,10 +283,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
 
       _ => {
         self.session.diagnosis.add_error(
-          UnexpectedCharacter(
-            (Literal::Identifier(self.recall().to_string().into()), None)
-              .into(),
-          ),
+          UnexpectedCharacter((self.recall().to_string(), None).into()),
           self.span(start),
         );
         None
@@ -302,7 +299,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     c.is_alphanumeric() || c == '_'
   }
 
-  fn lex_identifier(&mut self, start: usize) -> Token {
+  fn lex_identifier(&mut self, start: usize) -> Token<'context> {
     while matches!(self.peek(), c if Self::is_ident_continue(c)) {
       self.advance();
     }
@@ -312,11 +309,18 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     match Keyword::from_str(text) {
       Ok(keyword) =>
         Token::keyword(keyword, self.span(start)).transform_alternative(),
-      Err(_) => Token::identifier(text.into(), self.span(start)),
+      Err(_) => Token::identifier(
+        self.session.context.arena().alloc_str(text),
+        self.span(start),
+      ),
     }
   }
 
-  fn lex_number(&mut self, start: usize, started_with_dot: bool) -> Token {
+  fn lex_number(
+    &mut self,
+    start: usize,
+    started_with_dot: bool,
+  ) -> Token<'context> {
     let base = if !started_with_dot && self.cursor > 0 {
       match (self.recall(), self.peek()) {
         ('0', 'x' | 'X') => {
@@ -471,7 +475,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     }
   }
 
-  fn lex_string(&mut self, start: usize) -> Token {
+  fn lex_string(&mut self, start: usize) -> Token<'context> {
     while !self.is_at_end() && self.peek() != ('"') {
       self.advance();
     }
@@ -482,14 +486,20 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
         .diagnosis
         .add_error(UnterminatedString, self.span(start));
       let text = self.slice(start, self.cursor);
-      return Token::string(text.into(), self.span(start));
+      return Token::string(
+        self.session.context.arena().alloc_str(text),
+        self.span(start),
+      );
     }
 
     let end = self.cursor;
     self.advance(); // consume closing quote
 
     let text = self.slice(start, end);
-    Token::string(text.into(), self.span(start))
+    Token::string(
+      self.session.context.arena().alloc_str(text),
+      self.span(start),
+    )
   }
 
   fn skip_block_comment(&mut self) {
@@ -514,7 +524,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     start: usize,
     default: Operator,
     patterns: &'static [(&'static str, Operator)],
-  ) -> Option<Token> {
+  ) -> Option<Token<'context>> {
     debug_assert!(
       patterns.windows(2).all(|w| w[0].0.len() >= w[1].0.len()),
       "compound operator patterns should be sorted from longest to shortest"

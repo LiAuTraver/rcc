@@ -1,5 +1,5 @@
-use ::rcc_utils::{SmallString, interconvert};
-use ::std::fmt::Debug;
+use ::rcc_utils::{SmallString, ensure_is_pod, interconvert};
+use ::std::{fmt::Debug, str::FromStr};
 
 use super::{
   Keyword::{self, *},
@@ -10,36 +10,40 @@ use super::{
 use crate::types::Constant;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Literal {
-  Number(Constant),
-  Identifier(SmallString),
-  String(SmallString),
+pub enum Literal<'context> {
+  Number(Constant<'context>),
+  Identifier(&'context str),
+  String(&'context str),
   Keyword(Keyword),
   Operator(Operator),
 }
 
+ensure_is_pod!(Literal);
+
 #[derive(Debug)]
-pub struct Token {
-  pub literal: Literal,
+pub struct Token<'context> {
+  pub literal: Literal<'context>,
   pub location: SourceSpan,
 }
 
-impl Token {
-  pub fn string(literal: SmallString, location: SourceSpan) -> Self {
+ensure_is_pod!(Token);
+
+impl<'context> Token<'context> {
+  pub fn string(literal: &'context str, location: SourceSpan) -> Self {
     Self {
       literal: Literal::String(literal),
       location,
     }
   }
 
-  pub fn number(number: Constant, location: SourceSpan) -> Self {
+  pub fn number(number: Constant<'context>, location: SourceSpan) -> Self {
     Self {
       literal: Literal::Number(number),
       location,
     }
   }
 
-  pub fn identifier(identifier: SmallString, location: SourceSpan) -> Self {
+  pub fn identifier(identifier: &'context str, location: SourceSpan) -> Self {
     Self {
       literal: Literal::Identifier(identifier),
       location,
@@ -62,7 +66,8 @@ impl Token {
 
   pub fn to_owned_string(&self) -> SmallString {
     match &self.literal {
-      Literal::Identifier(str) | Literal::String(str) => str.clone(),
+      Literal::Identifier(str) | Literal::String(str) =>
+        SmallString::from_str(str).expect("never fails"),
       Literal::Keyword(kw) => kw.to_string().into(),
       _ => panic!("should not call this: {:?}", self.literal),
     }
@@ -85,7 +90,7 @@ impl Token {
     }
   }
 }
-impl Literal {
+impl<'context> Literal<'context> {
   pub fn is_qualifier(&self) -> bool {
     match self {
       Literal::Keyword(kw) => kw.is_qualifier(),
@@ -142,15 +147,15 @@ impl Keyword {
   }
 }
 
-interconvert!(Keyword, Literal);
-interconvert!(Operator, Literal);
-interconvert!(Constant, Literal, Number);
-interconvert!(SmallString, Literal, Identifier);
+interconvert!(Keyword, Literal<'context>);
+interconvert!(Operator, Literal<'context>);
+interconvert!(Constant, Literal,'context, Number);
+// interconvert!(SmallString, Literal, Identifier);
 // interconvert!(String, Literal, String); // this one conflicts with the above
 mod cmp {
   use super::{Keyword, Literal, Operator};
 
-  impl PartialEq<Literal> for Keyword {
+  impl<'context> PartialEq<Literal<'context>> for Keyword {
     #[inline]
     fn eq(&self, other: &Literal) -> bool {
       match other {
@@ -159,7 +164,7 @@ mod cmp {
       }
     }
   }
-  impl PartialEq<Keyword> for Literal {
+  impl<'context> PartialEq<Keyword> for Literal<'context> {
     #[inline]
     fn eq(&self, other: &Keyword) -> bool {
       match self {
@@ -168,7 +173,7 @@ mod cmp {
       }
     }
   }
-  impl PartialEq<Operator> for Literal {
+  impl<'context> PartialEq<Operator> for Literal<'context> {
     #[inline]
     fn eq(&self, other: &Operator) -> bool {
       match self {
@@ -177,7 +182,7 @@ mod cmp {
       }
     }
   }
-  impl PartialEq<Literal> for Operator {
+  impl<'context> PartialEq<Literal<'context>> for Operator {
     #[inline]
     fn eq(&self, other: &Literal) -> bool {
       match other {
@@ -186,7 +191,7 @@ mod cmp {
       }
     }
   }
-  impl PartialEq<Operator> for &Literal {
+  impl<'context> PartialEq<Operator> for &Literal<'context> {
     #[inline]
     fn eq(&self, other: &Operator) -> bool {
       match self {
@@ -196,7 +201,7 @@ mod cmp {
     }
   }
 
-  impl PartialEq<Keyword> for &Literal {
+  impl<'context> PartialEq<Keyword> for &Literal<'context> {
     #[inline]
     fn eq(&self, other: &Keyword) -> bool {
       match self {
@@ -206,7 +211,7 @@ mod cmp {
     }
   }
 
-  impl PartialEq<Literal> for &Literal {
+  impl<'context> PartialEq<Literal<'context>> for &Literal<'context> {
     #[inline]
     fn eq(&self, other: &Literal) -> bool {
       PartialEq::eq(*self, other)
@@ -218,7 +223,7 @@ mod fmt {
 
   use super::{Literal, Token};
 
-  impl Display for Token {
+  impl<'context> Display for Token<'context> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(
@@ -229,7 +234,7 @@ mod fmt {
     }
   }
 
-  impl Display for Literal {
+  impl<'context> Display for Literal<'context> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       ::rcc_utils::static_dispatch!(self.fmt(f), Operator Number String Identifier Keyword)

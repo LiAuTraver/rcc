@@ -1,59 +1,55 @@
 use ::rcc_utils::SmallString;
 
-use super::Placeholder as Empty;
+// use super::Placeholder as Empty;
 use crate::common::SourceSpan;
 
-#[derive(Debug)]
-pub enum RawStmt<StmtTy, DeclTy, ExprTy, ExprCaseTy = ExprTy> {
-  Empty(Empty),
-  Return(RawReturn<ExprTy>),
-  // here only vardef, funcdef only permitted in top-level declarations hence it's handled there
-  Declaration(DeclTy),
-  Expression(ExprTy),
-  Compound(RawCompound<StmtTy>),
-  If(RawIf<StmtTy, ExprTy>),
-  While(RawWhile<StmtTy, ExprTy>),
-  For(RawFor<StmtTy, ExprTy>),
-  DoWhile(RawDoWhile<StmtTy, ExprTy>),
-  Switch(RawSwitch<StmtTy, ExprTy, ExprCaseTy>),
-  Goto(RawGoto),
-  Label(RawLabel<StmtTy>),
-  Break(RawBreak),
-  Continue(RawContinue),
-}
-
-#[macro_export(local_inner_macros)]
+// #[derive(Debug)]
+// pub enum RawStmt<'context, StmtTy, DeclTy, ExprTy, ExprCaseTy = ExprTy> {
+//   Empty(Empty),
+//   Return(RawReturn<ExprTy>),
+//   // here only vardef, funcdef only permitted in top-level declarations hence it's handled there
+//   Declaration(DeclTy),
+//   Expression(ExprTy),
+//   Compound(RawCompound<StmtTy>),
+//   If(RawIf<StmtTy, ExprTy>),
+//   While(RawWhile<StmtTy, ExprTy>),
+//   For(RawFor<StmtTy, ExprTy>),
+//   DoWhile(RawDoWhile<StmtTy, ExprTy>),
+//   Switch(RawSwitch<StmtTy, ExprTy, ExprCaseTy>),
+//   Goto(RawGoto<'context>),
+//   Label(RawLabel<'context, StmtTy>),
+//   Break(RawBreak),
+//   Continue(RawContinue),
+// }
 macro_rules! type_alias_stmt {
   ($stmtty:ty, $declty:ty, $exprty:ty) => {
-    $crate::type_alias_stmt!($stmtty, $declty, $exprty, $exprty);
+    type_alias_stmt!($stmtty, $declty, $exprty, $exprty);
   };
   ($stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty) => {
-    $crate::type_alias_stmt!(@impl $stmtty, $declty, $exprty, $exprcasety: []);
+    type_alias_stmt!(@impl $stmtty, $declty, $exprty, $exprcasety);
   };
-    ($stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty, $lt:lifetime) => {
-    $crate::type_alias_stmt!(@impl $stmtty, $declty, $exprty, $exprcasety: [<$lt>]);
-  };
-  (@impl $stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty : [$(<$lt:lifetime>)?]) => {
-    #[allow(dead_code)]
-    pub type RawStmt$(<$lt>)? = $crate::blueprints::RawStmt<$stmtty, $declty, $exprty>;
+  (@impl $stmtty:ty, $declty:ty, $exprty:ty, $exprcasety:ty) => {
+    // #[allow(dead_code)]
+    // pub type RawStmt<'context> = $crate::blueprints::RawStmt<'context, $stmtty, $declty, $exprty>;
     #[allow(dead_code)]
     pub type Empty = $crate::blueprints::Placeholder;
-    pub type Return$(<$lt>)? = $crate::blueprints::RawReturn<$exprty>;
-    pub type If$(<$lt>)? = $crate::blueprints::RawIf<$stmtty, $exprty>;
-    pub type While$(<$lt>)? = $crate::blueprints::RawWhile<$stmtty, $exprty>;
-    pub type DoWhile$(<$lt>)? = $crate::blueprints::RawDoWhile<$stmtty, $exprty>;
-    pub type For$(<$lt>)? = $crate::blueprints::RawFor<$stmtty, $exprty>;
-    pub type Switch$(<$lt>)? =
+    pub type Return<'context> = $crate::blueprints::RawReturn<$exprty>;
+    pub type If<'context> = $crate::blueprints::RawIf<$stmtty, $exprty>;
+    pub type While<'context> = $crate::blueprints::RawWhile<$stmtty, $exprty>;
+    pub type DoWhile<'context> = $crate::blueprints::RawDoWhile<$stmtty, $exprty>;
+    pub type For<'context> = $crate::blueprints::RawFor<$stmtty, $exprty>;
+    pub type Switch<'context> =
       $crate::blueprints::RawSwitch<$stmtty, $exprty, $exprcasety>;
-    pub type Case$(<$lt>)? = $crate::blueprints::RawCase<$stmtty, $exprcasety>;
-    pub type Default$(<$lt>)? = $crate::blueprints::RawDefault<$stmtty>;
-    pub type Label$(<$lt>)? = $crate::blueprints::RawLabel<$stmtty>;
-    pub type Goto$(<$lt>)? = $crate::blueprints::RawGoto;
-    pub type Compound $(<$lt>)?= $crate::blueprints::RawCompound<$stmtty>;
-    pub type Break$(<$lt>)? = $crate::blueprints::RawBreak;
-    pub type Continue$(<$lt>)? = $crate::blueprints::RawContinue;
+    pub type Case<'context> = $crate::blueprints::RawCase<$stmtty, $exprcasety>;
+    pub type Default<'context> = $crate::blueprints::RawDefault<$stmtty>;
+    pub type Label<'context> = $crate::blueprints::RawLabel<'context, $stmtty>;
+    pub type Goto<'context> = $crate::blueprints::RawGoto<'context>;
+    pub type Compound <'context> = $crate::blueprints::RawCompound<$stmtty>;
+    pub type Break<'context> = $crate::blueprints::RawBreak;
+    pub type Continue<'context> = $crate::blueprints::RawContinue;
   };
 }
+pub(in super::super) use type_alias_stmt;
 
 #[derive(Debug)]
 pub struct RawReturn<ExprTy> {
@@ -120,15 +116,15 @@ pub struct RawDefault<StmtTy> {
 }
 
 #[derive(Debug)]
-pub struct RawLabel<StmtTy> {
-  pub name: SmallString,
+pub struct RawLabel<'context, StmtTy> {
+  pub name: &'context str,
   pub statement: Box<StmtTy>,
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
-pub struct RawGoto {
-  pub label: SmallString,
+pub struct RawGoto<'context> {
+  pub label: &'context str,
   pub span: SourceSpan,
 }
 
@@ -150,8 +146,8 @@ pub struct RawContinue {
   pub span: SourceSpan,
 }
 
-impl RawGoto {
-  pub fn new(label: SmallString, span: SourceSpan) -> Self {
+impl<'context> RawGoto<'context> {
+  pub fn new(label: &'context str, span: SourceSpan) -> Self {
     Self { label, span }
   }
 }
@@ -188,8 +184,8 @@ impl<StmtTy, ExprTy, ExprCaseTy> RawSwitch<StmtTy, ExprTy, ExprCaseTy> {
   }
 }
 
-impl<StmtTy> RawLabel<StmtTy> {
-  pub fn new(name: SmallString, statement: StmtTy, span: SourceSpan) -> Self {
+impl<'context, StmtTy> RawLabel<'context, StmtTy> {
+  pub fn new(name: &'context str, statement: StmtTy, span: SourceSpan) -> Self {
     Self {
       name,
       statement: Box::new(statement),
@@ -296,43 +292,45 @@ impl RawContinue {
   }
 }
 
-impl<StmtTy, DeclTy, ExprTy> RawStmt<StmtTy, DeclTy, ExprTy> {
-  pub fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
-    static LOOP_LABEL_COUNTER: ::std::sync::atomic::AtomicUsize =
-      ::std::sync::atomic::AtomicUsize::new(0);
-    let id =
-      LOOP_LABEL_COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
-    SmallString::from(format!("{}_{}", str, id))
-  }
-}
+// impl<'context, StmtTy, DeclTy, ExprTy>
+//   RawStmt<'context, StmtTy, DeclTy, ExprTy>
+// {
+//   pub fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
+//     static LOOP_LABEL_COUNTER: ::std::sync::atomic::AtomicUsize =
+//       ::std::sync::atomic::AtomicUsize::new(0);
+//     let id =
+//       LOOP_LABEL_COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
+//     SmallString::from(format!("{}_{}", str, id))
+//   }
+// }
 #[allow(clippy::write_with_newline)]
 mod fmt {
   use ::std::fmt::Display;
 
   use super::*;
 
-  impl<StmtTy: Display, DeclTy: Display, ExprTy: Display> Display
-    for RawStmt<StmtTy, DeclTy, ExprTy>
-  {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      match self {
-        RawStmt::Empty(_) => write!(f, ";"),
-        RawStmt::Return(ret) => write!(f, "{}", ret),
-        RawStmt::If(if_stmt) => write!(f, "{}", if_stmt),
-        RawStmt::Declaration(decl) => write!(f, "{}", decl),
-        RawStmt::Expression(expr) => write!(f, "{}", expr),
-        RawStmt::Compound(compound) => write!(f, "{}", compound),
-        RawStmt::While(while_stmt) => write!(f, "{}", while_stmt),
-        RawStmt::For(for_stmt) => write!(f, "{}", for_stmt),
-        RawStmt::DoWhile(dowhile_stmt) => write!(f, "{}", dowhile_stmt),
-        RawStmt::Switch(switch_stmt) => write!(f, "{}", switch_stmt),
-        RawStmt::Goto(goto) => write!(f, "{}", goto),
-        RawStmt::Label(label) => write!(f, "{}", label),
-        RawStmt::Break(break_stmt) => write!(f, "{}", break_stmt),
-        RawStmt::Continue(continue_stmt) => write!(f, "{}", continue_stmt),
-      }
-    }
-  }
+  // impl<'context, StmtTy: Display, DeclTy: Display, ExprTy: Display> Display
+  //   for RawStmt<'context, StmtTy, DeclTy, ExprTy>
+  // {
+  //   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  //     match self {
+  //       RawStmt::Empty(_) => write!(f, ";"),
+  //       RawStmt::Return(ret) => write!(f, "{}", ret),
+  //       RawStmt::If(if_stmt) => write!(f, "{}", if_stmt),
+  //       RawStmt::Declaration(decl) => write!(f, "{}", decl),
+  //       RawStmt::Expression(expr) => write!(f, "{}", expr),
+  //       RawStmt::Compound(compound) => write!(f, "{}", compound),
+  //       RawStmt::While(while_stmt) => write!(f, "{}", while_stmt),
+  //       RawStmt::For(for_stmt) => write!(f, "{}", for_stmt),
+  //       RawStmt::DoWhile(dowhile_stmt) => write!(f, "{}", dowhile_stmt),
+  //       RawStmt::Switch(switch_stmt) => write!(f, "{}", switch_stmt),
+  //       RawStmt::Goto(goto) => write!(f, "{}", goto),
+  //       RawStmt::Label(label) => write!(f, "{}", label),
+  //       RawStmt::Break(break_stmt) => write!(f, "{}", break_stmt),
+  //       RawStmt::Continue(continue_stmt) => write!(f, "{}", continue_stmt),
+  //     }
+  //   }
+  // }
 
   impl<ExprTy: Display> Display for RawReturn<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -424,7 +422,7 @@ mod fmt {
     }
   }
 
-  impl<StmtTy: Display> Display for RawLabel<StmtTy> {
+  impl<'context, StmtTy: Display> Display for RawLabel<'context, StmtTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}: {}", self.name, self.statement)
     }
@@ -464,7 +462,7 @@ mod fmt {
     }
   }
 
-  impl Display for RawGoto {
+  impl<'context> Display for RawGoto<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "goto {};", self.label)
     }

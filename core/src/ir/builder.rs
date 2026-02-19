@@ -31,7 +31,8 @@ where
   current_block: Option<ir::BasicBlock<'context>>,
   /// Blocks finalized in the current function
   current_blocks: ilist_type<ir::BasicBlock<'context>>,
-  locals: HashMap<SmallString, Operand>,
+  locals: HashMap<SmallString, Operand<'context>>,
+  module: Module<'context>,
 }
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   pub fn new(session: &'session Session<'context, 'source>) -> Self {
@@ -42,6 +43,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
       current_block: None,
       current_blocks: Default::default(),
       locals: Default::default(),
+      module: Default::default(),
     }
   }
 }
@@ -66,7 +68,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     }
   }
 
-  fn reg(&mut self) -> Operand {
+  fn reg(&mut self) -> Operand<'context> {
     self.temp_counter += 1;
     Operand::Reg(self.temp_counter)
   }
@@ -74,23 +76,27 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   pub fn build(
-    &mut self,
+    mut self,
     translation_unit: ad::TranslationUnit<'context>,
   ) -> Module<'context> {
-    let mut functions =
+    self.module.functions =
       ilist_type::with_capacity(translation_unit.declarations.len() * 2 / 3);
-    let mut globals =
+    self.module.globals =
       Vec::with_capacity(translation_unit.declarations.len() / 3);
     translation_unit
       .declarations
       .into_iter()
       .for_each(|decl| match decl {
-        ad::ExternalDeclaration::Function(function) =>
-          functions.push(self.function(function)),
-        ad::ExternalDeclaration::Variable(variable) =>
-          globals.push(self.vardef(variable)),
+        ad::ExternalDeclaration::Function(function) => {
+          let function = self.function(function);
+          self.module.functions.push(function)
+        },
+        ad::ExternalDeclaration::Variable(variable) => {
+          let variable = self.vardef(variable);
+          self.module.globals.push(variable)
+        },
       });
-    Module { functions, globals }
+    self.module
   }
 
   pub fn function(
@@ -151,7 +157,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     todo!()
   }
 
-  fn compound(&mut self, body: astmt::Compound) {
+  fn compound(&mut self, body: astmt::Compound<'context>) {
     let astmt::Compound { statements, span } = body;
     if statements.is_empty() {
       self.push_block("noop");
@@ -184,7 +190,10 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   }
 }
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
-  fn expression(&mut self, expression: ae::Expression) -> Option<Operand> {
+  fn expression(
+    &mut self,
+    expression: ae::Expression<'context>,
+  ) -> Option<Operand<'context>> {
     let (raw_expr, qualified_type, value_category) = expression.destructure();
     type RE<'a> = ae::RawExpr<'a>;
     match raw_expr {
@@ -209,16 +218,16 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 
   fn call(
     &mut self,
-    call: ae::Call,
-    qualified_type: QualifiedType,
+    call: ae::Call<'context>,
+    qualified_type: QualifiedType<'context>,
     value_category: ValueCategory,
-  ) -> Option<Operand> {
+  ) -> Option<Operand<'context>> {
     let ae::Call {
       callee,
       arguments,
       span,
     } = call;
-    let oprand_callee = self.expression(*callee);
+    let callee_operand = self.expression(*callee);
     let oprand_args = arguments
       .into_iter()
       .map(|actual_parameter| {
@@ -233,6 +242,18 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     } else {
       Some(self.reg())
     };
+
+    let callee_name = match &callee_operand {
+      Some(Operand::Label(name)) => name.clone(),
+      _ => panic!("callee must be a global function reference"),
+    };
+    let func_sig = self
+      .module
+      .functions
+      .iter()
+      .find(|f| f.name == callee_name)
+      .expect("callee not yet emitted — forward decls need a separate pass");
+
     self.emit(
       instruction::Call::new(
         retreg,
@@ -249,10 +270,10 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 
   fn constant(
     &mut self,
-    constant: ae::Constant,
-    qualified_type: QualifiedType,
+    constant: ae::Constant<'context>,
+    qualified_type: QualifiedType<'context>,
     value_category: ValueCategory, // should be RValue
-  ) -> Option<Operand> {
+  ) -> Option<Operand<'context>> {
     let ae::Constant { value, span } = constant;
     Some(Operand::Imm(value))
   }

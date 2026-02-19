@@ -36,7 +36,7 @@ where
   'context: 'session,
   'source: 'context,
 {
-  tokens: Vec<Token>,
+  tokens: Vec<Token<'context>>,
   cursor: usize,
   loop_labels: Vec<SmallString>,
   // contest-sensitive part - needed to parse `T * x`.
@@ -48,7 +48,7 @@ where
 #[allow(unused)]
 impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   pub fn new(
-    tokens: Vec<Token>,
+    tokens: Vec<Token<'context>>,
     session: &'session Session<'context, 'source>,
   ) -> Self {
     assert_eq!(
@@ -64,7 +64,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  pub fn parse(&mut self) -> Program {
+  pub fn parse(&mut self) -> Program<'context> {
     let mut program = Program::new();
 
     self.typedefs.push_scope(); // global scope
@@ -89,22 +89,22 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 
   #[inline]
-  fn peek(&self) -> &Token {
+  fn peek(&self) -> &Token<'context> {
     &self.tokens[self.cursor]
   }
 
   #[inline]
-  fn peek_with_offset(&self, offset: usize) -> &Token {
+  fn peek_with_offset(&self, offset: usize) -> &Token<'context> {
     &self.tokens[self.cursor + offset]
   }
 
   #[inline]
-  fn peek_lit(&self) -> &Literal {
+  fn peek_lit(&self) -> &Literal<'context> {
     &self.tokens[self.cursor].literal
   }
 
   #[inline]
-  fn peek_lit_with_offset(&self, offset: usize) -> &Literal {
+  fn peek_lit_with_offset(&self, offset: usize) -> &Literal<'context> {
     &self.tokens[self.cursor + offset].literal
   }
 
@@ -123,7 +123,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 
   #[inline]
-  fn peek_prev_lit(&self) -> &Literal {
+  fn peek_prev_lit(&self) -> &Literal<'context> {
     &self.tokens[self.cursor - 1].literal
   }
 
@@ -146,7 +146,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 
   #[inline]
-  fn peek_backward_lit_with_offset(&self, offset: isize) -> &Literal {
+  fn peek_backward_lit_with_offset(&self, offset: isize) -> &Literal<'context> {
     contract_assert!(
       offset < (self.cursor as isize),
       "peek_backward_lit: offset out of bounds"
@@ -201,7 +201,9 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn recoverable_get<const OP: Operator>(&mut self) {
     if self.peek_lit() != OP {
       self.add_error(
-        UnexpectedCharacter((self.peek_lit().clone(), Some(OP.into())).into()),
+        UnexpectedCharacter(
+          (self.peek_lit().to_string(), Some(OP.to_string())).into(),
+        ),
         *self.peek_loc(),
       );
     } else {
@@ -245,7 +247,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
 }
 /// meta parse
 impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
-  fn parse_type_specifier(&self) -> Option<TypeSpecifier> {
+  fn parse_type_specifier(&self) -> Option<TypeSpecifier<'context>> {
     match self.peek_lit() {
       Literal::Keyword(Keyword::Struct) => todo!(),
       Literal::Keyword(Keyword::Union) => todo!(),
@@ -253,7 +255,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
       Literal::Keyword(keyword) => TypeSpecifier::try_from(keyword).ok(),
       Literal::Identifier(ident) =>
         if self.typedefs.contains(ident) {
-          Some(TypeSpecifier::Typedef(ident.clone()))
+          Some(TypeSpecifier::Typedef(ident))
         } else {
           None
         },
@@ -291,7 +293,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     qualifiers
   }
 
-  fn parse_declspecs(&mut self) -> DeclSpecs {
+  fn parse_declspecs(&mut self) -> DeclSpecs<'context> {
     let location = *self.peek_loc();
 
     let mut qualifiers = Qualifiers::empty();
@@ -371,7 +373,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// `AGGRESSIVE`: [`bool`] if true, will try to recover from missing identifier by consuming the next token.
   fn parse_declarator<const TYPE: DeclaratorType, const AGGRESSIVE: bool>(
     &mut self,
-  ) -> Declarator {
+  ) -> Declarator<'context> {
     let location = *self.peek_loc();
 
     let mut pointers = Vec::new();
@@ -433,7 +435,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     Declarator::new(name, modifiers, self.eloc(location))
   }
 
-  fn parse_array_declarator(&mut self) -> ArrayModifier {
+  fn parse_array_declarator(&mut self) -> ArrayModifier<'context> {
     let location = *self.peek_loc();
 
     if self.peek_lit() == RightBracket {
@@ -484,7 +486,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 
   /// parse function parameter list, use [`Parser::_parse_argument_list`] for function call.
-  fn parse_function_params(&mut self) -> FunctionSignature {
+  fn parse_function_params(&mut self) -> FunctionSignature<'context> {
     // (functionnoproto type, deprecated in C23) a function declaration without a parameter list
     //  or function body provides no information about that function’s parameters
     // but I won't support that obselete feature :(
@@ -578,7 +580,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// parse argument list, assuming the left paren has been consumed.
   ///
   /// does **NOT** consume the right paren -- caller should check and consume it.
-  fn parse_argument_list_inner(&mut self) -> Vec<Expression> {
+  fn parse_argument_list_inner(&mut self) -> Vec<Expression<'context>> {
     let location = *self.peek_loc();
     let mut arguments = Vec::new();
 
@@ -606,7 +608,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// parse argument list in **function call**, not function declaration.
   ///
   /// for function declaration, use [`Parser::parse_function_params`].
-  fn _parse_argument_list(&mut self) -> Vec<Expression> {
+  fn _parse_argument_list(&mut self) -> Vec<Expression<'context>> {
     self.must_get_op::<{ LeftParen }>();
     let arguments = self.parse_argument_list_inner();
     self.must_get_op::<{ RightParen }>();
@@ -616,7 +618,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// common function to parse `(` expr `)`.
   fn parse_paren_expression<const LMIN_PRECEDENCE: u8>(
     &mut self,
-  ) -> Expression {
+  ) -> Expression<'context> {
     if self.peek_lit() != LeftParen {
       self
         .add_error(MissingOpenParen(self.peek_lit().clone()), *self.peek_loc());
@@ -637,7 +639,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     expr
   }
 
-  fn parse_case_and_default_body(&mut self) -> Vec<Statement> {
+  fn parse_case_and_default_body(&mut self) -> Vec<Statement<'context>> {
     let mut body = Vec::new();
     while self.peek_lit() != Keyword::Case
       && self.peek_lit() != Keyword::Default
@@ -648,7 +650,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     body
   }
 
-  fn parse_case(&mut self) -> Case {
+  fn parse_case(&mut self) -> Case<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Case }>();
     let expression = if self.peek_lit() == Colon {
@@ -671,7 +673,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     Case::new(expression, body, self.eloc(location))
   }
 
-  fn parse_default(&mut self) -> Default {
+  fn parse_default(&mut self) -> Default<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Default }>();
     self.recoverable_get::<{ Colon }>();
@@ -683,9 +685,9 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
 impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn next_vardef(
     &mut self,
-    declspecs: DeclSpecs,
-    declarator: Declarator,
-  ) -> VarDef {
+    declspecs: DeclSpecs<'context>,
+    declarator: Declarator<'context>,
+  ) -> VarDef<'context> {
     let location = *self.peek_loc();
     let initializer = match self.peek_lit() {
       Literal::Operator(Semicolon) => {
@@ -725,7 +727,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     )
   }
 
-  fn next_declaration(&mut self) -> Declaration {
+  fn next_declaration(&mut self) -> Declaration<'context> {
     while matches!(
       self.peek_lit(),
       Literal::Operator(Semicolon) | Literal::Operator(Hash)
@@ -788,9 +790,13 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
 impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   fn next_function_body(
     &mut self,
-    declspecs: DeclSpecs,
-    declarator: Declarator,
-  ) -> (DeclSpecs, Declarator, Option<Compound>) {
+    declspecs: DeclSpecs<'context>,
+    declarator: Declarator<'context>,
+  ) -> (
+    DeclSpecs<'context>,
+    Declarator<'context>,
+    Option<Compound<'context>>,
+  ) {
     let body = match self.peek_lit() {
       Literal::Operator(LeftBrace) => Some(self.next_block()),
       _ => {
@@ -802,7 +808,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     (declspecs, declarator, body)
   }
 
-  fn next_block(&mut self) -> Compound {
+  fn next_block(&mut self) -> Compound<'context> {
     let location = *self.peek_loc();
     self.must_get_op::<{ LeftBrace }>();
     self.typedefs.push_scope();
@@ -816,7 +822,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     Compound::new(block.statements, self.eloc(location))
   }
 
-  fn next_return(&mut self) -> Return {
+  fn next_return(&mut self) -> Return<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Return }>();
     let expression = if self.peek_lit() == Semicolon {
@@ -830,7 +836,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     Return::new(expression, self.eloc(location))
   }
 
-  fn next_if(&mut self) -> If {
+  fn next_if(&mut self) -> If<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::If }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
@@ -852,7 +858,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     )
   }
 
-  fn next_while(&mut self) -> While {
+  fn next_while(&mut self) -> While<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::While }>();
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
@@ -871,7 +877,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     while_stmt
   }
 
-  fn next_dowhile(&mut self) -> DoWhile {
+  fn next_dowhile(&mut self) -> DoWhile<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Do }>();
     self
@@ -893,7 +899,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     dowhile_stmt
   }
 
-  fn next_for(&mut self) -> For {
+  fn next_for(&mut self) -> For<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::For }>();
     if self.peek_lit() != LeftParen {
@@ -936,9 +942,9 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
           },
         },
       };
-      fn parse_optional_expression<const OP: Operator>(
-        parser: &mut Parser,
-      ) -> Option<Expression> {
+      fn parse_optional_expression<'a, const OP: Operator>(
+        parser: &mut Parser<'_, 'a, '_>,
+      ) -> Option<Expression<'a>> {
         match parser.peek_lit() {
           Literal::Operator(op) if op == OP => {
             parser.must_get_op::<OP>();
@@ -975,7 +981,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  fn next_switch(&mut self) -> Switch {
+  fn next_switch(&mut self) -> Switch<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Switch }>();
     let condition = self.parse_paren_expression::<{ Operator::EXCOMMA }>();
@@ -1024,7 +1030,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     switch_stmt
   }
 
-  fn next_statement(&mut self) -> Statement {
+  fn next_statement(&mut self) -> Statement<'context> {
     match *self.peek_lit() {
       Literal::Keyword(Keyword::If) => self.next_if().into(),
       Literal::Keyword(Keyword::For) => self.next_for().into(),
@@ -1051,17 +1057,16 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
       },
       Literal::Keyword(Keyword::Goto) => self.next_gotostmt(),
       Literal::Keyword(_) => self.next_declaration().into(),
-      Literal::Identifier(ref ident) if self.typedefs.contains(ident) =>
+      Literal::Identifier(ident) if self.typedefs.contains(ident) =>
         self.next_declaration().into(),
-      Literal::Identifier(ref ident)
-        if self.peek_lit_with_offset(1) == Colon =>
-        self.next_labelstmt(ident.clone()),
+      Literal::Identifier(ident) if self.peek_lit_with_offset(1) == Colon =>
+        self.next_labelstmt(ident),
 
       _ => self.next_exprstmt().into(),
     }
   }
 
-  fn next_labelstmt(&mut self, ident: SmallString) -> Statement {
+  fn next_labelstmt(&mut self, ident: &'context str) -> Statement<'context> {
     let location = *self.peek_loc();
     // 1. label at end of compound statement is not allowed until C23
     // 2. label can only jump to statements within the same function, not to mention cross file.
@@ -1078,11 +1083,11 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  fn next_gotostmt(&mut self) -> Statement {
+  fn next_gotostmt(&mut self) -> Statement<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Goto }>();
     if let Literal::Identifier(ident) = self.peek_lit() {
-      let name = ident.clone();
+      let name = *ident;
       self.get(); // consume ident
       self.recoverable_get::<{ Semicolon }>();
       Goto::new(name, self.eloc(location)).into()
@@ -1094,18 +1099,18 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  fn next_emptystmt(&mut self) -> Statement {
+  fn next_emptystmt(&mut self) -> Statement<'context> {
     self.must_get_op::<{ Semicolon }>();
     Statement::default()
   }
 
-  fn next_exprstmt(&mut self) -> Expression {
+  fn next_exprstmt(&mut self) -> Expression<'context> {
     let expr = self.next_expression(Operator::DEFAULT);
     self.recoverable_get::<{ Semicolon }>();
     expr
   }
 
-  fn next_break(&mut self) -> Break {
+  fn next_break(&mut self) -> Break<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Break }>();
     self.recoverable_get::<{ Semicolon }>();
@@ -1124,7 +1129,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  fn next_continue(&mut self) -> Continue {
+  fn next_continue(&mut self) -> Continue<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Continue }>();
 
@@ -1155,7 +1160,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
 }
 /// expressions
 impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
-  fn next_factor(&mut self) -> Expression {
+  fn next_factor(&mut self) -> Expression<'context> {
     let location = *self.peek_loc();
     match self.peek_lit().clone() {
       Literal::Operator(op) if op.unary() => {
@@ -1177,7 +1182,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
       Literal::String(str) => {
         self.get();
         Expression::Constant(
-          ConstantLiteral::String(str.clone()).into_with(self.eloc(location)),
+          ConstantLiteral::String(str).into_with(self.eloc(location)),
         )
       },
       Literal::Identifier(ident) => {
@@ -1207,7 +1212,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
           ),
           _ => {
             self.add_error(
-              UnexpectedCharacter((keyword.clone().into(), None).into()),
+              UnexpectedCharacter((keyword.to_string(), None).into()),
               self.eloc(location),
             );
             Expression::Constant(
@@ -1219,7 +1224,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
       },
       Literal::Operator(op) => {
         self.add_error(
-          UnexpectedCharacter((op.into(), None).into()),
+          UnexpectedCharacter((op.to_string(), None).into()),
           self.eloc(location),
         );
         self.get();
@@ -1232,7 +1237,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 
   /// this should return [`ae::SizeOf`].
-  fn next_sizeof(&mut self) -> Expression {
+  fn next_sizeof(&mut self) -> Expression<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Sizeof }>();
     // maybe type or expression
@@ -1290,7 +1295,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   /// For more information, read this excellent blog
   /// [post](https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html)
   /// by Matklad.
-  fn next_expression(&mut self, min_bp: u8) -> Expression {
+  fn next_expression(&mut self, min_bp: u8) -> Expression<'context> {
     let location = *self.peek_loc();
     let mut lhs = self.next_factor();
 

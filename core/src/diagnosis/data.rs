@@ -72,7 +72,7 @@ type Elem = String;
 #[derive(Debug, ::thiserror::Error)]
 pub enum Data<'context> {
   #[error("Unexpected character '{}'{expected}", &.0.0, expected = format_expected(&.0.1))]
-  UnexpectedCharacter(Box<(Literal, Option<Literal>)>),
+  UnexpectedCharacter(Box<(String, Option<String>)>),
   #[error("Unterminated string literal")]
   UnterminatedString,
   #[error("Invalid number format '{0}'")]
@@ -94,9 +94,9 @@ pub enum Data<'context> {
   #[error("{0}")]
   UnclosedParameterList(CustomMessage),
   #[error("Expect '(' after {0}")]
-  MissingOpenParen(Literal),
+  MissingOpenParen(Literal<'context>),
   #[error("Expect ')' after {0}")]
-  MissingCloseParen(Literal),
+  MissingCloseParen(Literal<'context>),
   #[error("{0}")]
   ExprNotConstant(CustomMessage),
   #[error("{0}")]
@@ -199,7 +199,7 @@ pub enum Data<'context> {
   #[error("Discarding qualifiers '{0}' during conversion is not allowed")]
   DiscardingQualifiers(Qualifiers),
   #[error("Case label expression '{0}' is not an integer")]
-  NonIntegerInCaseStmt(Constant),
+  NonIntegerInCaseStmt(Constant<'context>),
   #[error("{0}")]
   InvalidConversion(CustomMessage),
   #[error("Cannot apply operator '{2}' to types '{0}' and '{1}'")]
@@ -233,11 +233,13 @@ pub enum Data<'context> {
   #[error(
     "Applying unary operator '{}' may cause overflow on constant '{}'", &.0.1, &.0.0
   )]
-  ArithmeticUnaryOpOverflow(Box<(Constant, Operator)>),
+  ArithmeticUnaryOpOverflow(Box<(Constant<'context>, Operator)>),
   #[error(
     "Arithmetic overflow in operation '{}' between '{}' and '{}'", &.0.2, &.0.0, &.0.1
   )]
-  ArithmeticBinOpOverflow(Box<(Constant, Constant, Operator)>),
+  ArithmeticBinOpOverflow(
+    Box<(Constant<'context>, Constant<'context>, Operator)>,
+  ),
   #[error(
     "'{}' is used in a logical operation, {}", &.0, if let Some(suggest) = &.1 {
       format!(
@@ -252,7 +254,7 @@ pub enum Data<'context> {
   #[error("Possible data loss in implicit cast from '{0}' to '{1}'")]
   CastDown(QualifiedType<'context>, QualifiedType<'context>),
   #[error("Operation '{}' between '{}' and '{}' results in NaN", &.0.2, &.0.0, &.0.1)]
-  NotANumber(Box<(Constant, Constant, Operator)>),
+  NotANumber(Box<(Constant<'context>, Constant<'context>, Operator)>),
   #[error("Division by zero")]
   DivideByZero,
   #[error(
@@ -280,7 +282,7 @@ impl<'context> IntoWith<Severity, Meta<'context>> for Data<'context> {
   }
 }
 
-fn format_expected(expected: &Option<Literal>) -> String {
+fn format_expected(expected: &Option<String>) -> String {
   match expected {
     Some(exp) => format!(", expected '{}'", exp),
     None => String::with_capacity(0),

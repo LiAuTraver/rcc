@@ -1,59 +1,60 @@
-use ::rcc_utils::SmallString;
-
 use crate::{
+  blueprints::type_alias_expr,
   common::SourceSpan,
   parser::declaration::{DeclSpecs, Declarator},
-  type_alias_expr,
 };
 
 #[derive(Debug)]
-pub enum Expression {
+pub enum Expression<'context> {
   Empty(Empty), // no-op for error recovery; for empty expr should use Option<Expression> instead
-  Constant(Constant),
-  Unary(Unary),
-  Binary(Binary),
-  Variable(Variable),
-  Call(Call),
-  Paren(Paren),
-  MemberAccess(MemberAccess),
-  Ternary(Ternary),
-  SizeOf(SizeOf),
-  CStyleCast(CStyleCast),           // (int)x
-  ArraySubscript(ArraySubscript),   // arr[i]
+  Constant(Constant<'context>),
+  Unary(Unary<'context>),
+  Binary(Binary<'context>),
+  Variable(Variable<'context>),
+  Call(Call<'context>),
+  Paren(Paren<'context>),
+  MemberAccess(MemberAccess<'context>),
+  Ternary(Ternary<'context>),
+  SizeOf(SizeOf<'context>),
+  CStyleCast(CStyleCast<'context>), // (int)x
+  ArraySubscript(ArraySubscript<'context>), // arr[i]
   CompoundLiteral(CompoundLiteral), // (struct Point){.x=1, .y=2}
 }
-type_alias_expr! {Expression, UnprocessedType, Variable}
-::rcc_utils::interconvert!(Variable, Expression);
-::rcc_utils::interconvert!(Constant, Expression);
-::rcc_utils::interconvert!(Unary, Expression);
-::rcc_utils::interconvert!(Binary, Expression);
-::rcc_utils::interconvert!(Call, Expression);
-::rcc_utils::interconvert!(Paren, Expression);
-::rcc_utils::interconvert!(MemberAccess, Expression);
-::rcc_utils::interconvert!(Ternary, Expression);
-::rcc_utils::interconvert!(SizeOf, Expression);
-::rcc_utils::interconvert!(CStyleCast, Expression);
-::rcc_utils::interconvert!(ArraySubscript, Expression);
-::rcc_utils::interconvert!(CompoundLiteral, Expression);
-impl ::std::default::Default for Expression {
+type_alias_expr! {Expression<'context> , UnprocessedType<'context>, Variable<'context>}
+::rcc_utils::interconvert!(Variable, Expression, 'context);
+::rcc_utils::interconvert!(Constant, Expression,'context);
+::rcc_utils::interconvert!(Unary, Expression, 'context);
+::rcc_utils::interconvert!(Binary, Expression, 'context);
+::rcc_utils::interconvert!(Call, Expression, 'context);
+::rcc_utils::interconvert!(Paren, Expression, 'context);
+::rcc_utils::interconvert!(MemberAccess, Expression, 'context);
+::rcc_utils::interconvert!(Ternary, Expression, 'context);
+::rcc_utils::interconvert!(SizeOf, Expression, 'context);
+::rcc_utils::interconvert!(CStyleCast, Expression, 'context);
+::rcc_utils::interconvert!(ArraySubscript, Expression, 'context);
+::rcc_utils::interconvert!(CompoundLiteral, Expression<'context>);
+impl<'context> ::std::default::Default for Expression<'context> {
   #[inline(always)]
   fn default() -> Self {
     Expression::Empty(Empty::default())
   }
 }
 
-impl Variable {
-  pub fn new(name: SmallString, span: SourceSpan) -> Self {
+impl<'context> Variable<'context> {
+  pub fn new(name: &'context str, span: SourceSpan) -> Self {
     Self { name, span }
   }
 }
 #[derive(Debug)]
-pub struct UnprocessedType {
-  pub declspecs: DeclSpecs,
-  pub declarator: Declarator,
+pub struct UnprocessedType<'context> {
+  pub declspecs: DeclSpecs<'context>,
+  pub declarator: Declarator<'context>,
 }
-impl UnprocessedType {
-  pub fn new(declspecs: DeclSpecs, declarator: Declarator) -> Self {
+impl<'context> UnprocessedType<'context> {
+  pub fn new(
+    declspecs: DeclSpecs<'context>,
+    declarator: Declarator<'context>,
+  ) -> Self {
     Self {
       declspecs,
       declarator,
@@ -61,8 +62,8 @@ impl UnprocessedType {
   }
 }
 #[derive(Debug)]
-pub struct Variable {
-  pub name: SmallString,
+pub struct Variable<'context> {
+  pub name: &'context str,
   pub span: SourceSpan,
 }
 
@@ -72,7 +73,7 @@ mod fmt {
 
   use super::*;
 
-  impl Display for Expression {
+  impl<'context> Display for Expression<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       static_dispatch!(
         self.fmt(f),
@@ -80,12 +81,12 @@ mod fmt {
       )
     }
   }
-  impl Display for Variable {
+  impl<'context> Display for Variable<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{}", self.name)
     }
   }
-  impl Display for UnprocessedType {
+  impl<'context> Display for UnprocessedType<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       write!(f, "{} {}", self.declspecs, self.declarator)
     }

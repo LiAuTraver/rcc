@@ -106,8 +106,8 @@ impl Floating {
   }
 }
 
-impl Constant {
-  pub fn unqualified_type<'context>(
+impl<'context> Constant<'context> {
+  pub fn unqualified_type(
     &self,
     context: &'context Context,
   ) -> TypeRef<'context> {

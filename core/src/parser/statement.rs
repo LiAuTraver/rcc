@@ -1,47 +1,55 @@
 use ::rcc_utils::{SmallString, interconvert};
 
 use super::{declaration::Declaration, expression::Expression};
-use crate::type_alias_stmt;
+use crate::blueprints::type_alias_stmt;
 
 #[derive(Debug)]
-pub enum Statement {
+pub enum Statement<'context> {
   Empty(Empty),
-  Return(Return),
-  Expression(Expression),
-  Declaration(Declaration),
-  Compound(Compound),
-  If(If),
-  While(While),
-  DoWhile(DoWhile),
-  For(For),
-  Switch(Switch),
-  Goto(Goto),
-  Label(Label),
-  Break(Break),
-  Continue(Continue),
+  Return(Return<'context>),
+  Expression(Expression<'context>),
+  Declaration(Declaration<'context>),
+  Compound(Compound<'context>),
+  If(If<'context>),
+  While(While<'context>),
+  DoWhile(DoWhile<'context>),
+  For(For<'context>),
+  Switch(Switch<'context>),
+  Goto(Goto<'context>),
+  Label(Label<'context>),
+  Break(Break<'context>),
+  Continue(Continue<'context>),
 }
 
-type_alias_stmt!(Statement, Declaration, Expression);
-interconvert!(Declaration, Statement);
-interconvert!(Expression, Statement);
-interconvert!(Return, Statement);
-interconvert!(Compound, Statement);
-interconvert!(If, Statement);
-interconvert!(While, Statement);
-interconvert!(DoWhile, Statement);
-interconvert!(For, Statement);
-interconvert!(Switch, Statement);
-interconvert!(Goto, Statement);
-interconvert!(Label, Statement);
-interconvert!(Break, Statement);
-interconvert!(Continue, Statement);
+type_alias_stmt!(
+  Statement<'context>,
+  Declaration<'context>,
+  Expression<'context>
+);
+interconvert!(Declaration, Statement, 'context);
+interconvert!(Expression, Statement, 'context);
+interconvert!(Return, Statement, 'context);
+interconvert!(Compound, Statement, 'context);
+interconvert!(If, Statement, 'context);
+interconvert!(While, Statement, 'context);
+interconvert!(DoWhile, Statement, 'context);
+interconvert!(For, Statement, 'context);
+interconvert!(Switch, Statement, 'context);
+interconvert!(Goto, Statement, 'context);
+interconvert!(Label, Statement, 'context);
+interconvert!(Break, Statement, 'context);
+interconvert!(Continue, Statement, 'context);
 
-impl Statement {
-  pub(super) fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
-    RawStmt::new_loop_dummy_identifier(str)
+impl<'context> Statement<'context> {
+  pub fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
+    static LOOP_LABEL_COUNTER: ::std::sync::atomic::AtomicUsize =
+      ::std::sync::atomic::AtomicUsize::new(0);
+    let id =
+      LOOP_LABEL_COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
+    SmallString::from(format!("{}_{}", str, id))
   }
 }
-impl ::std::default::Default for Statement {
+impl<'context> ::std::default::Default for Statement<'context> {
   fn default() -> Self {
     Self::Empty(Empty::default())
   }
@@ -52,7 +60,7 @@ mod fmt {
 
   use super::Statement;
 
-  impl Display for Statement {
+  impl<'context> Display for Statement<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       static_dispatch!(
         self.fmt(f),

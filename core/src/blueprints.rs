@@ -2,6 +2,9 @@ mod rawdecl;
 mod rawexpr;
 mod rawstmt;
 
+pub(crate) use rawexpr::type_alias_expr;
+pub(crate) use rawstmt::type_alias_stmt;
+
 pub use self::{
   // rawdecl::*,
   rawexpr::{
@@ -11,7 +14,7 @@ pub use self::{
   },
   rawstmt::{
     RawBreak, RawCase, RawCompound, RawContinue, RawDefault, RawDoWhile,
-    RawFor, RawGoto, RawIf, RawLabel, RawReturn, RawStmt, RawSwitch, RawWhile,
+    RawFor, RawGoto, RawIf, RawLabel, RawReturn, RawSwitch, RawWhile,
   },
 };
 

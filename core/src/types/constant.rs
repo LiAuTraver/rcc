@@ -1,4 +1,4 @@
-use ::rcc_utils::{IntoWith, SmallString};
+use ::rcc_utils::ensure_is_pod;
 
 use crate::{
   blueprints::Placeholder as Nullptr,
@@ -20,14 +20,15 @@ use crate::{
 ///
 /// TODO: named constants `constexpr` and AddressConstant +- constant integral
 #[derive(Debug, PartialEq, Clone)]
-pub enum Constant {
+pub enum Constant<'context> {
   Integral(Integral),
   Floating(Floating),
-  String(SmallString),
+  String(&'context str),
   Nullptr(Nullptr),
-  Address(SmallString),
+  Address(&'context str),
 }
-impl Constant {
+ensure_is_pod!(Constant);
+impl<'context> Constant<'context> {
   pub const FLOATING_SUFFIXES: &'static [&'static str] = &[
     "f", "F", // float
     "l", "L", // long double
@@ -55,11 +56,13 @@ impl Constant {
   ];
 
   /// parse a numeric literal with optional suffix, if fails, return an error message and the default value of the Constant
-  pub fn parse<'context>(
+  pub fn parse(
     num: &str,
     suffix: Option<&str>,
     is_floating: bool,
   ) -> (Self, Option<DiagMeta<'context>>) {
+    use ::rcc_utils::IntoWith;
+
     macro_rules! int_conv {
       ($t:ty, $signess:ident) => {
         match num.parse::<$t>() {
@@ -162,7 +165,7 @@ impl Constant {
     }
   }
 
-  pub fn to_boolean(self) -> Constant {
+  pub fn to_boolean(self) -> Self {
     match self {
       Self::Integral(integral) =>
         Constant::Integral(Integral::from_bool(!integral.is_zero())),
@@ -174,7 +177,7 @@ impl Constant {
     }
   }
 
-  pub fn to_integral(self, width: u8, signedness: Signedness) -> Constant {
+  pub fn to_integral(self, width: u8, signedness: Signedness) -> Self {
     match self {
       Self::Integral(integral) =>
         Constant::Integral(integral.cast(width, signedness)),
@@ -184,7 +187,7 @@ impl Constant {
     }
   }
 
-  pub fn to_floating(self, format: FloatFormat) -> Constant {
+  pub fn to_floating(self, format: FloatFormat) -> Self {
     match self {
       Self::Integral(integral) =>
         Constant::Floating(integral.to_floating(format)),
@@ -192,15 +195,20 @@ impl Constant {
       _ => unreachable!("handled elsewhere"),
     }
   }
+
+  pub fn is_address(&self) -> bool {
+    matches!(self, Constant::Address(_))
+  }
 }
-::rcc_utils::interconvert!(Integral, Constant);
-::rcc_utils::interconvert!(Floating, Constant);
-::rcc_utils::interconvert!(SmallString, Constant, String);
-::rcc_utils::interconvert!(Nullptr, Constant);
+::rcc_utils::interconvert!(Integral, Constant<'context>);
+::rcc_utils::interconvert!(Floating, Constant<'context>);
+// ::rcc_utils::interconvert!(SmallString, Constant, String);
+::rcc_utils::interconvert!(Nullptr, Constant<'context>);
 // ::rcc_utils::interconvert!(SmallString, Constant, Address);
 
-::rcc_utils::make_trio_for!(Integral, Constant);
-::rcc_utils::make_trio_for!(Floating, Constant);
-::rcc_utils::make_trio_for!(Nullptr, Constant);
-::rcc_utils::make_trio_for!(SmallString, Constant, String);
-::rcc_utils::make_trio_for!(SmallString, Constant, Address);
+::rcc_utils::make_trio_for!(Integral, Constant<'context>);
+::rcc_utils::make_trio_for!(Floating, Constant<'context>);
+::rcc_utils::make_trio_for!(Nullptr, Constant<'context>);
+
+// ::rcc_utils::make_trio_for!(SmallString, Constant, String);
+// ::rcc_utils::make_trio_for!(SmallString, Constant, Address);

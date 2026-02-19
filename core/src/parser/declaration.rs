@@ -7,8 +7,8 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-pub struct Program {
-  pub declarations: Vec<Declaration>,
+pub struct Program<'context> {
+  pub declarations: Vec<Declaration<'context>>,
 }
 /// declaration:
 ///       - declaration-specifiers init-declarator-list_opt ;
@@ -16,13 +16,13 @@ pub struct Program {
 ///       - static_assert-declaration (don't care)
 ///       - attribute-declaration (don't care)
 #[derive(Debug)]
-pub enum Declaration {
-  Function(Function),
-  Variable(VarDef),
+pub enum Declaration<'context> {
+  Function(Function<'context>),
+  Variable(VarDef<'context>),
 }
 
-interconvert!(Function, Declaration);
-interconvert!(VarDef, Declaration, Variable);
+interconvert!(Function, Declaration, 'context);
+interconvert!(VarDef, Declaration, 'context, Variable);
 
 /// abstract declarator: no variable name/identifier
 ///
@@ -39,9 +39,9 @@ pub enum DeclaratorType {
 /// declarator:
 ///     pointer_opt direct-declarator
 #[derive(Debug)]
-pub struct Declarator {
+pub struct Declarator<'context> {
   pub name: Option<SmallString>,
-  pub modifiers: Vec<Modifier>, // pointer, array, function
+  pub modifiers: Vec<Modifier<'context>>, // pointer, array, function
   pub span: SourceSpan,
 }
 /// direct-declarator:
@@ -59,33 +59,33 @@ pub struct Declarator {
 /// this is flatten structure, so the order of `Vec<Modifier>` in `Declarator` matters
 /// and usually applied in reverse order
 #[derive(Debug)]
-pub enum Modifier {
+pub enum Modifier<'context> {
   Pointer(Qualifiers),
-  Array(ArrayModifier),
-  Function(FunctionSignature),
+  Array(ArrayModifier<'context>),
+  Function(FunctionSignature<'context>),
 }
 #[derive(Debug)]
-pub struct Member {
-  pub specifiers: Vec<TypeSpecifier>,
+pub struct Member<'context> {
+  pub specifiers: Vec<TypeSpecifier<'context>>,
   pub qualifiers: Qualifiers,
-  pub modifiers: Vec<Modifier>,
-  pub declarator: Option<Declarator>,
-  pub bit_width: Option<Expression>,
+  pub modifiers: Vec<Modifier<'context>>,
+  pub declarator: Option<Declarator<'context>>,
+  pub bit_width: Option<Expression<'context>>,
 }
 #[derive(Debug)]
-pub struct Parameter {
-  pub declspecs: DeclSpecs,
-  pub declarator: Declarator,
+pub struct Parameter<'context> {
+  pub declspecs: DeclSpecs<'context>,
+  pub declarator: Declarator<'context>,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
-pub struct Struct {
+pub struct Struct<'context> {
   pub name: Option<SmallString>,
-  pub members: Vec<Member>,
+  pub members: Vec<Member<'context>>,
 }
 /// type-specifier
 #[derive(Debug)]
-pub enum TypeSpecifier {
+pub enum TypeSpecifier<'context> {
   Nullptr,
   Void,
   Char,
@@ -98,14 +98,14 @@ pub enum TypeSpecifier {
   Unsigned,
   Bool,
   Complex,
-  Typedef(SmallString),
+  Typedef(&'context str),
   // vvv below should be wrong, but now don't care
-  Struct(Struct),
-  Union(Struct),
-  Enum(EnumSpecifier),
+  Struct(Struct<'context>),
+  Union(Struct<'context>),
+  Enum(EnumSpecifier<'context>),
 }
 
-impl TypeSpecifier {
+impl<'context> TypeSpecifier<'context> {
   pub fn sort_key(&self) -> u8 {
     match self {
       TypeSpecifier::Void => 0,
@@ -148,25 +148,25 @@ impl TypeSpecifier {
 ///    - type-specifier-qualifier
 ///    - function-specifier
 #[derive(Debug)]
-pub struct DeclSpecs {
+pub struct DeclSpecs<'context> {
   pub function_specifiers: FunctionSpecifier,
   pub storage_class: Option<Storage>,
   pub qualifiers: Qualifiers,
-  pub type_specifiers: Vec<TypeSpecifier>,
+  pub type_specifiers: Vec<TypeSpecifier<'context>>,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
-pub struct Function {
-  pub declspecs: DeclSpecs,
-  pub declarator: Declarator,
-  pub body: Option<Compound>,
+pub struct Function<'context> {
+  pub declspecs: DeclSpecs<'context>,
+  pub declarator: Declarator<'context>,
+  pub body: Option<Compound<'context>>,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
-pub struct VarDef {
-  pub declspecs: DeclSpecs,
-  pub declarator: Declarator,
-  pub initializer: Option<Initializer>,
+pub struct VarDef<'context> {
+  pub declspecs: DeclSpecs<'context>,
+  pub declarator: Declarator<'context>,
+  pub initializer: Option<Initializer<'context>>,
   pub span: SourceSpan,
 }
 /// array-declarator:
@@ -175,59 +175,62 @@ pub struct VarDef {
 ///     - direct-declarator \[ type-qualifier-list static assignment-expression \]
 ///     - direct-declarator \[ type-qualifier-list_opt * \]
 #[derive(Debug)]
-pub struct ArrayModifier {
+pub struct ArrayModifier<'context> {
   pub qualifiers: Qualifiers,
   pub is_static: bool,
-  pub bound: Option<Expression>,
+  pub bound: Option<Expression<'context>>,
   pub span: SourceSpan,
 }
 /// function-declarator:
 ///     - direct-declarator ( parameter-type-list_opt )
 #[derive(Debug)]
-pub struct FunctionSignature {
-  pub parameters: Vec<Parameter>,
+pub struct FunctionSignature<'context> {
+  pub parameters: Vec<Parameter<'context>>,
   pub is_variadic: bool,
 }
 #[derive(Debug)]
-pub enum Initializer {
-  Expression(Box<Expression>),
-  List(Vec<InitializerListEntry>),
+pub enum Initializer<'context> {
+  Expression(Box<Expression<'context>>),
+  List(Vec<InitializerListEntry<'context>>),
 }
 #[derive(Debug)]
-pub struct InitializerListEntry {
-  pub designators: Vec<Designator>,
-  pub value: Box<Initializer>,
+pub struct InitializerListEntry<'context> {
+  pub designators: Vec<Designator<'context>>,
+  pub value: Box<Initializer<'context>>,
 }
 #[derive(Debug)]
-pub enum Designator {
+pub enum Designator<'context> {
   Member(SmallString),
-  Index(Expression),
+  Index(Expression<'context>),
 }
 #[derive(Debug)]
-pub struct EnumSpecifier {
+pub struct EnumSpecifier<'context> {
   pub name: Option<SmallString>,
-  pub enumerators: Vec<Enumerator>,
+  pub enumerators: Vec<Enumerator<'context>>,
 }
 #[derive(Debug)]
-pub struct Enumerator {
+pub struct Enumerator<'context> {
   pub name: SmallString,
-  pub value: Option<Expression>,
+  pub value: Option<Expression<'context>>,
 }
-impl Enumerator {
-  pub fn new(name: SmallString, value: Option<Expression>) -> Self {
+impl<'context> Enumerator<'context> {
+  pub fn new(name: SmallString, value: Option<Expression<'context>>) -> Self {
     Self { name, value }
   }
 }
-impl EnumSpecifier {
-  pub fn new(name: Option<SmallString>, enumerators: Vec<Enumerator>) -> Self {
+impl<'context> EnumSpecifier<'context> {
+  pub fn new(
+    name: Option<SmallString>,
+    enumerators: Vec<Enumerator<'context>>,
+  ) -> Self {
     Self { name, enumerators }
   }
 }
-impl ArrayModifier {
+impl<'context> ArrayModifier<'context> {
   pub fn new(
     qualifiers: Qualifiers,
     is_static: bool,
-    bound: Option<Expression>,
+    bound: Option<Expression<'context>>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -238,11 +241,11 @@ impl ArrayModifier {
     }
   }
 }
-impl Function {
+impl<'context> Function<'context> {
   pub fn new(
-    declspecs: DeclSpecs,
-    declarator: Declarator,
-    body: Option<Compound>,
+    declspecs: DeclSpecs<'context>,
+    declarator: Declarator<'context>,
+    body: Option<Compound<'context>>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -253,8 +256,8 @@ impl Function {
     }
   }
 }
-impl FunctionSignature {
-  pub fn new(parameters: Vec<Parameter>, is_variadic: bool) -> Self {
+impl<'context> FunctionSignature<'context> {
+  pub fn new(parameters: Vec<Parameter<'context>>, is_variadic: bool) -> Self {
     Self {
       parameters,
       is_variadic,
@@ -262,7 +265,7 @@ impl FunctionSignature {
   }
 }
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for FunctionSignature {
+impl<'context> ::core::default::Default for FunctionSignature<'context> {
   fn default() -> Self {
     Self {
       parameters: Vec::default(),
@@ -270,10 +273,10 @@ impl ::core::default::Default for FunctionSignature {
     }
   }
 }
-impl Parameter {
+impl<'context> Parameter<'context> {
   pub fn new(
-    declspecs: DeclSpecs,
-    declarator: Declarator,
+    declspecs: DeclSpecs<'context>,
+    declarator: Declarator<'context>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -283,18 +286,18 @@ impl Parameter {
     }
   }
 }
-impl Program {
+impl<'context> Program<'context> {
   pub fn new() -> Self {
     Self {
       declarations: Vec::default(),
     }
   }
 }
-impl DeclSpecs {
+impl<'context> DeclSpecs<'context> {
   pub fn new(
     storage_class: Option<Storage>,
     qualifiers: Qualifiers,
-    type_specifiers: Vec<TypeSpecifier>,
+    type_specifiers: Vec<TypeSpecifier<'context>>,
     function_specifiers: FunctionSpecifier,
     span: SourceSpan,
   ) -> Self {
@@ -307,10 +310,10 @@ impl DeclSpecs {
     }
   }
 }
-impl Declarator {
+impl<'context> Declarator<'context> {
   pub fn new(
     name: Option<SmallString>,
-    modifiers: Vec<Modifier>,
+    modifiers: Vec<Modifier<'context>>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -327,11 +330,11 @@ impl Declarator {
     }
   }
 }
-impl VarDef {
+impl<'context> VarDef<'context> {
   pub fn new(
-    declspecs: DeclSpecs,
-    declarator: Declarator,
-    initializer: Option<Initializer>,
+    declspecs: DeclSpecs<'context>,
+    declarator: Declarator<'context>,
+    initializer: Option<Initializer<'context>>,
     span: SourceSpan,
   ) -> Self {
     Self {
@@ -359,7 +362,7 @@ impl VarDef {
 }
 mod cvt {
   use super::*;
-  impl From<&Literal> for Qualifiers {
+  impl<'context> From<&Literal<'context>> for Qualifiers {
     fn from(literal: &Literal) -> Self {
       match literal {
         Literal::Keyword(kw) => match kw {
@@ -385,7 +388,7 @@ mod cvt {
     }
   }
 
-  impl TryFrom<&Literal> for FunctionSpecifier {
+  impl<'context> TryFrom<&Literal<'context>> for FunctionSpecifier {
     type Error = ();
 
     fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
@@ -396,7 +399,7 @@ mod cvt {
     }
   }
 
-  impl TryFrom<&Keyword> for TypeSpecifier {
+  impl<'context> TryFrom<&Keyword> for TypeSpecifier<'context> {
     type Error = ();
 
     fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
@@ -415,7 +418,7 @@ mod cvt {
       }
     }
   }
-  impl TryFrom<&Literal> for TypeSpecifier {
+  impl<'context> TryFrom<&Literal<'context>> for TypeSpecifier<'context> {
     type Error = ();
 
     fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
@@ -435,7 +438,7 @@ mod fmt {
     FunctionSignature, Modifier, Program, Struct, TypeSpecifier, VarDef,
   };
 
-  impl Display for Declaration {
+  impl<'context> Display for Declaration<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         Declaration::Function(func) => <Function as Display>::fmt(func, f),
@@ -444,7 +447,7 @@ mod fmt {
     }
   }
 
-  impl Display for Program {
+  impl<'context> Display for Program<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       self
         .declarations
@@ -452,7 +455,7 @@ mod fmt {
         .try_for_each(|decl| writeln!(f, "{}", decl))
     }
   }
-  impl Display for Function {
+  impl<'context> Display for Function<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
@@ -487,7 +490,7 @@ mod fmt {
     }
   }
 
-  impl Display for Modifier {
+  impl<'context> Display for Modifier<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         Modifier::Pointer(qualifiers) => {
@@ -516,7 +519,7 @@ mod fmt {
     }
   }
 
-  impl Display for ArrayModifier {
+  impl<'context> Display for ArrayModifier<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(f, "[")?;
       if self.is_static {
@@ -543,7 +546,7 @@ mod fmt {
     }
   }
 
-  impl Display for FunctionSignature {
+  impl<'context> Display for FunctionSignature<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(f, "(")?;
       for (i, param) in self.parameters.iter().enumerate() {
@@ -571,7 +574,7 @@ mod fmt {
       write!(f, ")")
     }
   }
-  impl Display for VarDef {
+  impl<'context> Display for VarDef<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(f, "{} {}", self.declspecs, self.declarator)?;
       if self.initializer.is_some() {
@@ -580,7 +583,7 @@ mod fmt {
       Ok(())
     }
   }
-  impl Display for DeclSpecs {
+  impl<'context> Display for DeclSpecs<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       if !self.function_specifiers.is_empty() {
         write!(f, "{} ", self.function_specifiers)?;
@@ -600,7 +603,7 @@ mod fmt {
       )
     }
   }
-  impl Display for Declarator {
+  impl<'context> Display for Declarator<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
@@ -619,7 +622,7 @@ mod fmt {
       )
     }
   }
-  impl Display for TypeSpecifier {
+  impl<'context> Display for TypeSpecifier<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
         TypeSpecifier::Nullptr => write!(f, "nullptr"),
@@ -641,7 +644,7 @@ mod fmt {
       }
     }
   }
-  impl Display for Struct {
+  impl<'context> Display for Struct<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
@@ -653,7 +656,7 @@ mod fmt {
       )
     }
   }
-  impl Display for EnumSpecifier {
+  impl<'context> Display for EnumSpecifier<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,

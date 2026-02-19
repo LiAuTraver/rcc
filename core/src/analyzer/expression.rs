@@ -1,10 +1,10 @@
 use crate::{
+  blueprints::type_alias_expr,
   common::{Operator, OperatorCategory, SourceSpan, Storage, SymbolRef},
-  type_alias_expr,
   types::{CastType, QualifiedType, Qualifiers, Type, TypeRef},
 };
 
-type_alias_expr! {Expression<'context>, QualifiedType<'context>, Variable<'context> ImplicitCast<'context> Assignment<'context>: 'context}
+type_alias_expr! {Expression<'context>, QualifiedType<'context>, Variable<'context> ImplicitCast<'context> Assignment<'context>}
 #[derive(Debug, Clone, Copy, ::strum_macros::Display, PartialEq)]
 pub enum ValueCategory {
   LValue,
