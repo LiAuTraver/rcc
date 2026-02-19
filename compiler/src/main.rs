@@ -48,7 +48,9 @@ fn main() {
       ::std::process::exit(1);
     },
   };
-  let session = Session::new(&source_manager);
+  let arena = Bump::new();
+  let context = Context::new(&arena);
+  let session = Session::new(&source_manager, &context);
   pipeline(session, stage, false);
 }
 
@@ -79,18 +81,9 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     println!("Lex succeeded.");
     return 0;
   }
-  let session = Session::new(session.manager);
   let mut parser = Parser::new(tokens, &session);
   let program = parser.parse();
   println!("{program}");
-  if session.diagnosis.has_warnings() {
-    eprintln!("Parser warnings:");
-    session
-      .diagnosis
-      .warnings()
-      .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
-  }
   if session.diagnosis.has_errors() {
     eprintln!("Parser errors:");
     session
@@ -107,19 +100,9 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     println!("Parse succeeded.");
     return 0;
   }
-  let session = Session::new(session.manager);
-  let arena = Bump::new();
-  let context = Context::new(&arena);
-  let mut analyzer = Analyzer::new(program, &session, &context);
+
+  let mut analyzer = Analyzer::new(program, &session);
   let translation_unit = analyzer.analyze();
-  if session.diagnosis.has_warnings() {
-    eprintln!("Analyzer warnings:");
-    session
-      .diagnosis
-      .warnings()
-      .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
-  }
   if session.diagnosis.has_errors() {
     eprintln!("Analyzer errors:");
     session
@@ -136,13 +119,21 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     println!("{translation_unit}");
     println!("Analyze succeeded.");
   }
+
+  if session.diagnosis.has_warnings() {
+    eprintln!("Analyzer warnings:");
+    session
+      .diagnosis
+      .warnings()
+      .iter()
+      .for_each(|e| eprintln!("{}", e.display_with(session.manager)));
+  }
   ASTDumper::dump(&translation_unit, &session).unwrap();
   if let Stage::Analyze = stage {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));
-  let session = Session::new(session.manager);
-  let mut builder = ModuleBuilder::new(&session, &context);
+  let mut builder = ModuleBuilder::new(&session);
   let m = builder.build(translation_unit);
   println!("{m:#?}");
 
@@ -238,7 +229,9 @@ int main(int argc, char **argv) { //
   fn test_str(source: &str) -> i32 {
     let mut manager = SourceManager::default();
     manager.add_string(source.into());
-    let session = Session::new(&manager);
+    let arena = Bump::new();
+    let context = Context::new(&arena);
+    let session = Session::new(&manager, &context);
     pipeline(session, Stage::Analyze, true)
   }
   #[test]

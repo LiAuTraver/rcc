@@ -116,22 +116,23 @@ where
   environment: Environment<'context>,
   current_function: Option<ad::Function<'context>>,
   session: &'session Session<'context, 'source>,
-  context: &'context Context<'context>,
 }
 
 impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   pub fn new(
     program: pd::Program,
     session: &'session Session<'context, 'source>,
-    context: &'context Context<'context>,
   ) -> Self {
     Self {
       program,
       session,
-      context,
       environment: Environment::default(),
       current_function: None,
     }
+  }
+
+  pub fn context(&self) -> &'context Context<'context> {
+    self.session.context
   }
 
   pub fn add_diag(&self, diag: Diag<'context>) {
@@ -175,7 +176,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
         pd::Modifier::Pointer(qualifiers) => {
           qualified_type = QualifiedType::new(
             qualifiers,
-            Type::Pointer(Pointer::new(qualified_type)).lookup(self.context),
+            Type::Pointer(Pointer::new(qualified_type)).lookup(self.context()),
           );
         },
         pd::Modifier::Array(array_modifier) => {
@@ -185,7 +186,9 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
               // check 1. it's a constant expression or not, 2. it's type should be integer type 3. should be non-negative
               let analyzed_expr = self.expression(expr).handle_with(
                 self,
-                ae::Expression::new_error_node(self.context.int_type().into()),
+                ae::Expression::new_error_node(
+                  self.context().int_type().into(),
+                ),
               );
 
               if analyzed_expr.qualified_type().is_scalar() {
@@ -223,7 +226,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
             },
           };
           qualified_type = Type::Array(Array::new(qualified_type, size))
-            .lookup(self.context)
+            .lookup(self.context())
             .into();
         },
         pd::Modifier::Function(function_signature) => {
@@ -233,7 +236,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
             is_variadic,
           } = function_signature;
           let analyzed_parameter_types = self.parse_parameter_types(parameters);
-          let p = self.context.intern_type(Type::<'context>::FunctionProto(
+          let p = self.context().intern_type(Type::<'context>::FunctionProto(
             FunctionProto::<'context>::new(
               qualified_type,
               analyzed_parameter_types.into_bump_slice(),
@@ -274,7 +277,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     let parameter_types = parameters
       .iter()
       .map(|param| param.symbol.borrow().qualified_type)
-      .collect_in::<ArenaVec<_>>(self.context.arena());
+      .collect_in::<ArenaVec<_>>(self.context().arena());
     let is_variadic = function_signature.is_variadic;
 
     let functionproto = Type::FunctionProto(FunctionProto::new(
@@ -283,7 +286,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       is_variadic,
     ));
 
-    Ok((self.context.intern_type(functionproto).into(), parameters))
+    Ok((self.context().intern_type(functionproto).into(), parameters))
   }
 
   fn parse_parameter_types(
@@ -312,7 +315,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
         } = declarator;
         self.apply_modifiers_for_varty(base_type, modifiers)
       })
-      .collect_in(self.context.arena())
+      .collect_in(self.context().arena())
   }
 
   fn parse_parameters(
@@ -360,7 +363,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   > {
     let qualified_type = self
       .get_type(declspecs.type_specifiers)
-      .handle_with(self, self.context.int_type().into())
+      .handle_with(self, self.context().int_type().into())
       .with_qualifiers(declspecs.qualifiers);
     let storage_class = declspecs.storage_class;
     let function_specifier = declspecs.function_specifiers;
@@ -380,25 +383,34 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     match type_specifiers.as_slice() {
       [TS::Nullptr] => Ok(
         Type::Primitive(Primitive::Nullptr)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
-      [TS::Void] =>
-        Ok(Type::Primitive(Primitive::Void).lookup(self.context).into()),
+      [TS::Void] => Ok(
+        Type::Primitive(Primitive::Void)
+          .lookup(self.context())
+          .into(),
+      ),
 
-      [TS::Bool] =>
-        Ok(Type::Primitive(Primitive::Bool).lookup(self.context).into()),
+      [TS::Bool] => Ok(
+        Type::Primitive(Primitive::Bool)
+          .lookup(self.context())
+          .into(),
+      ),
 
-      [TS::Char] =>
-        Ok(Type::Primitive(Primitive::Char).lookup(self.context).into()),
+      [TS::Char] => Ok(
+        Type::Primitive(Primitive::Char)
+          .lookup(self.context())
+          .into(),
+      ),
       [TS::Signed, TS::Char] => Ok(
         Type::Primitive(Primitive::SChar)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Unsigned, TS::Char] => Ok(
         Type::Primitive(Primitive::UChar)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
 
@@ -407,28 +419,37 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       | [TS::Signed, TS::Short]
       | [TS::Signed, TS::Short, TS::Int] => Ok(
         Type::Primitive(Primitive::Short)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Unsigned, TS::Short] | [TS::Unsigned, TS::Short, TS::Int] => Ok(
         Type::Primitive(Primitive::UShort)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
 
-      [TS::Int] | [TS::Signed] | [TS::Signed, TS::Int] =>
-        Ok(Type::Primitive(Primitive::Int).lookup(self.context).into()),
-      [TS::Unsigned] | [TS::Unsigned, TS::Int] =>
-        Ok(Type::Primitive(Primitive::UInt).lookup(self.context).into()),
+      [TS::Int] | [TS::Signed] | [TS::Signed, TS::Int] => Ok(
+        Type::Primitive(Primitive::Int)
+          .lookup(self.context())
+          .into(),
+      ),
+      [TS::Unsigned] | [TS::Unsigned, TS::Int] => Ok(
+        Type::Primitive(Primitive::UInt)
+          .lookup(self.context())
+          .into(),
+      ),
 
       [TS::Long]
       | [TS::Long, TS::Int]
       | [TS::Signed, TS::Long]
-      | [TS::Signed, TS::Long, TS::Int] =>
-        Ok(Type::Primitive(Primitive::Long).lookup(self.context).into()),
+      | [TS::Signed, TS::Long, TS::Int] => Ok(
+        Type::Primitive(Primitive::Long)
+          .lookup(self.context())
+          .into(),
+      ),
       [TS::Unsigned, TS::Long] | [TS::Unsigned, TS::Long, TS::Int] => Ok(
         Type::Primitive(Primitive::ULong)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
 
@@ -437,45 +458,45 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       | [TS::Signed, TS::Long, TS::Long]
       | [TS::Signed, TS::Long, TS::Long, TS::Int] => Ok(
         Type::Primitive(Primitive::LongLong)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Unsigned, TS::Long, TS::Long]
       | [TS::Unsigned, TS::Long, TS::Long, TS::Int] => Ok(
         Type::Primitive(Primitive::ULongLong)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
 
       [TS::Float] => Ok(
         Type::Primitive(Primitive::Float)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Double] => Ok(
         Type::Primitive(Primitive::Double)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Long, TS::Double] => Ok(
         Type::Primitive(Primitive::LongDouble)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
 
       [TS::Float, TS::Complex] => Ok(
         Type::Primitive(Primitive::ComplexFloat)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Double, TS::Complex] => Ok(
         Type::Primitive(Primitive::ComplexDouble)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
       [TS::Long, TS::Double, TS::Complex] => Ok(
         Type::Primitive(Primitive::ComplexLongDouble)
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ),
 
@@ -571,7 +592,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
     if name == "main" {
       Context::main_proto_validate(
-        self.context,
+        self.context(),
         qualified_type.unqualified_type.as_functionproto_unchecked(),
         function_specifier,
       )
@@ -625,7 +646,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
               let composite = Compatibility::composite_unchecked(
                 &prev_symbol_ref.borrow().qualified_type,
                 &qualified_type,
-                self.context,
+                self.context(),
               );
               let mut borrow_mut = prev_symbol_ref.borrow_mut();
               borrow_mut.qualified_type = composite;
@@ -837,7 +858,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
             prev.qualified_type = QualifiedType::composite_unchecked(
               &new_symbol.qualified_type,
               &prev.qualified_type,
-              self.context,
+              self.context(),
             );
 
             // dropped prev and new_symbol here
@@ -1000,7 +1021,9 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       pe::SizeOfKind::Expression(expression) => {
         let analyzed_expr = self.expression(*expression).handle_with(
           self,
-          ae::Expression::new_error_node(self.context.ulong_long_type().into()),
+          ae::Expression::new_error_node(
+            self.context().ulong_long_type().into(),
+          ),
         );
         let size = analyzed_expr.unqualified_type().size();
         Ok(ae::Expression::new_rvalue(
@@ -1010,7 +1033,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
               ..sizeof.span
             }),
           ),
-          self.context.ulong_long_type().into(),
+          self.context().ulong_long_type().into(),
         ))
       },
       pe::SizeOfKind::Type(unprocessed_type) => {
@@ -1028,7 +1051,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
             ae::ConstantLiteral::Integral(qualified_type.size().into())
               .into_with(sizeof.span),
           ),
-          self.context.ulong_long_type().into(),
+          self.context().ulong_long_type().into(),
         ))
       },
     }
@@ -1129,7 +1152,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       value: constant,
       span,
     } = constant;
-    let unqualified_type = constant.unqualified_type(self.context);
+    let unqualified_type = constant.unqualified_type(self.context());
 
     Ok(ae::Expression::new_rvalue(
       ae::Constant::new(constant, span).into(),
@@ -1204,27 +1227,27 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       (Type::Primitive(Primitive::Void), Type::Primitive(Primitive::Void)) =>
         Ok(ae::Expression::new_rvalue(
           ae::Ternary::new(condition, then_expr, else_expr, span).into(),
-          self.context.void_type().into(),
+          self.context().void_type().into(),
         )),
       (Type::Primitive(Primitive::Void), _) => Ok(ae::Expression::new_rvalue(
         ae::Ternary::new(
           condition,
           then_expr,
-          ae::Expression::void_conversion(else_expr, self.context),
+          ae::Expression::void_conversion(else_expr, self.context()),
           span,
         )
         .into(),
-        self.context.void_type().into(),
+        self.context().void_type().into(),
       )),
       (_, Type::Primitive(Primitive::Void)) => Ok(ae::Expression::new_rvalue(
         ae::Ternary::new(
           condition,
-          ae::Expression::void_conversion(then_expr, self.context),
+          ae::Expression::void_conversion(then_expr, self.context()),
           else_expr,
           span,
         )
         .into(),
-        self.context.void_type().into(),
+        self.context().void_type().into(),
       )),
       // both arithmetic -> usual arithmetic conversion
       (left_type, right_type)
@@ -1234,7 +1257,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           ae::Expression::usual_arithmetic_conversion(
             then_expr,
             else_expr,
-            self.context,
+            self.context(),
           )?;
         Ok(ae::Expression::new_rvalue(
           ae::Ternary::new(condition, then_converted, else_converted, span)
@@ -1250,10 +1273,10 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           let qualified_type = QualifiedType::composite_unchecked(
             left_pointee,
             right_pointee,
-            self.context,
+            self.context(),
           );
           let result_type = Type::Pointer(Pointer::new(qualified_type))
-            .lookup(self.context)
+            .lookup(self.context())
             .into();
           Ok(ae::Expression::new_rvalue(
             ae::Ternary::new(condition, then_expr, else_expr, span).into(),
@@ -1294,11 +1317,11 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     let analyzed_array = self
       .expression(*pe_array)?
       .lvalue_conversion()
-      .decay(self.context);
+      .decay(self.context());
     let analyzed_index = self
       .expression(*pe_index)?
       .lvalue_conversion()
-      .decay(self.context);
+      .decay(self.context());
 
     if !analyzed_index.unqualified_type().is_integer() {
       Err(
@@ -1309,7 +1332,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     }
 
     let analyzed_index =
-      analyzed_index.ptrdiff_conversion_unchecked(self.context);
+      analyzed_index.ptrdiff_conversion_unchecked(self.context());
 
     if let Type::Pointer(ptr) = analyzed_array.unqualified_type() {
       let elem_type = ptr.pointee;
@@ -1343,7 +1366,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     assert!(matches!(operator, Operator::Plus | Operator::Minus));
-    let operand = operand.lvalue_conversion().decay(self.context);
+    let operand = operand.lvalue_conversion().decay(self.context());
 
     if !operand.unqualified_type().is_arithmetic() {
       Err(
@@ -1353,7 +1376,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       )
     } else {
       let converted_operand =
-        operand.usual_arithmetic_conversion_unary(self.context)?;
+        operand.usual_arithmetic_conversion_unary(self.context())?;
       let expr_type = *converted_operand.qualified_type();
       Ok(ae::Expression::new_rvalue(
         ae::Unary::prefix(operator, converted_operand, span).into(),
@@ -1374,7 +1397,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       operator,
       Operator::PlusPlus | Operator::MinusMinus
     ));
-    let operand = operand.decay(self.context);
+    let operand = operand.decay(self.context());
     if operand.value_category() != ae::ValueCategory::LValue {
       Err(
         ExprNotAssignable(operand.to_string())
@@ -1390,7 +1413,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     } else {
       // checked version would assert and panic if the operand is lvalue.
       let converted_operand =
-        operand.usual_arithmetic_conversion_unary_unchecked(self.context)?;
+        operand.usual_arithmetic_conversion_unary_unchecked(self.context())?;
       let expr_type = *converted_operand.qualified_type();
       Ok(ae::Expression::new_rvalue(
         ae::Unary::new(operator, converted_operand, kind, span).into(),
@@ -1410,7 +1433,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Tilde);
-    let operand = operand.lvalue_conversion().decay(self.context);
+    let operand = operand.lvalue_conversion().decay(self.context());
 
     if !operand.unqualified_type().is_integer() {
       Err(
@@ -1420,7 +1443,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       )
     } else {
       let converted_operand =
-        operand.usual_arithmetic_conversion_unary(self.context)?;
+        operand.usual_arithmetic_conversion_unary(self.context())?;
       let expr_type = *converted_operand.qualified_type();
       Ok(ae::Expression::new_rvalue(
         ae::Unary::prefix(operator, converted_operand, span).into(),
@@ -1437,12 +1460,12 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Not);
-    let operand = operand.lvalue_conversion().decay(self.context);
+    let operand = operand.lvalue_conversion().decay(self.context());
 
-    let converted_operand = operand.conditional_conversion(self.context)?;
+    let converted_operand = operand.conditional_conversion(self.context())?;
     Ok(ae::Expression::new_rvalue(
       ae::Unary::prefix(operator, converted_operand, span).into(),
-      self.context.bool_type().into(),
+      self.context().bool_type().into(),
     ))
   }
 
@@ -1476,7 +1499,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       Ok(ae::Expression::new_rvalue(
         ae::Unary::prefix(operator, operand, span).into(),
         Type::Pointer(Pointer::new(pointee))
-          .lookup(self.context)
+          .lookup(self.context())
           .into(),
       ))
     }
@@ -1494,7 +1517,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Star);
 
-    let operand = operand.lvalue_conversion().decay(self.context);
+    let operand = operand.lvalue_conversion().decay(self.context());
 
     if !operand.unqualified_type().is_pointer() {
       Err(
@@ -1506,7 +1529,8 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
-    if ::std::ptr::eq(pointee_type.unqualified_type, self.context.void_type()) {
+    if ::std::ptr::eq(pointee_type.unqualified_type, self.context().void_type())
+    {
       Err(
         DerefVoidPtr(operand.to_string())
           .into_with(Severity::Error)
@@ -1540,7 +1564,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     }
     let assigned_expr = right
       .lvalue_conversion()
-      .decay(self.context)
+      .decay(self.context())
       .assignment_conversion(left.qualified_type())?;
     let expr_type = *left.qualified_type();
     Ok(ae::Expression::new_rvalue(
@@ -1561,14 +1585,14 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     right: ae::Expression<'context>,
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
-    let left = left.lvalue_conversion().decay(self.context);
-    let right = right.lvalue_conversion().decay(self.context);
+    let left = left.lvalue_conversion().decay(self.context());
+    let right = right.lvalue_conversion().decay(self.context());
 
-    let lhs = left.conditional_conversion(self.context)?;
-    let rhs = right.conditional_conversion(self.context)?;
+    let lhs = left.conditional_conversion(self.context())?;
+    let rhs = right.conditional_conversion(self.context())?;
     Ok(ae::Expression::new_rvalue(
       ae::Binary::new(operator, lhs, rhs, span).into(),
-      self.context.bool_type().into(), // todo: this should be an `int` according to standard(?)
+      self.context().bool_type().into(), // todo: this should be an `int` according to standard(?)
     ))
   }
 
@@ -1582,19 +1606,23 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     right: ae::Expression<'context>,
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
-    let left = left.lvalue_conversion().decay(self.context);
-    let right = right.lvalue_conversion().decay(self.context);
+    let left = left.lvalue_conversion().decay(self.context());
+    let right = right.lvalue_conversion().decay(self.context());
 
     // Path A
     if left.unqualified_type().is_arithmetic()
       && right.unqualified_type().is_arithmetic()
     {
       let (lhs, rhs, _common_type) =
-        ae::Expression::usual_arithmetic_conversion(left, right, self.context)?;
+        ae::Expression::usual_arithmetic_conversion(
+          left,
+          right,
+          self.context(),
+        )?;
 
       return Ok(ae::Expression::new_rvalue(
         ae::Binary::new(operator, lhs, rhs, span).into(),
-        self.context.bool_type().into(), // ditto
+        self.context().bool_type().into(), // ditto
       ));
     }
     todo!()
@@ -1607,8 +1635,8 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     right: ae::Expression<'context>,
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
-    let left = left.lvalue_conversion().decay(self.context);
-    let right = right.lvalue_conversion().decay(self.context);
+    let left = left.lvalue_conversion().decay(self.context());
+    let right = right.lvalue_conversion().decay(self.context());
 
     match (left.unqualified_type(), right.unqualified_type()) {
       (l, r) if l.is_pointer() || r.is_pointer() =>
@@ -1643,7 +1671,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     );
 
     let (lhs, rhs, result_type) =
-      ae::Expression::usual_arithmetic_conversion(left, right, self.context)?;
+      ae::Expression::usual_arithmetic_conversion(left, right, self.context())?;
 
     Ok(ae::Expression::new_rvalue(
       ae::Binary::new(operator, lhs, rhs, span).into(),
@@ -1669,7 +1697,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
         match Compatibility::compatible(&left_ptr.pointee, &right_ptr.pointee) {
           true => Ok(ae::Expression::new_rvalue(
             ae::Binary::new(operator, left, right, span).into(),
-            self.context.ptrdiff_type().into(), // no qual for pointer difference
+            self.context().ptrdiff_type().into(), // no qual for pointer difference
           )),
           false => Err(
             IncompatiblePointerTypes(
@@ -1684,11 +1712,11 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       (Type::Primitive(lhs), Type::Pointer(ptr))
         if lhs.is_integer() && operator == Operator::Plus =>
       {
-        let ptrty = right.unqualified_type().clone().lookup(self.context);
+        let ptrty = right.unqualified_type().clone().lookup(self.context());
         Ok(ae::Expression::new_rvalue(
           ae::Binary::new(
             operator,
-            left.ptrdiff_conversion_unchecked(self.context),
+            left.ptrdiff_conversion_unchecked(self.context()),
             right,
             span,
           )
@@ -1701,12 +1729,12 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
         if rhs.is_integer()
           && matches!(operator, Operator::Plus | Operator::Minus) =>
       {
-        let ptrty = left.unqualified_type().clone().lookup(self.context);
+        let ptrty = left.unqualified_type().clone().lookup(self.context());
         Ok(ae::Expression::new_rvalue(
           ae::Binary::new(
             operator,
             left,
-            right.ptrdiff_conversion_unchecked(self.context),
+            right.ptrdiff_conversion_unchecked(self.context()),
             span,
           )
           .into(),
@@ -1721,7 +1749,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
         ) =>
         Ok(ae::Expression::new_rvalue(
           ae::Binary::new(operator, left, right, span).into(),
-          self.context.bool_type().into(),
+          self.context().bool_type().into(),
         )),
       _ => Err(
         InvalidOprand(
@@ -1745,8 +1773,8 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     right: ae::Expression<'context>,
     span: SourceSpan,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
-    let left = left.lvalue_conversion().decay(self.context);
-    let right = right.lvalue_conversion().decay(self.context);
+    let left = left.lvalue_conversion().decay(self.context());
+    let right = right.lvalue_conversion().decay(self.context());
 
     if !left.unqualified_type().is_integer()
       || !right.unqualified_type().is_integer()
@@ -1762,7 +1790,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     }
 
     let (lhs, rhs, result_type) =
-      ae::Expression::usual_arithmetic_conversion(left, right, self.context)?;
+      ae::Expression::usual_arithmetic_conversion(left, right, self.context())?;
 
     Ok(ae::Expression::new_rvalue(
       ae::Binary::new(operator, lhs, rhs, span).into(),
@@ -1782,12 +1810,12 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
     let lhs = left
       .lvalue_conversion()
-      .decay(self.context)
-      .promote(self.context);
+      .decay(self.context())
+      .promote(self.context());
     let rhs = right
       .lvalue_conversion()
-      .decay(self.context)
-      .promote(self.context);
+      .decay(self.context())
+      .promote(self.context());
 
     if !lhs.unqualified_type().is_integer()
       || !rhs.unqualified_type().is_integer()
@@ -1951,7 +1979,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           analyzed_expr.unwrap_unchecked()
         }
         .lvalue_conversion()
-        .decay(self.context)
+        .decay(self.context())
         .assignment_conversion(&return_type)?;
         Ok(astmt::Return::new(Some(a), span))
       },
@@ -1970,10 +1998,10 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     } = if_stmt;
     let analyzed_condition = self
       .expression(condition)
-      .and_then(|e| e.conditional_conversion(self.context))
+      .and_then(|e| e.conditional_conversion(self.context()))
       .handle_with(
         self,
-        ae::Expression::new_error_node(self.context.bool_type().into()),
+        ae::Expression::new_error_node(self.context().bool_type().into()),
       );
     let analyzed_then_branch =
       self.statement(*then_branch).handle_or_default(self).into();
@@ -2000,10 +2028,10 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     } = while_stmt;
     let analyzed_condition = self
       .expression(condition)
-      .and_then(|e| e.conditional_conversion(self.context))
+      .and_then(|e| e.conditional_conversion(self.context()))
       .handle_with(
         self,
-        ae::Expression::new_error_node(self.context.bool_type().into()),
+        ae::Expression::new_error_node(self.context().bool_type().into()),
       );
     let analyzed_body = self.statement(*body).handle_or_default(self).into();
     Ok(astmt::While::new(
@@ -2027,10 +2055,10 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     let analyzed_body = self.statement(*body).handle_or_default(self).into();
     let analyzed_condition = self
       .expression(condition)
-      .and_then(|e| e.conditional_conversion(self.context))
+      .and_then(|e| e.conditional_conversion(self.context()))
       .handle_with(
         self,
-        ae::Expression::new_error_node(self.context.bool_type().into()),
+        ae::Expression::new_error_node(self.context().bool_type().into()),
       );
     Ok(astmt::DoWhile::new(
       analyzed_body,
@@ -2057,7 +2085,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     let analyzed_condition = condition.map(|cond| {
       self.expression(cond).handle_with(
         self,
-        ae::Expression::new_error_node(self.context.bool_type().into()),
+        ae::Expression::new_error_node(self.context().bool_type().into()),
       )
     });
     let analyzed_increment =
@@ -2098,7 +2126,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       },
       Err(e) => {
         self.add_diag(e);
-        ae::Expression::new_error_node(self.context.int_type().into())
+        ae::Expression::new_error_node(self.context().int_type().into())
       },
     };
     let analyzed_cases = cases
@@ -2124,7 +2152,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     let ps::Case { body, value, span } = case;
     let analyzed_value = self.expression(value).handle_with(
       self,
-      ae::Expression::new_error_node(self.context.int_type().into()),
+      ae::Expression::new_error_node(self.context().int_type().into()),
     );
     let analyzed_body = self.statements(body);
 

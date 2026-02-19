@@ -23,7 +23,6 @@ where
   'source: 'context,
 {
   session: &'session Session<'context, 'source>,
-  context: &'context Context<'context>,
   /// counter for generating unique temporary names
   temp_counter: usize,
   /// counter for generating unique label names
@@ -35,13 +34,9 @@ where
   locals: HashMap<SmallString, Operand>,
 }
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
-  pub fn new(
-    session: &'session Session<'context, 'source>,
-    context: &'context Context<'context>,
-  ) -> Self {
+  pub fn new(session: &'session Session<'context, 'source>) -> Self {
     Self {
       session,
-      context,
       label_counter: 0,
       temp_counter: 0,
       current_block: None,
@@ -71,9 +66,9 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     }
   }
 
-  fn new_temp(&mut self) -> usize {
+  fn reg(&mut self) -> Operand {
     self.temp_counter += 1;
-    self.temp_counter
+    Operand::Reg(self.temp_counter)
   }
 }
 
@@ -114,7 +109,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 
     assert!(
       self.locals.is_empty() && self.current_block.is_none(),
-      "not implemented for local func def!"
+      "not implemented for local func decl!"
     );
 
     self.locals.clear();
@@ -125,7 +120,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
       .into_iter()
       .map(|p| {
         let sym = p.symbol.borrow();
-        let op = Operand::Reg(self.new_temp()); // adapt to your Operand variants
+        let op = self.reg();
         self.locals.insert(sym.name.clone(), op.clone());
         op
       })
@@ -168,45 +163,47 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   }
 
   fn statement(&mut self, statement: astmt::Statement) {
+    #[allow(clippy::upper_case_acronyms)]
+    type STMT<'a> = astmt::Statement<'a>;
     match statement {
-      astmt::Statement::Empty(_) => (),
-      astmt::Statement::Return(return_stmt) => todo!(),
-      astmt::Statement::Expression(expression) => todo!(),
-      astmt::Statement::Declaration(external_declaration) => todo!(),
-      astmt::Statement::Compound(compound) => todo!(),
-      astmt::Statement::If(if_stmt) => todo!(),
-      astmt::Statement::While(while_stmt) => todo!(),
-      astmt::Statement::DoWhile(do_while) => todo!(),
-      astmt::Statement::For(for_stmt) => todo!(),
-      astmt::Statement::Switch(switch) => todo!(),
-      astmt::Statement::Goto(goto) => todo!(),
-      astmt::Statement::Label(label) => todo!(),
-      astmt::Statement::Break(break_stmt) => todo!(),
-      astmt::Statement::Continue(continue_stmt) => todo!(),
+      STMT::Empty(_) => (),
+      STMT::Return(return_stmt) => todo!(),
+      STMT::Expression(expression) => todo!(),
+      STMT::Declaration(external_declaration) => todo!(),
+      STMT::Compound(compound) => todo!(),
+      STMT::If(if_stmt) => todo!(),
+      STMT::While(while_stmt) => todo!(),
+      STMT::DoWhile(do_while) => todo!(),
+      STMT::For(for_stmt) => todo!(),
+      STMT::Switch(switch) => todo!(),
+      STMT::Goto(goto) => todo!(),
+      STMT::Label(label) => todo!(),
+      STMT::Break(break_stmt) => todo!(),
+      STMT::Continue(continue_stmt) => todo!(),
     }
   }
 }
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   fn expression(&mut self, expression: ae::Expression) -> Option<Operand> {
     let (raw_expr, qualified_type, value_category) = expression.destructure();
+    type RE<'a> = ae::RawExpr<'a>;
     match raw_expr {
-      ae::RawExpr::Empty(_) => None,
-      ae::RawExpr::Constant(constant) =>
+      RE::Empty(_) => None,
+      RE::Constant(constant) =>
         self.constant(constant, qualified_type, value_category),
-      ae::RawExpr::Unary(unary) => todo!(),
-      ae::RawExpr::Binary(binary) => todo!(),
-      ae::RawExpr::Call(call) =>
-        self.call(call, qualified_type, value_category),
-      ae::RawExpr::Paren(paren) => todo!(),
-      ae::RawExpr::MemberAccess(member_access) => todo!(),
-      ae::RawExpr::Ternary(ternary) => todo!(),
-      ae::RawExpr::SizeOf(size_of) => todo!(),
-      ae::RawExpr::CStyleCast(cstyle_cast) => todo!(),
-      ae::RawExpr::ArraySubscript(array_subscript) => todo!(),
-      ae::RawExpr::CompoundLiteral(compound_literal) => todo!(),
-      ae::RawExpr::Variable(variable) => todo!(),
-      ae::RawExpr::ImplicitCast(implicit_cast) => todo!(),
-      ae::RawExpr::Assignment(assignment) => todo!(),
+      RE::Unary(unary) => todo!(),
+      RE::Binary(binary) => todo!(),
+      RE::Call(call) => self.call(call, qualified_type, value_category),
+      RE::Paren(paren) => todo!(),
+      RE::MemberAccess(member_access) => todo!(),
+      RE::Ternary(ternary) => todo!(),
+      RE::SizeOf(size_of) => todo!(),
+      RE::CStyleCast(cstyle_cast) => todo!(),
+      RE::ArraySubscript(array_subscript) => todo!(),
+      RE::CompoundLiteral(compound_literal) => todo!(),
+      RE::Variable(variable) => todo!(),
+      RE::ImplicitCast(implicit_cast) => todo!(),
+      RE::Assignment(assignment) => todo!(),
     }
   }
 
@@ -234,7 +231,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     let retreg = if qualified_type.is_void() {
       None
     } else {
-      Some(Operand::Reg(self.new_temp()))
+      Some(self.reg())
     };
     self.emit(
       instruction::Call::new(

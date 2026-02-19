@@ -9,7 +9,7 @@ use super::{
 use crate::diagnosis::{
   DiagData::MainFunctionProtoMismatch, DiagMeta, Severity,
 };
-
+#[derive(Debug)]
 pub struct Context<'context> {
   arena: &'context Bump,
   interner: RefCell<HashSet<&'context Type<'context>>>,
