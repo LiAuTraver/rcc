@@ -1,7 +1,7 @@
 use ::rcc_utils::SmallString;
 
 // use super::Placeholder as Empty;
-use crate::common::SourceSpan;
+use crate::{common::SourceSpan, common::StrRef};
 
 // #[derive(Debug)]
 // pub enum RawStmt<'context, StmtTy, DeclTy, ExprTy, ExprCaseTy = ExprTy> {
@@ -117,14 +117,14 @@ pub struct RawDefault<StmtTy> {
 
 #[derive(Debug)]
 pub struct RawLabel<'context, StmtTy> {
-  pub name: &'context str,
+  pub name: StrRef<'context>,
   pub statement: Box<StmtTy>,
   pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct RawGoto<'context> {
-  pub label: &'context str,
+  pub label: StrRef<'context>,
   pub span: SourceSpan,
 }
 
@@ -147,7 +147,7 @@ pub struct RawContinue {
 }
 
 impl<'context> RawGoto<'context> {
-  pub fn new(label: &'context str, span: SourceSpan) -> Self {
+  pub fn new(label: StrRef<'context>, span: SourceSpan) -> Self {
     Self { label, span }
   }
 }
@@ -185,7 +185,11 @@ impl<StmtTy, ExprTy, ExprCaseTy> RawSwitch<StmtTy, ExprTy, ExprCaseTy> {
 }
 
 impl<'context, StmtTy> RawLabel<'context, StmtTy> {
-  pub fn new(name: &'context str, statement: StmtTy, span: SourceSpan) -> Self {
+  pub fn new(
+    name: StrRef<'context>,
+    statement: StmtTy,
+    span: SourceSpan,
+  ) -> Self {
     Self {
       name,
       statement: Box::new(statement),
@@ -292,17 +296,6 @@ impl RawContinue {
   }
 }
 
-// impl<'context, StmtTy, DeclTy, ExprTy>
-//   RawStmt<'context, StmtTy, DeclTy, ExprTy>
-// {
-//   pub fn new_loop_dummy_identifier(str: &'static str) -> SmallString {
-//     static LOOP_LABEL_COUNTER: ::std::sync::atomic::AtomicUsize =
-//       ::std::sync::atomic::AtomicUsize::new(0);
-//     let id =
-//       LOOP_LABEL_COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
-//     SmallString::from(format!("{}_{}", str, id))
-//   }
-// }
 #[allow(clippy::write_with_newline)]
 mod fmt {
   use ::std::fmt::Display;

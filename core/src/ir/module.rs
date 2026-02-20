@@ -1,7 +1,10 @@
 use ::rcc_utils::SmallString;
 
 use super::instruction::{Instruction, Operand};
-use crate::types::{Constant, QualifiedType};
+use crate::{
+  common::StrRef,
+  types::{Constant, QualifiedType},
+};
 
 /// keep it an alias type for latter convenience if choosing to optimize a lot
 /// (e.g., switch to VecDeque, LinkedList or intrusive list. since now it's better for me to focus on the compiler design, not ADT.)
@@ -19,7 +22,7 @@ pub struct Module<'context> {
 /// **Global** function in TAC-SSA form
 #[derive(Debug)]
 pub struct Function<'context> {
-  pub name: SmallString,
+  pub name: StrRef<'context>,
   pub params: Vec<Operand<'context>>,
   pub blocks: ilist_type<BasicBlock<'context>>,
   pub return_type: QualifiedType<'context>,
@@ -29,7 +32,7 @@ pub struct Function<'context> {
 /// **Global** Variable. Non-static local variable won't be stored here, but exists as [`Operand`].
 #[derive(Debug)]
 pub struct Variable<'context> {
-  pub name: SmallString,
+  pub name: StrRef<'context>,
   pub qualified_type: QualifiedType<'context>,
   pub initializer: Option<Initializer<'context>>,
 }

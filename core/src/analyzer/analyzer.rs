@@ -1,7 +1,6 @@
 use ::bumpalo::collections::CollectIn;
 use ::rcc_utils::{
-  IntoWith, SmallString, contract_assert, contract_violation,
-  not_implemented_feature,
+  IntoWith, contract_assert, contract_violation, not_implemented_feature,
 };
 
 use crate::{
@@ -12,7 +11,7 @@ use crate::{
   },
   common::{
     Environment, Integral, Operator, OperatorCategory, SourceSpan, Storage,
-    Symbol, VarDeclKind,
+    StrRef, Symbol, VarDeclKind,
   },
   diagnosis::{
     Diag,
@@ -154,13 +153,6 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     self.environment.exit();
     translation_unit
   }
-
-  pub fn unnamed_placeholder() -> SmallString {
-    static COUNTER: ::std::sync::atomic::AtomicUsize =
-      ::std::sync::atomic::AtomicUsize::new(0);
-    let id = COUNTER.fetch_add(1, ::std::sync::atomic::Ordering::Relaxed);
-    format!("<unnamed_{}>", id).into()
-  }
 }
 impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
   /// TODO: caller shoould check whether the `restrict` is valid.
@@ -202,6 +194,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
                           ae::ConstantLiteral::Floating(_) => unreachable!(),
                           ae::ConstantLiteral::String(_) => unreachable!(),
                           ae::ConstantLiteral::Address(_) => unreachable!(),
+                          ae::ConstantLiteral::Character(_) => unreachable!(),
                           ae::ConstantLiteral::Nullptr(_) => 0,
                         },
                       )
@@ -346,7 +339,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
         let symbol = Symbol::new_ref(Symbol::new(
           qualified_type,
           Storage::Automatic,
-          name.unwrap_or_else(Self::unnamed_placeholder),
+          name.unwrap_or_else(|| self.session.context.unnamed_str()),
           VarDeclKind::Declaration,
         ));
         ad::Parameter::new(symbol, span)
@@ -356,7 +349,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn parse_declspecs(
     &self,
-    declspecs: pd::DeclSpecs,
+    declspecs: pd::DeclSpecs<'context>,
   ) -> Result<
     (FunctionSpecifier, Option<Storage>, QualifiedType<'context>),
     Diag<'context>,
@@ -373,7 +366,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn get_type(
     &self,
-    mut type_specifiers: Vec<pd::TypeSpecifier>,
+    mut type_specifiers: Vec<pd::TypeSpecifier<'context>>,
   ) -> Result<QualifiedType<'context>, Diag<'context>> {
     assert!(!type_specifiers.is_empty());
     assert!(type_specifiers.len() <= 5); // unsigned long long int complex (integer complex not in standard) is the max
@@ -590,7 +583,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       .apply_modifiers_for_functiondecl(return_type, modifiers)
       .shall_ok("failed to apply modifiers for function declarator");
 
-    if name == "main" {
+    if name.as_str() == "main" {
       Context::main_proto_validate(
         self.context(),
         qualified_type.unqualified_type.as_functionproto_unchecked(),
@@ -608,24 +601,16 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
       Declaration
     };
 
-    let symbol = match self.environment.find(&name) {
-      None => Symbol::new_ref(Symbol::new(
-        qualified_type,
-        storage,
-        name.clone(),
-        declkind,
-      )),
+    let symbol = match self.environment.find(name.as_str()) {
+      None =>
+        Symbol::new_ref(Symbol::new(qualified_type, storage, name, declkind)),
       Some(prev_symbol_ref) => {
         let borrow = prev_symbol_ref.borrow();
         if !Compatibility::compatible(&borrow.qualified_type, &qualified_type) {
           Err(
-            IncompatibleType(
-              name.to_string(),
-              borrow.qualified_type,
-              qualified_type,
-            )
-            .into_with(Severity::Error)
-            .into_with(span),
+            IncompatibleType(name, borrow.qualified_type, qualified_type)
+              .into_with(Severity::Error)
+              .into_with(span),
           )?;
         }
 
@@ -655,7 +640,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
             } else {
               Err(
                 IncompatibleType(
-                  name.to_string(),
+                  name,
                   prev_symbol_ref.borrow().qualified_type,
                   qualified_type,
                 )
@@ -719,7 +704,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           // unnamed parameter - do nothing currently
         } else {
           self.environment.declare_symbol(
-            parameter.symbol.borrow().name.clone(),
+            parameter.symbol.borrow().name,
             parameter.symbol.clone(),
           );
         }
@@ -740,10 +725,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
     function.gotos.iter().for_each(|goto| {
       if !function.labels.contains(goto) {
-        contract_violation!(
-          "goto label '{}' not found; this should be handled in parser",
-          goto
-        );
+        self.add_error(LabelNotFound(goto), function.span);
       }
     });
     Ok(function)
@@ -788,17 +770,12 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     });
 
     let vardef = match self.environment.is_global() {
-      true => self.global_vardef(
-        storage,
-        qualified_type,
-        name.clone(),
-        initializer,
-        span,
-      ),
+      true =>
+        self.global_vardef(storage, qualified_type, name, initializer, span),
       false => self.local_vardef(
         storage.unwrap_or(Storage::Automatic),
         qualified_type,
-        name.clone(),
+        name,
         initializer,
         span,
       ),
@@ -811,14 +788,15 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     // prev: declaration -- update to definition
     // prev: typedef w/ current vardef or vice versa -> override
     // prev and cur all typedef -> if all same nothing, otherwise error
-    if let Some(prev_symbol_ref) = self.environment.shallow_find(&name) {
+    if let Some(prev_symbol_ref) = self.environment.shallow_find(name.as_str())
+    {
       if !Compatibility::compatible(
         &prev_symbol_ref.borrow().qualified_type,
         &vardef.symbol.borrow().qualified_type,
       ) {
         Err(
           IncompatibleType(
-            name.into(),
+            name,
             prev_symbol_ref.borrow().qualified_type,
             vardef.symbol.borrow().qualified_type,
           )
@@ -925,7 +903,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     &self,
     storage: Option<Storage>,
     qualified_type: QualifiedType<'context>,
-    name: SmallString,
+    name: StrRef<'context>,
     initializer: Option<ad::Initializer<'context>>,
     span: SourceSpan,
   ) -> Result<ad::VarDef<'context>, Diag<'context>> {
@@ -976,7 +954,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
     &self,
     storage: Storage,
     qualified_type: QualifiedType<'context>,
-    name: SmallString,
+    name: StrRef<'context>,
     initializer: Option<ad::Initializer<'context>>,
     span: SourceSpan,
   ) -> Result<ad::VarDef<'context>, Diag<'context>> {
@@ -1125,10 +1103,10 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
 
   fn variable(
     &self,
-    variable: pe::Variable,
+    variable: pe::Variable<'context>,
   ) -> Result<ae::Expression<'context>, Diag<'context>> {
-    let symbol = self.environment.find(variable.name).ok_or(
-      UndefinedVariable(variable.name.into())
+    let symbol = self.environment.find(variable.name.as_str()).ok_or(
+      UndefinedVariable(variable.name)
         .into_with(Severity::Error)
         .into_with(variable.span),
     )?;
@@ -2207,7 +2185,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           .as_mut()
           .unwrap()
           .labels
-          .insert(name.into())
+          .insert((*name).into())
         {
           true => Ok(astmt::Label::new(
             name,
@@ -2215,7 +2193,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
             span,
           )),
           false => Err(
-            DuplicateLabel(name.into())
+            DuplicateLabel(name)
               .into_with(Severity::Error)
               .into_with(span),
           ),
@@ -2238,7 +2216,7 @@ impl<'session, 'context, 'source> Analyzer<'session, 'context, 'source> {
           .as_mut()
           .unwrap()
           .gotos
-          .insert(goto.label.into());
+          .insert((*goto.label).into());
         Ok(astmt::Goto::new(goto.label, goto.span))
       },
     }

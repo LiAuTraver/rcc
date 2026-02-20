@@ -1,27 +1,27 @@
-use ::rcc_utils::{SmallString, shared_ptr, weak_ptr};
+use ::rcc_utils::{shared_ptr, weak_ptr};
 use ::std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
   rc::Rc,
 };
 
-use super::Storage;
+use super::{Storage, StrRef};
 use crate::types::QualifiedType;
 
 pub type SymbolRef<'context> = shared_ptr<Symbol<'context>>;
 pub type WeakSymbolRef<'context> = weak_ptr<Symbol<'context>>;
 
 /// a lexical scope.
-type ScopeAssoc<T> = HashMap<SmallString, shared_ptr<T>>;
+type ScopeAssoc<'context, T> = HashMap<StrRef<'context>, shared_ptr<T>>;
 /// A lexical scope stack.
 #[derive(Debug)]
-pub struct Scope<T> {
-  scopes: Vec<ScopeAssoc<T>>,
+pub struct Scope<'context, T> {
+  scopes: Vec<ScopeAssoc<'context, T>>,
 }
 /// only tracks names
 #[derive(Debug, Default)]
-pub struct UnitScope {
-  scopes: Vec<HashSet<SmallString>>,
+pub struct UnitScope<'context> {
+  scopes: Vec<HashSet<StrRef<'context>>>,
 }
 #[derive(Debug, Eq, PartialEq, Clone, Copy, ::strum_macros::Display)]
 pub enum VarDeclKind {
@@ -68,13 +68,13 @@ pub struct Symbol<'context> {
   ///   or one [`VarDeclKind::Tentative`] (one tantative counts as definition), add it as definition
   /// - else if only has [`Storage::Extern`] and [`VarDeclKind::Declaration`], it's declaration and let linker handle it.
   pub storage_class: Storage,
-  pub name: SmallString,
+  pub name: StrRef<'context>,
   pub declkind: VarDeclKind,
 }
 #[derive(Debug, Default)]
 pub struct Environment<'context> {
-  symbols: Scope<Symbol<'context>>,
-  cache: RefCell<HashMap<SmallString, WeakSymbolRef<'context>>>,
+  symbols: Scope<'context, Symbol<'context>>,
+  cache: RefCell<HashMap<StrRef<'context>, WeakSymbolRef<'context>>>,
 }
 impl<'context> Environment<'context> {
   pub fn new() -> Self {
@@ -97,7 +97,7 @@ impl<'context> Environment<'context> {
   }
 
   /// look up symbol and potentially cache it
-  pub fn find(&self, name: &str) -> Option<SymbolRef<'context>> {
+  pub fn find(&self, name: StrRef<'context>) -> Option<SymbolRef<'context>> {
     if let Some(sym) = self.cache.borrow().get(name) {
       // upgrade weak ref, this already handles whether the ref is dead or not
       return sym.upgrade();
@@ -105,22 +105,19 @@ impl<'context> Environment<'context> {
 
     let sym = self.symbols.get(name);
     if let Some(s) = &sym {
-      self
-        .cache
-        .borrow_mut()
-        .insert(name.into(), Rc::downgrade(s));
+      self.cache.borrow_mut().insert(name, Rc::downgrade(s));
     }
     sym
   }
 
   // we dont provide cache layer for shallow find, since it'll contain non-local symbols
-  pub fn shallow_find(&self, name: &str) -> Option<SymbolRef<'context>> {
+  pub fn shallow_find(
+    &self,
+    name: StrRef<'context>,
+  ) -> Option<SymbolRef<'context>> {
     let sym = self.symbols.shallow_get(name);
     if let Some(s) = &sym {
-      self
-        .cache
-        .borrow_mut()
-        .insert(name.into(), Rc::downgrade(s));
+      self.cache.borrow_mut().insert(name, Rc::downgrade(s));
     }
     sym
   }
@@ -128,15 +125,15 @@ impl<'context> Environment<'context> {
   /// note: if the symbol already exists, it'll be updated.
   pub fn declare_symbol(
     &mut self,
-    name: SmallString,
+    name: StrRef<'context>,
     symbol: SymbolRef<'context>,
   ) -> SymbolRef<'context> {
     // overwrite cache
     self
       .cache
       .borrow_mut()
-      .insert(name.clone(), Rc::downgrade(&symbol));
-    self.symbols.declare(name, symbol.clone())
+      .insert(name.as_str(), Rc::downgrade(&symbol));
+    self.symbols.declare(name.as_str(), symbol.clone())
   }
 }
 impl<'context> Symbol<'context> {
@@ -153,21 +150,21 @@ impl<'context> Symbol<'context> {
   pub fn new(
     qualified_type: QualifiedType<'context>,
     storage_class: Storage,
-    name: SmallString,
+    name: StrRef<'context>,
     declkind: VarDeclKind,
   ) -> Self {
     Self {
       qualified_type,
       storage_class,
       declkind,
-      name,
+      name: name.as_str(),
     }
   }
 
   pub fn decl(
     qualified_type: QualifiedType<'context>,
     storage_class: Storage,
-    name: SmallString,
+    name: StrRef<'context>,
   ) -> SymbolRef<'context> {
     Self::new_ref(Self::new(
       qualified_type,
@@ -180,7 +177,7 @@ impl<'context> Symbol<'context> {
   pub fn def(
     qualified_type: QualifiedType<'context>,
     storage_class: Storage,
-    name: SmallString,
+    name: StrRef<'context>,
   ) -> SymbolRef<'context> {
     Self::new_ref(Self::new(
       qualified_type,
@@ -193,7 +190,7 @@ impl<'context> Symbol<'context> {
   pub fn tentative(
     qualified_type: QualifiedType<'context>,
     storage_class: Storage,
-    name: SmallString,
+    name: StrRef<'context>,
   ) -> SymbolRef<'context> {
     Self::new_ref(Self::new(
       qualified_type,
@@ -207,7 +204,7 @@ impl<'context> Symbol<'context> {
     Rc::new(RefCell::new(symbol))
   }
 }
-impl UnitScope {
+impl<'context> UnitScope<'context> {
   pub fn new() -> Self {
     Self::default()
   }
@@ -233,7 +230,7 @@ impl UnitScope {
     false
   }
 
-  pub fn declare(&mut self, name: SmallString) {
+  pub fn declare(&mut self, name: StrRef<'context>) {
     let current = self.scopes.last_mut();
     assert!(
       current.is_some(),
@@ -247,14 +244,14 @@ impl UnitScope {
     self.scopes.len() == 1
   }
 }
-impl<T> Default for Scope<T> {
+impl<'context, T> Default for Scope<'context, T> {
   fn default() -> Self {
     Self {
       scopes: Vec::default(),
     }
   }
 }
-impl<T> Scope<T> {
+impl<'context, T> Scope<'context, T> {
   #[allow(unused)]
   pub fn new() -> Self {
     Self::default()
@@ -286,7 +283,7 @@ impl<T> Scope<T> {
 
   pub fn declare(
     &mut self,
-    name: SmallString,
+    name: StrRef<'context>,
     val: shared_ptr<T>,
   ) -> shared_ptr<T> {
     let current = self.scopes.last_mut();

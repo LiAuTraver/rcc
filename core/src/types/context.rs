@@ -6,13 +6,15 @@ use super::{
   Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
   Primitive, QualifiedType, Type, TypeRef,
 };
-use crate::diagnosis::{
-  DiagData::MainFunctionProtoMismatch, DiagMeta, Severity,
+use crate::{
+  common::StrRef,
+  diagnosis::{DiagData::MainFunctionProtoMismatch, DiagMeta, Severity},
 };
 #[derive(Debug)]
 pub struct Context<'context> {
   arena: &'context Bump,
-  interner: RefCell<HashSet<&'context Type<'context>>>,
+  type_interner: RefCell<HashSet<&'context Type<'context>>>,
+  string_interner: RefCell<HashSet<StrRef<'context>>>,
 
   nullptr_type: TypeRef<'context>,
   void_type: TypeRef<'context>,
@@ -30,12 +32,15 @@ pub struct Context<'context> {
   float_type: TypeRef<'context>,
   double_type: TypeRef<'context>,
   voidptr_type: TypeRef<'context>,
+
+  unnamed_str: StrRef<'context>,
 }
 impl<'context> Context<'context> {
   pub fn new(arena: &'context Bump) -> Self {
     Self {
       arena,
-      interner: Default::default(),
+      type_interner: Default::default(),
+      string_interner: Default::default(),
       int_type: arena.alloc(Type::Primitive(Primitive::Int)),
       float_type: arena.alloc(Type::Primitive(Primitive::Float)),
       short_type: arena.alloc(Type::Primitive(Primitive::Short)),
@@ -54,24 +59,36 @@ impl<'context> Context<'context> {
       voidptr_type: arena.alloc(Type::Pointer(Pointer::new(
         arena.alloc(Type::Primitive(Primitive::Void)).into(),
       ))),
+      unnamed_str: arena.alloc_str("<unnamed>"),
     }
+  }
+
+  pub fn arena(&self) -> &'context Bump {
+    self.arena
   }
 }
 
 pub type ArenaVec<'a, T> = ::bumpalo::collections::Vec<'a, T>;
 
 impl<'context> Context<'context> {
-  pub fn arena(&self) -> &'context Bump {
-    self.arena
-  }
-
   pub fn intern_type(&self, value: Type<'context>) -> TypeRef<'context> {
-    if let Some(&interned) = self.interner.borrow().get(&value) {
+    if let Some(&interned) = self.type_interner.borrow().get(&value) {
       interned
     } else {
       let interned = self.arena.alloc(value);
-      self.interner.borrow_mut().insert(interned);
+      self.type_interner.borrow_mut().insert(interned);
       interned
+    }
+  }
+
+  pub fn intern_str(&self, value: &str) -> StrRef<'context> {
+    if let Some(&interned) = self.string_interner.borrow().get(value) {
+      interned
+    } else {
+      let interned = self.arena.alloc_str(value);
+      self.string_interner.borrow_mut().insert(interned);
+      // ... weird syntax to make &mut str into &str
+      &*interned
     }
   }
 
@@ -228,5 +245,9 @@ impl<'context> Context<'context> {
     } else {
       Ok(())
     }
+  }
+
+  pub fn unnamed_str(&self) -> StrRef<'context> {
+    self.unnamed_str
   }
 }

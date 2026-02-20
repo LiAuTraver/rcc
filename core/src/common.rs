@@ -24,3 +24,5 @@ pub use self::{
   storage::Storage,
   token::{Literal, Token},
 };
+
+pub type StrRef<'context> = &'context str;

@@ -1,7 +1,7 @@
-use ::rcc_utils::{SmallString, interconvert};
+use ::rcc_utils::interconvert;
 
 use crate::{
-  common::{Keyword, Literal, SourceSpan, Storage},
+  common::{Keyword, Literal, SourceSpan, Storage, StrRef},
   parser::{expression::Expression, statement::Compound},
   types::{FunctionSpecifier, Qualifiers},
 };
@@ -40,7 +40,7 @@ pub enum DeclaratorType {
 ///     pointer_opt direct-declarator
 #[derive(Debug)]
 pub struct Declarator<'context> {
-  pub name: Option<SmallString>,
+  pub name: Option<StrRef<'context>>,
   pub modifiers: Vec<Modifier<'context>>, // pointer, array, function
   pub span: SourceSpan,
 }
@@ -80,7 +80,7 @@ pub struct Parameter<'context> {
 }
 #[derive(Debug)]
 pub struct Struct<'context> {
-  pub name: Option<SmallString>,
+  pub name: Option<StrRef<'context>>,
   pub members: Vec<Member<'context>>,
 }
 /// type-specifier
@@ -98,7 +98,7 @@ pub enum TypeSpecifier<'context> {
   Unsigned,
   Bool,
   Complex,
-  Typedef(&'context str),
+  Typedef(StrRef<'context>),
   // vvv below should be wrong, but now don't care
   Struct(Struct<'context>),
   Union(Struct<'context>),
@@ -200,27 +200,30 @@ pub struct InitializerListEntry<'context> {
 }
 #[derive(Debug)]
 pub enum Designator<'context> {
-  Member(SmallString),
+  Member(StrRef<'context>),
   Index(Expression<'context>),
 }
 #[derive(Debug)]
 pub struct EnumSpecifier<'context> {
-  pub name: Option<SmallString>,
+  pub name: Option<StrRef<'context>>,
   pub enumerators: Vec<Enumerator<'context>>,
 }
 #[derive(Debug)]
 pub struct Enumerator<'context> {
-  pub name: SmallString,
+  pub name: StrRef<'context>,
   pub value: Option<Expression<'context>>,
 }
 impl<'context> Enumerator<'context> {
-  pub fn new(name: SmallString, value: Option<Expression<'context>>) -> Self {
+  pub fn new(
+    name: StrRef<'context>,
+    value: Option<Expression<'context>>,
+  ) -> Self {
     Self { name, value }
   }
 }
 impl<'context> EnumSpecifier<'context> {
   pub fn new(
-    name: Option<SmallString>,
+    name: Option<StrRef<'context>>,
     enumerators: Vec<Enumerator<'context>>,
   ) -> Self {
     Self { name, enumerators }
@@ -312,7 +315,7 @@ impl<'context> DeclSpecs<'context> {
 }
 impl<'context> Declarator<'context> {
   pub fn new(
-    name: Option<SmallString>,
+    name: Option<StrRef<'context>>,
     modifiers: Vec<Modifier<'context>>,
     span: SourceSpan,
   ) -> Self {
@@ -608,10 +611,7 @@ mod fmt {
       write!(
         f,
         "{} {}",
-        match &self.name {
-          Some(name) => name,
-          None => "<anonymous>",
-        },
+        self.name.unwrap_or("<anonymous>"),
         self
           .modifiers
           .iter()

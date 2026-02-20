@@ -1,6 +1,7 @@
 //! this file would be furthur split into multiple files when more impls are added.
 
 use super::{Primitive, QualifiedType, Type};
+use crate::common::StrRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pointer<'context> {
@@ -46,33 +47,33 @@ pub struct FunctionProto<'context> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Field<'context> {
-  pub name: &'context str,
+  pub name: StrRef<'context>,
   pub field_type: QualifiedType<'context>,
 }
 
 // ignore unnamed/anonymous structs/unions for now
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Record<'context> {
-  pub name: Option<&'context str>,
+  pub name: Option<StrRef<'context>>,
   pub fields: &'context [Field<'context>],
 }
 
 // seems not so much difference between struct and union here, but for convenience we keep them separate
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Union<'context> {
-  pub name: Option<&'context str>,
+  pub name: Option<StrRef<'context>>,
   pub fields: &'context [Field<'context>],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EnumConstant<'context> {
-  pub name: &'context str,
+  pub name: StrRef<'context>,
   pub value: Option<isize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Enum<'context> {
-  pub name: Option<&'context str>,
+  pub name: Option<StrRef<'context>>,
   pub constants: &'context [EnumConstant<'context>],
   pub underlying_type: Primitive, // must be integer type
 }
@@ -103,7 +104,7 @@ impl<'context> FunctionProto<'context> {
 }
 impl<'context> Enum<'context> {
   pub fn new(
-    name: Option<&'context str>,
+    name: Option<StrRef<'context>>,
     constants: &'context [EnumConstant<'context>],
     underlying_type: Primitive,
   ) -> Self {

@@ -23,9 +23,10 @@ fn main() {
 
   let (kind, filename) = match args.as_slice() {
     [_] => ("all", "test.c"),
+    [_, kind] => (kind.as_str(), "test.c"),
     [_, kind, filename] => (kind.as_str(), filename.as_str()),
     _ => {
-      eprintln!("Usage: rcc [all|lex|parse] <filename>");
+      eprintln!("Usage: rcc [all|lex|parse|analyze] <filename>");
       ::std::process::exit(1);
     },
   };
@@ -133,7 +134,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));
-  let mut builder = ModuleBuilder::new(&session);
+  let builder = ModuleBuilder::new(&session);
   let m = builder.build(translation_unit);
   println!("{m:#?}");
 

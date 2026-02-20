@@ -2,7 +2,7 @@ use ::rcc_utils::ensure_is_pod;
 
 use crate::{
   blueprints::Placeholder as Nullptr,
-  common::{FloatFormat, Floating, Integral, Signedness},
+  common::{FloatFormat, Floating, Integral, Signedness, StrRef},
   diagnosis::{DiagData, DiagMeta, Severity},
 };
 
@@ -23,9 +23,10 @@ use crate::{
 pub enum Constant<'context> {
   Integral(Integral),
   Floating(Floating),
-  String(&'context str),
+  String(StrRef<'context>),
+  Character(char),
   Nullptr(Nullptr),
-  Address(&'context str),
+  Address(StrRef<'context>),
 }
 ensure_is_pod!(Constant);
 impl<'context> Constant<'context> {
@@ -159,9 +160,10 @@ impl<'context> Constant<'context> {
     match self {
       Self::Integral(integral) => integral.is_zero(),
       Self::Floating(floating) => floating.is_zero(),
-      Self::String(_) => false,
+      Self::String(s) => s.is_empty(),
       Self::Nullptr(_) => true,
       Self::Address(_) => false,
+      Self::Character(c) => c == &'\0',
     }
   }
 
@@ -171,9 +173,10 @@ impl<'context> Constant<'context> {
         Constant::Integral(Integral::from_bool(!integral.is_zero())),
       Self::Floating(floating) =>
         Constant::Integral(Integral::from_bool(!floating.is_zero())),
-      Self::String(_) => Constant::Integral(Integral::from_bool(true)),
+      Self::String(s) => Constant::Integral(Integral::from_bool(s.is_empty())),
       Self::Nullptr(_) => Constant::Integral(Integral::from_bool(false)),
       Self::Address(_) => Constant::Integral(Integral::from_bool(true)),
+      Self::Character(c) => Constant::Integral(Integral::from_bool(c == '\0')),
     }
   }
 
@@ -202,13 +205,13 @@ impl<'context> Constant<'context> {
 }
 ::rcc_utils::interconvert!(Integral, Constant<'context>);
 ::rcc_utils::interconvert!(Floating, Constant<'context>);
-// ::rcc_utils::interconvert!(SmallString, Constant, String);
+// ::rcc_utils::interconvert!(???, Constant, String);
 ::rcc_utils::interconvert!(Nullptr, Constant<'context>);
-// ::rcc_utils::interconvert!(SmallString, Constant, Address);
+// ::rcc_utils::interconvert!(???, Constant, Address);
 
 ::rcc_utils::make_trio_for!(Integral, Constant<'context>);
 ::rcc_utils::make_trio_for!(Floating, Constant<'context>);
 ::rcc_utils::make_trio_for!(Nullptr, Constant<'context>);
 
-// ::rcc_utils::make_trio_for!(SmallString, Constant, String);
-// ::rcc_utils::make_trio_for!(SmallString, Constant, Address);
+// ::rcc_utils::make_trio_for!(???, Constant, String);
+// ::rcc_utils::make_trio_for!(???, Constant, Address);

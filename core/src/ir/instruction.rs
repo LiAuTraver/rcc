@@ -1,6 +1,9 @@
 use ::rcc_utils::SmallString;
 
-use crate::types::{Constant, QualifiedType};
+use crate::{
+  common::StrRef,
+  types::{Constant, QualifiedType},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand<'context> {
@@ -14,7 +17,7 @@ pub enum Operand<'context> {
   ///
   /// This represents the **Address** of the global(i.e., [`Function`] and [`Variable`])
   /// Effectively a link-time constant.
-  Label(SmallString),
+  Label(StrRef<'context>),
 
   /// A Fixed Constant (Immediate).
   Imm(Constant<'context>),

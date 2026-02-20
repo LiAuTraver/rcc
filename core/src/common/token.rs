@@ -3,7 +3,7 @@ use ::std::{fmt::Debug, str::FromStr};
 
 use super::{
   Keyword::{self, *},
-  Operator, SourceSpan,
+  Operator, SourceSpan, StrRef,
 };
 /// strictly speaking this isn't counted as cyclic dependency,
 /// the [`Constant`] type looks similiar so used in here too.
@@ -12,8 +12,8 @@ use crate::types::Constant;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Literal<'context> {
   Number(Constant<'context>),
-  Identifier(&'context str),
-  String(&'context str),
+  Identifier(StrRef<'context>),
+  String(StrRef<'context>),
   Keyword(Keyword),
   Operator(Operator),
 }
@@ -29,7 +29,7 @@ pub struct Token<'context> {
 ensure_is_pod!(Token);
 
 impl<'context> Token<'context> {
-  pub fn string(literal: &'context str, location: SourceSpan) -> Self {
+  pub fn string(literal: StrRef<'context>, location: SourceSpan) -> Self {
     Self {
       literal: Literal::String(literal),
       location,
@@ -43,7 +43,10 @@ impl<'context> Token<'context> {
     }
   }
 
-  pub fn identifier(identifier: &'context str, location: SourceSpan) -> Self {
+  pub fn identifier(
+    identifier: StrRef<'context>,
+    location: SourceSpan,
+  ) -> Self {
     Self {
       literal: Literal::Identifier(identifier),
       location,

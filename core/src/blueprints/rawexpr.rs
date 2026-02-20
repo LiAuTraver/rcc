@@ -5,7 +5,7 @@
 use ::rcc_utils::IntoWith;
 
 use crate::{
-  common::{Operator, SourceSpan},
+  common::{Operator, SourceSpan, StrRef},
   types::Constant,
 };
 macro_rules! type_alias_expr {
@@ -190,7 +190,7 @@ pub struct RawParen<ExprTy> {
 #[derive(Debug)]
 pub struct RawMemberAccess<'context, ExprTy> {
   pub object: Box<ExprTy>,
-  pub member: &'context str,
+  pub member: StrRef<'context>,
   pub span: SourceSpan,
 }
 #[derive(Debug)]

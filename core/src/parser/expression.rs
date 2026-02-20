@@ -1,6 +1,6 @@
 use crate::{
   blueprints::type_alias_expr,
-  common::SourceSpan,
+  common::{SourceSpan, StrRef},
   parser::declaration::{DeclSpecs, Declarator},
 };
 
@@ -41,7 +41,7 @@ impl<'context> ::std::default::Default for Expression<'context> {
 }
 
 impl<'context> Variable<'context> {
-  pub fn new(name: &'context str, span: SourceSpan) -> Self {
+  pub fn new(name: StrRef<'context>, span: SourceSpan) -> Self {
     Self { name, span }
   }
 }
@@ -63,7 +63,7 @@ impl<'context> UnprocessedType<'context> {
 }
 #[derive(Debug)]
 pub struct Variable<'context> {
-  pub name: &'context str,
+  pub name: StrRef<'context>,
   pub span: SourceSpan,
 }
 

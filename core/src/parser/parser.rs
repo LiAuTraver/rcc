@@ -6,7 +6,7 @@ use crate::{
   common::{
     Integral, Keyword, Literal,
     Operator::{self, *},
-    SourceSpan, Storage, Token, UnitScope,
+    SourceSpan, Storage, StrRef, Token, UnitScope,
   },
   diagnosis::{
     DiagData::{self, *},
@@ -40,7 +40,7 @@ where
   cursor: usize,
   loop_labels: Vec<SmallString>,
   // contest-sensitive part - needed to parse `T * x`.
-  typedefs: UnitScope,
+  typedefs: UnitScope<'context>,
   session: &'session Session<'context, 'source>,
 }
 
@@ -396,7 +396,12 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
       let name = if TYPE != DeclaratorType::Abstract {
         if let Literal::Identifier(_) = self.peek_lit() {
           let name_idx = self.get(); // consume the ident
-          Some(self.tokens[name_idx].to_owned_string())
+          Some(
+            self
+              .session
+              .context
+              .intern_str(&self.tokens[name_idx].to_owned_string()),
+          )
         } else {
           if TYPE == DeclaratorType::Named {
             self.add_error(
@@ -758,8 +763,8 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     let declarator = self.parse_declarator::<{ DeclaratorType::Maybe }, true>();
 
     if matches!(declspecs.storage_class, Some(Storage::Typedef)) {
-      if let Some(name) = &declarator.name {
-        self.typedefs.declare(name.clone());
+      if let Some(name) = declarator.name {
+        self.typedefs.declare(name.as_str());
       } else {
         self.add_warning(EmptyTypedef, declarator.span);
       }
@@ -1066,7 +1071,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  fn next_labelstmt(&mut self, ident: &'context str) -> Statement<'context> {
+  fn next_labelstmt(&mut self, ident: StrRef<'context>) -> Statement<'context> {
     let location = *self.peek_loc();
     // 1. label at end of compound statement is not allowed until C23
     // 2. label can only jump to statements within the same function, not to mention cross file.

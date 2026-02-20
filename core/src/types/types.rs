@@ -121,6 +121,7 @@ impl<'context> Constant<'context> {
       ),
       Self::Nullptr(_) => Context::nullptr_type(context),
       Self::Address(_) => Context::voidptr_type(context),
+      Self::Character(_) => Context::char_type(context),
     }
   }
 }

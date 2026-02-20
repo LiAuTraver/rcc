@@ -45,7 +45,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     Self {
       source,
       chars: source.chars().peekable(),
-      cursor: usize::default(),
+      cursor: Default::default(),
       coords: Default::default(),
       session,
     }
@@ -58,9 +58,9 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
 
   /// look ahead without consuming
   #[inline]
-  fn peek(&mut self) -> char {
+  fn peek(&mut self) -> &char {
     // returns '\0' if EOF, copied
-    *self.chars.peek().unwrap_or(&'\0')
+    self.chars.peek().unwrap_or(&'\0')
   }
 
   /// double peek
@@ -155,7 +155,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
       ' ' | '\t' | '\r' | '\n' | '\0' => None,
 
       // identifiers and keywords
-      c if Self::is_ident_start(c) => Some(self.lex_identifier(start)),
+      c if Self::is_ident_start(&c) => Some(self.lex_identifier(start)),
 
       // numbers
       '0'..='9' => Some(self.lex_number(start, false)),
@@ -291,12 +291,12 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     }
   }
 
-  fn is_ident_start(c: char) -> bool {
-    c.is_alphabetic() || c == '_'
+  fn is_ident_start(c: &char) -> bool {
+    c.is_alphabetic() || c == &'_'
   }
 
-  fn is_ident_continue(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+  fn is_ident_continue(c: &char) -> bool {
+    c.is_alphanumeric() || c == &'_'
   }
 
   fn lex_identifier(&mut self, start: usize) -> Token<'context> {
@@ -310,7 +310,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
       Ok(keyword) =>
         Token::keyword(keyword, self.span(start)).transform_alternative(),
       Err(_) => Token::identifier(
-        self.session.context.arena().alloc_str(text),
+        self.session.context.intern_str(text),
         self.span(start),
       ),
     }
@@ -465,7 +465,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     Token::number(constant, self.span(start))
   }
 
-  fn is_digit_of_base(c: char, base: u32) -> bool {
+  fn is_digit_of_base(c: &char, base: u32) -> bool {
     match base {
       2 => matches!(c, '0' | '1'),
       8 => matches!(c, '0'..='7'),
@@ -476,7 +476,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
   }
 
   fn lex_string(&mut self, start: usize) -> Token<'context> {
-    while !self.is_at_end() && self.peek() != ('"') {
+    while !self.is_at_end() && self.peek() != (&'"') {
       self.advance();
     }
 
@@ -487,7 +487,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
         .add_error(UnterminatedString, self.span(start));
       let text = self.slice(start, self.cursor);
       return Token::string(
-        self.session.context.arena().alloc_str(text),
+        self.session.context.intern_str(text),
         self.span(start),
       );
     }
@@ -496,15 +496,12 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
     self.advance(); // consume closing quote
 
     let text = self.slice(start, end);
-    Token::string(
-      self.session.context.arena().alloc_str(text),
-      self.span(start),
-    )
+    Token::string(self.session.context.intern_str(text), self.span(start))
   }
 
   fn skip_block_comment(&mut self) {
     while !self.is_at_end() {
-      if self.peek() == ('*') && self.peek_next() == ('/') {
+      if self.peek() == (&'*') && self.peek_next() == ('/') {
         self.advance_n(2); // consume '*/'
         break;
       } else {
@@ -514,7 +511,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
   }
 
   fn skip_line_comment(&mut self) {
-    while !self.is_at_end() && self.peek() != ('\n') {
+    while !self.is_at_end() && self.peek() != (&'\n') {
       self.advance();
     }
   }

@@ -12,7 +12,7 @@ use crate::{
     expression::{self as ae, ValueCategory},
     statement as astmt,
   },
-  common::SourceSpan,
+  common::{SourceSpan, StrRef},
   session::Session,
   types::{Context, QualifiedType},
 };
@@ -31,7 +31,7 @@ where
   current_block: Option<BasicBlock<'context>>,
   /// Blocks finalized in the current function
   current_blocks: ilist_type<BasicBlock<'context>>,
-  locals: HashMap<SmallString, Operand<'context>>,
+  locals: HashMap<StrRef<'context>, Operand<'context>>,
   module: Module<'context>,
 }
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
@@ -129,7 +129,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
       .map(|p| {
         let sym = p.symbol.borrow();
         let op = self.reg();
-        self.locals.insert(sym.name.clone(), op.clone());
+        self.locals.insert(sym.name, op.clone());
         op
       })
       .collect();
@@ -142,7 +142,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     self.locals.clear();
 
     module::Function {
-      name: symbol.borrow().name.clone(),
+      name: symbol.borrow().name,
       params,
       blocks: std::mem::take(&mut self.current_blocks),
       return_type: symbol
@@ -251,7 +251,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     };
 
     let callee_name =
-      &callee.raw_expr().as_variable_unchecked().name.borrow().name;
+      callee.raw_expr().as_variable_unchecked().name.borrow().name;
 
     //  match &callee_operand {
     //   Some(Operand::Label(name)) => name.clone(),
@@ -261,13 +261,13 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
       .module
       .functions
       .iter()
-      .find(|f| f.name == callee_name)
+      .find(|f| ::std::ptr::eq(f.name, callee_name))
       .expect("callee not yet emitted — forward decls need a separate pass");
 
     self.emit(
       inst::Call::new(
         retreg.clone(),
-        Operand::Label(func_sig.name.clone()),
+        Operand::Label(func_sig.name),
         oprand_args,
       )
       .into(),
@@ -276,11 +276,12 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   }
 
   fn constant(
-    &mut self,
+    &self,
     constant: ae::Constant<'context>,
     qualified_type: QualifiedType<'context>,
     value_category: ValueCategory, // should be RValue
   ) -> Option<Operand<'context>> {
+    debug_assert!(value_category == ValueCategory::RValue);
     let ae::Constant { value, span } = constant;
     Some(Operand::Imm(value))
   }

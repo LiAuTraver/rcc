@@ -55,10 +55,11 @@ pub enum Severity {
 use ::rcc_utils::{DisplayWith, IntoWith, static_assert};
 
 use crate::{
-  common::{Keyword, Literal, Operator, SourceManager, SourceSpan, Storage},
+  common::{
+    Keyword, Literal, Operator, SourceManager, SourceSpan, Storage, StrRef,
+  },
   types::{Constant, QualifiedType, Qualifiers},
 };
-
 /// Custom message. would be printed as-is.
 type CustomMessage = String;
 /// Fixed custom message.
@@ -122,7 +123,7 @@ pub enum Data<'context> {
   #[error("{0}")]
   InvalidControlFlowStmt(CustomMessage),
   #[error("Label '{0}' not found")]
-  LabelNotFound(Elem),
+  LabelNotFound(StrRef<'context>),
   #[error("Variable '{0}' cannot have function specifiers")]
   FunctionSpecsInVariableDecl(Elem),
   #[error("Variable '{0}' already defined")]
@@ -136,7 +137,7 @@ pub enum Data<'context> {
   #[error("'{0}' is not a variable")]
   NotVariable(Elem),
   #[error("Variable '{0}' is not defined")]
-  UndefinedVariable(Elem),
+  UndefinedVariable(StrRef<'context>),
   #[error("Incompatible types '{0}' and '{1}' in ternary expression")]
   TenaryTypeIncompatible(Elem, Elem),
   #[error("Operand of unary operator '{0}' must be arithmetic type, got '{1}'")]
@@ -184,12 +185,16 @@ pub enum Data<'context> {
   #[error("Return type mismatch: {0}")]
   ReturnTypeMismatch(CustomMessage),
   #[error("Duplicate label '{0}'")]
-  DuplicateLabel(Elem),
+  DuplicateLabel(StrRef<'context>),
   #[error(
     "Incompatible types in declaration of '{0}': '{1}' is not compatible with \
      '{2}'"
   )]
-  IncompatibleType(Elem, QualifiedType<'context>, QualifiedType<'context>),
+  IncompatibleType(
+    StrRef<'context>,
+    QualifiedType<'context>,
+    QualifiedType<'context>,
+  ),
   #[error("Incompatible pointer types '{0}' and '{1}'")]
   IncompatiblePointerTypes(Elem, Elem),
   #[error("Cannot merge storage classes '{0}' and '{1}'")]

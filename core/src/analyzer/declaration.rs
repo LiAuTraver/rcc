@@ -1,9 +1,8 @@
-use ::rcc_utils::SmallString;
 use ::std::{cell::Ref, collections::HashSet};
 
 use crate::{
   analyzer::{expression::Expression, statement::Compound},
-  common::{SourceSpan, SymbolRef},
+  common::{SourceSpan, StrRef, SymbolRef},
   types::{FunctionSpecifier, QualifiedType, Type},
 };
 
@@ -24,8 +23,8 @@ pub struct Function<'context> {
   pub parameters: Vec<Parameter<'context>>, // some duplication with symbol's qualified_type, but we need this for param names
   pub specifier: FunctionSpecifier,
   pub body: Option<Compound<'context>>,
-  pub labels: HashSet<SmallString>, // just holds a name
-  pub gotos: HashSet<SmallString>,  // just holds a name
+  pub labels: HashSet<StrRef<'context>>, // just holds a name
+  pub gotos: HashSet<StrRef<'context>>,  // just holds a name
   pub span: SourceSpan,
 }
 
