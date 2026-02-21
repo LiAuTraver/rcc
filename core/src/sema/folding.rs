@@ -101,7 +101,7 @@ use FoldingResult::{Failure, Success};
 
 impl<'context> Expression<'context> {
   #[inline(always)]
-  pub(super) fn fold(
+  pub(crate) fn fold(
     self,
     diag: &impl Diagnosis<'context>,
   ) -> FoldingResult<Expression<'context>> {

@@ -125,8 +125,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     Self {
       program,
       session,
-      environment: Environment::default(),
-      current_function: None,
+      environment: Default::default(),
+      current_function: Default::default(),
     }
   }
 
@@ -191,11 +191,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
                         match v.raw_expr().as_constant_unchecked().value {
                           ae::ConstantLiteral::Integral(integral) =>
                             integral.to_builtin(),
+                          ae::ConstantLiteral::Nullptr(_) => 0,
                           ae::ConstantLiteral::Floating(_) => unreachable!(),
                           ae::ConstantLiteral::String(_) => unreachable!(),
                           ae::ConstantLiteral::Address(_) => unreachable!(),
-                          ae::ConstantLiteral::Character(_) => unreachable!(),
-                          ae::ConstantLiteral::Nullptr(_) => 0,
                         },
                       )
                     } else {

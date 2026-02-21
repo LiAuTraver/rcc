@@ -201,7 +201,10 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     &mut self,
     expression: ae::Expression<'context>,
   ) -> Option<Operand<'context>> {
-    let (raw_expr, qualified_type, value_category) = expression.destructure();
+    let (raw_expr, qualified_type, value_category) = expression
+      .fold(&self.session.diagnosis)
+      .unwrap()
+      .destructure();
     type RE<'a> = ae::RawExpr<'a>;
     match raw_expr {
       RE::Empty(_) => None,

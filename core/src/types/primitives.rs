@@ -57,7 +57,8 @@ pub enum Primitive {
   ComplexLongDouble,
   // wchar_t is a built-in in C++, but not C, in C it's `typedef`-ed as unsigned short on Windows
 }
-::rcc_utils::static_assert!(::std::mem::needs_drop::<Primitive>() == false);
+::rcc_utils::ensure_is_pod!(Primitive);
+
 use super::{
   CastType::{self, *},
   TypeInfo,

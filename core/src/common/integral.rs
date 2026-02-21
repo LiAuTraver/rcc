@@ -15,10 +15,12 @@ pub enum Signedness {
 use Signedness::*;
 
 impl Signedness {
+  #[inline(always)]
   pub const fn is_signed(self) -> bool {
     matches!(self, Self::Signed)
   }
 
+  #[inline(always)]
   pub const fn is_unsigned(self) -> bool {
     matches!(self, Self::Unsigned)
   }
@@ -117,27 +119,27 @@ impl Integral {
   }
 }
 impl Integral {
-  #[inline]
+  #[inline(always)]
   pub const fn bits(&self) -> Underlying {
     self.bits
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn width(&self) -> u8 {
     self.width
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn signedness(&self) -> Signedness {
     self.signedness
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn is_signed(&self) -> bool {
     self.signedness.is_signed()
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn is_unsigned(&self) -> bool {
     self.signedness.is_unsigned()
   }

@@ -105,7 +105,6 @@ impl<'context> Display for Constant<'context> {
       Floating(d) => write!(f, "{d}"),
       String(s) | Address(s) => write!(f, "\"{}\"", s),
       Nullptr(_) => write!(f, "nullptr"),
-      Character(c) => write!(f, "'{}'", c.escape_default()),
     }
   }
 }
