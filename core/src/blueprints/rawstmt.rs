@@ -101,7 +101,7 @@ pub struct RawSwitch<StmtTy, ExprTy, ExprCaseTy = ExprTy> {
 }
 #[derive(Debug)]
 pub struct RawCase<StmtTy, ExprCaseTy> {
-  /// [`Expression`](crate::parser::expression::Expression) in parser,
+  /// [`Expression`](crate::parse::expression::Expression) in parser,
   /// [`ConstantLiteral`](crate::types::Constant) in analyzer
   /// and IT SHALL be of integral type.
   pub value: ExprCaseTy,

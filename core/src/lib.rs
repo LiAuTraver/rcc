@@ -16,7 +16,7 @@ pub mod common;
 pub mod diagnosis;
 pub mod ir;
 pub mod lexer;
-pub mod parser;
+pub mod parse;
 pub mod sema;
 pub mod session;
 pub mod types;

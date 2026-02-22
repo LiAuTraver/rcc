@@ -2,7 +2,7 @@ use ::rcc_utils::{Dummy, IntoWith};
 
 use crate::{
   common::{Operator, SourceSpan},
-  parser::expression::{Binary, ConstantLiteral, Expression},
+  parse::expression::{Binary, ConstantLiteral, Expression},
 };
 
 impl<'context> Expression<'context> {

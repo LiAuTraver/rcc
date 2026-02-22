@@ -9,9 +9,9 @@ use super::{
 use crate::{
   common::{SourceSpan, StrRef},
   sema::{
-    declaration as ad,
-    expression::{self as ae, ValueCategory},
-    statement as astmt,
+    declaration as sd,
+    expression::{self as se, ValueCategory},
+    statement as ss,
   },
   session::Session,
   types::{Context, QualifiedType},
@@ -38,9 +38,9 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   pub fn new(session: &'session Session<'context, 'source>) -> Self {
     Self {
       session,
-      label_counter: 0,
-      temp_counter: 0,
-      current_block: None,
+      label_counter: Default::default(),
+      temp_counter: Default::default(),
+      current_block: Default::default(),
       current_blocks: Default::default(),
       locals: Default::default(),
       module: Default::default(),
@@ -79,7 +79,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   pub fn build(
     mut self,
-    translation_unit: ad::TranslationUnit<'context>,
+    translation_unit: sd::TranslationUnit<'context>,
   ) -> Module<'context> {
     self.module.functions =
       ilist_type::with_capacity(translation_unit.declarations.len() * 2 / 3);
@@ -89,23 +89,24 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
       .declarations
       .into_iter()
       .for_each(|decl| match decl {
-        ad::ExternalDeclaration::Function(function) => {
+        sd::ExternalDeclaration::Function(function) => {
           let function = self.function(function);
           self.module.functions.push(function)
         },
-        ad::ExternalDeclaration::Variable(variable) => {
+        sd::ExternalDeclaration::Variable(variable) => {
           let variable = self.vardef(variable);
           self.module.globals.push(variable)
         },
       });
     self.module
   }
-
+}
+impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   pub fn function(
     &mut self,
-    function: ad::Function<'context>,
+    function: sd::Function<'context>,
   ) -> module::Function<'context> {
-    let ad::Function {
+    let sd::Function {
       symbol,
       parameters,
       specifier,
@@ -156,32 +157,19 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 
   pub fn vardef(
     &mut self,
-    variable: ad::VarDef<'context>,
+    variable: sd::VarDef<'context>,
   ) -> module::Variable<'context> {
     todo!()
   }
-
-  fn compound(&mut self, body: astmt::Compound<'context>) {
-    let astmt::Compound { statements, span } = body;
-    if statements.is_empty() {
-      self.push_block("noop");
-    } else {
-      self.push_block("entry");
-    }
-    for statement in statements {
-      self.statement(statement);
-    }
-  }
-
-  fn statement(&mut self, statement: astmt::Statement<'context>) {
+}
+impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
+  fn statement(&mut self, statement: ss::Statement<'context>) {
     #[allow(clippy::upper_case_acronyms)]
-    type STMT<'a> = astmt::Statement<'a>;
+    type STMT<'a> = ss::Statement<'a>;
     match statement {
       STMT::Empty(_) => (),
-      STMT::Return(return_stmt) => todo!(),
-      STMT::Expression(expression) => {
-        self.expression(expression);
-      },
+      STMT::Return(return_stmt) => self.returnstmt(return_stmt),
+      STMT::Expression(expression) => self.exprstmt(expression),
       STMT::Declaration(external_declaration) => todo!(),
       STMT::Compound(compound) => todo!(),
       STMT::If(if_stmt) => todo!(),
@@ -195,44 +183,75 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
       STMT::Continue(continue_stmt) => todo!(),
     }
   }
+
+  #[inline]
+  fn exprstmt(&mut self, expression: se::Expression<'context>) {
+    self.expression(expression);
+  }
+
+  fn returnstmt(&mut self, return_stmt: ss::Return<'context>) {
+    let ss::Return { expression, span } = return_stmt;
+    let operand = match expression {
+      Some(expression) => self.expression(expression),
+      None => None,
+    };
+    self.emit(Instruction::Terminator(inst::Terminator::Return(
+      inst::Return { result: operand },
+    )));
+  }
+
+  fn compound(&mut self, body: ss::Compound<'context>) {
+    let ss::Compound { statements, span } = body;
+    if statements.is_empty() {
+      self.push_block("noop");
+    } else {
+      self.push_block("entry");
+    }
+    for statement in statements {
+      self.statement(statement);
+    }
+  }
 }
 impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   fn expression(
     &mut self,
-    expression: ae::Expression<'context>,
+    expression: se::Expression<'context>,
   ) -> Option<Operand<'context>> {
     let (raw_expr, qualified_type, value_category) = expression
       .fold(&self.session.diagnosis)
       .unwrap()
       .destructure();
-    type RE<'a> = ae::RawExpr<'a>;
+    #[allow(clippy::upper_case_acronyms)]
+    type EXPR<'a> = se::RawExpr<'a>;
     match raw_expr {
-      RE::Empty(_) => contract_violation!(),
-      RE::Constant(constant) =>
+      EXPR::Empty(_) => contract_violation!(
+        "empty expr is used in sema for error recovery. shouldnt reach here."
+      ),
+      EXPR::Constant(constant) =>
         self.constant(constant, qualified_type, value_category),
-      RE::Unary(unary) => todo!(),
-      RE::Binary(binary) => todo!(),
-      RE::Call(call) => self.call(call, qualified_type, value_category),
-      RE::Paren(paren) => self.paren(paren, qualified_type, value_category),
-      RE::MemberAccess(member_access) => todo!(),
-      RE::Ternary(ternary) => todo!(),
-      RE::SizeOf(size_of) => todo!(),
-      RE::CStyleCast(cstyle_cast) => todo!(),
-      RE::ArraySubscript(array_subscript) => todo!(),
-      RE::CompoundLiteral(compound_literal) => todo!(),
-      RE::Variable(variable) => todo!(),
-      RE::ImplicitCast(implicit_cast) => todo!(),
-      RE::Assignment(assignment) => todo!(),
+      EXPR::Unary(unary) => todo!(),
+      EXPR::Binary(binary) => todo!(),
+      EXPR::Call(call) => self.call(call, qualified_type, value_category),
+      EXPR::Paren(paren) => self.paren(paren, qualified_type, value_category),
+      EXPR::MemberAccess(member_access) => todo!(),
+      EXPR::Ternary(ternary) => todo!(),
+      EXPR::SizeOf(size_of) => todo!(),
+      EXPR::CStyleCast(cstyle_cast) => todo!(),
+      EXPR::ArraySubscript(array_subscript) => todo!(),
+      EXPR::CompoundLiteral(compound_literal) => todo!(),
+      EXPR::Variable(variable) => todo!(),
+      EXPR::ImplicitCast(implicit_cast) => todo!(),
+      EXPR::Assignment(assignment) => todo!(),
     }
   }
 
   fn call(
     &mut self,
-    call: ae::Call<'context>,
+    call: se::Call<'context>,
     qualified_type: QualifiedType<'context>,
     value_category: ValueCategory,
   ) -> Option<Operand<'context>> {
-    let ae::Call {
+    let se::Call {
       callee,
       arguments,
       span,
@@ -284,7 +303,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
 
   fn constant(
     &self,
-    constant: ae::Constant<'context>,
+    constant: se::Constant<'context>,
     qualified_type: QualifiedType<'context>,
     value_category: ValueCategory, // should be RValue
   ) -> Option<Operand<'context>> {
@@ -295,7 +314,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   #[inline]
   fn paren(
     &mut self,
-    paren: ae::Paren<'context>,
+    paren: se::Paren<'context>,
     qualified_type: QualifiedType<'context>,
     value_category: ValueCategory,
   ) -> Option<Operand<'context>> {

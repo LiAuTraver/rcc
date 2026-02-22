@@ -1,7 +1,7 @@
 use crate::{
   blueprints::type_alias_expr,
   common::{SourceSpan, StrRef},
-  parser::declaration::{DeclSpecs, Declarator},
+  parse::declaration::{DeclSpecs, Declarator},
 };
 
 #[derive(Debug)]

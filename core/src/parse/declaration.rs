@@ -2,7 +2,7 @@ use ::rcc_utils::interconvert;
 
 use crate::{
   common::{Keyword, Literal, SourceSpan, Storage, StrRef},
-  parser::{expression::Expression, statement::Compound},
+  parse::{expression::Expression, statement::Compound},
   types::{FunctionSpecifier, Qualifiers},
 };
 

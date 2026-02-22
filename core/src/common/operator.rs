@@ -119,6 +119,9 @@ pub enum Operator {
   Hash,
   #[strum(serialize = "##")]
   HashHash,
+  // MS-ext
+  #[strum(serialize = "#@")]
+  HashAt,
 
   #[strum(disabled)]
   #[default]

@@ -16,11 +16,15 @@ pub enum Type<'context> {
   Record(Record<'context>),
   Union(Union<'context>),
 }
+/// Indicates a reference to [`Type`] which stores in the `'context`.
+///
+///
 /// TODO: it's HARD and I tried 4 times...
 /// make a wrapprt [`TypeRef`] and use [`Eq`] for comparison.
 ///
-/// If so, it's INVORRECT to store the new [`TypeRef`] wrapper inside [`QualifiedType`], [`Hash`] would FAIL.
+/// If so, it's INCORRECT to store the new [`TypeRef`] wrapper inside [`QualifiedType`], [`Hash`] would FAIL.
 pub type TypeRef<'context> = &'context Type<'context>;
+pub type TypeRefMut<'context> = &'context mut Type<'context>;
 
 ensure_is_pod!(Type);
 ensure_is_pod!(TypeRef);

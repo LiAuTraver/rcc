@@ -47,7 +47,7 @@ pub struct Branch<'context> {
 }
 #[derive(Debug)]
 pub struct Return<'context> {
-  pub returne: Option<Operand<'context>>,
+  pub result: Option<Operand<'context>>,
 }
 #[derive(Debug)]
 pub enum Terminator<'context> {

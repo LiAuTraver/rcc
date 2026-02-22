@@ -4,7 +4,7 @@ use ::rcc_core::{
   diagnosis::Diagnosis,
   ir::ModuleBuilder,
   lexer::Lexer,
-  parser::Parser,
+  parse::Parser,
   sema::Sema,
   session::Session,
   types::Context,
@@ -59,16 +59,6 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
   let content = &session.manager.files.first().unwrap().source;
   let mut lexer = Lexer::new(content, &session);
   let tokens = lexer.lex();
-  tokens
-    .iter()
-    .take(tokens.iter().len() - 1) // last is EOF
-    .for_each(|t| {
-      if pretty_print {
-        println!("{t}");
-      } else {
-        println!("{} ", t);
-      }
-    });
   if session.diagnosis.has_errors() {
     eprintln!("Lex errors:");
     session
@@ -79,12 +69,21 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     return 1;
   }
   if let Stage::Lex = stage {
+    tokens
+      .iter()
+      .take(tokens.iter().len() - 1) // last is EOF
+      .for_each(|t| {
+        if pretty_print {
+          println!("{t}");
+        } else {
+          println!("{} ", t);
+        }
+      });
     println!("Lex succeeded.");
     return 0;
   }
   let mut parser = Parser::new(tokens, &session);
   let program = parser.parse();
-  println!("{program}");
   if session.diagnosis.has_errors() {
     eprintln!("Parser errors:");
     session
@@ -98,6 +97,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     if pretty_print {
       println!("{:#?}", program);
     }
+    println!("{program}");
     println!("Parse succeeded.");
     return 0;
   }
@@ -136,7 +136,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
   assert!(matches!(stage, Stage::Ir));
   let builder = ModuleBuilder::new(&session);
   let m = builder.build(translation_unit);
-  println!("{m:#?}");
+  println!("{m:?}");
 
   0
 }

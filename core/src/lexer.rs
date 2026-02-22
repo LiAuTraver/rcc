@@ -270,7 +270,11 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
         &[("]]", DoubleRightBracket)],
       ),
 
-      '#' => self.lex_compound_operator(start, Hash, &[("##", HashHash)]),
+      '#' => self.lex_compound_operator(
+        start,
+        Hash,
+        &[("##", HashHash), ("#@", HashAt)],
+      ),
 
       // single-character operators
       ',' => Some(Token::operator(Comma, self.span(start))),

@@ -23,5 +23,5 @@ pub use self::{
   promotion::Promotion,
   qualified_types::{FunctionSpecifier, QualifiedType, Qualifiers},
   type_info::TypeInfo,
-  types::{Type, TypeRef},
+  types::{Type, TypeRef, TypeRefMut},
 };

@@ -1,6 +1,6 @@
 use ::rcc_utils::{IntoWith, ensure_is_pod};
 
-use super::{Type, TypeRef};
+use super::{TypeRef, TypeRefMut};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct QualifiedType<'context> {
@@ -88,9 +88,9 @@ impl<'context> const From<TypeRef<'context>> for QualifiedType<'context> {
   }
 }
 
-impl<'context> From<&'context mut Type<'context>> for QualifiedType<'context> {
+impl<'context> From<TypeRefMut<'context>> for QualifiedType<'context> {
   #[inline(always)]
-  fn from(inner: &'context mut Type<'context>) -> Self {
+  fn from(inner: TypeRefMut<'context>) -> Self {
     Self::new_unqualified(inner)
   }
 }

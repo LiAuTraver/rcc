@@ -6,3 +6,4 @@ test_compiler.ps1
 # output 
 out.txt
 test.ll
+test.s

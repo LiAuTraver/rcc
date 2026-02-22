@@ -13,11 +13,11 @@ use crate::{
     DiagData::{self, *},
     Diagnosis, Severity,
   },
-  parser::{declaration as pd, expression as pe, statement as ps},
+  parse::{declaration as pd, expression as pe, statement as ps},
   sema::{
-    declaration as ad,
-    expression::{self as ae},
-    statement as astmt,
+    declaration as sd,
+    expression::{self as se},
+    statement as ss,
   },
   session::Session,
   types::{
@@ -113,7 +113,7 @@ where
 {
   program: pd::Program<'context>,
   environment: Environment<'context>,
-  current_function: Option<ad::Function<'context>>,
+  current_function: Option<sd::Function<'context>>,
   session: &'session Session<'context, 'source>,
 }
 
@@ -146,17 +146,18 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     self.session.diagnosis.add_warning(warning, span);
   }
 
-  pub fn analyze(&mut self) -> ad::TranslationUnit<'context> {
+  pub fn analyze(&mut self) -> sd::TranslationUnit<'context> {
     self.environment.enter();
-    let translation_unit = ad::TranslationUnit::new(self.externaldecl());
+    let translation_unit = sd::TranslationUnit::new(self.externaldecl());
 
     self.environment.exit();
     translation_unit
   }
 }
 impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
-  /// TODO: caller shoould check whether the `restrict` is valid.
-  /// it's only valid for pointers and non-static local variable.
+  /// TODO: currently, caller shoould check:
+  /// 1. whether the `restrict` is valid; (it's only valid for pointers and non-static local variable.)
+  /// 2. the type is complete or not, via [`TypeInfo::size`].
   fn apply_modifiers_for_varty(
     &self,
     mut qualified_type: QualifiedType<'context>,
@@ -178,7 +179,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
               // check 1. it's a constant expression or not, 2. it's type should be integer type 3. should be non-negative
               let analyzed_expr = self.expression(expr).handle_with(
                 self,
-                ae::Expression::new_error_node(
+                se::Expression::new_error_node(
                   self.context().int_type().into(),
                 ),
               );
@@ -189,12 +190,12 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
                     if v.is_integer_constant() {
                       ArraySize::Constant(
                         match v.raw_expr().as_constant_unchecked().value {
-                          ae::ConstantLiteral::Integral(integral) =>
+                          se::ConstantLiteral::Integral(integral) =>
                             integral.to_builtin(),
-                          ae::ConstantLiteral::Nullptr(_) => 0,
-                          ae::ConstantLiteral::Floating(_) => unreachable!(),
-                          ae::ConstantLiteral::String(_) => unreachable!(),
-                          ae::ConstantLiteral::Address(_) => unreachable!(),
+                          se::ConstantLiteral::Nullptr(_) => 0,
+                          se::ConstantLiteral::Floating(_) => unreachable!(),
+                          se::ConstantLiteral::String(_) => unreachable!(),
+                          se::ConstantLiteral::Address(_) => unreachable!(),
                         },
                       )
                     } else {
@@ -249,7 +250,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   ) -> Result<
     (
       QualifiedType<'context>,
-      Vec<ad::Parameter<'context>>, /* parameters name and their type, here's some repetition
+      Vec<sd::Parameter<'context>>, /* parameters name and their type, here's some repetition
                                     parameter type had also been inside QualifiedType of the function */
     ),
     Diag<'context>,
@@ -319,7 +320,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn parse_parameters(
     &self,
     parameters: Vec<pd::Parameter<'context>>,
-  ) -> Vec<ad::Parameter<'context>> {
+  ) -> Vec<sd::Parameter<'context>> {
     parameters
       .into_iter()
       .map(|parameter| {
@@ -347,7 +348,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           name.unwrap_or_else(|| self.session.context.unnamed_str()),
           VarDeclKind::Declaration,
         ));
-        ad::Parameter::new(symbol, span)
+        sd::Parameter::new(symbol, span)
       })
       .collect()
   }
@@ -505,7 +506,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
 }
 
 impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
-  fn externaldecl(&mut self) -> Vec<ad::ExternalDeclaration<'context>> {
+  fn externaldecl(&mut self) -> Vec<sd::ExternalDeclaration<'context>> {
     let mut declarations = Vec::new();
     std::mem::take(&mut self.program)
       .declarations
@@ -520,20 +521,20 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   pub fn declarations(
     &mut self,
     declaration: pd::Declaration<'context>,
-  ) -> Result<ad::ExternalDeclaration<'context>, Diag<'context>> {
+  ) -> Result<sd::ExternalDeclaration<'context>, Diag<'context>> {
     match declaration {
       pd::Declaration::Function(function) => Ok(
-        ad::ExternalDeclaration::Function(self.functiondecl(function)?),
+        sd::ExternalDeclaration::Function(self.functiondecl(function)?),
       ),
       pd::Declaration::Variable(vardef) =>
-        Ok(ad::ExternalDeclaration::Variable(self.vardef(vardef)?)),
+        Ok(sd::ExternalDeclaration::Variable(self.vardef(vardef)?)),
     }
   }
 
   pub fn functiondecl(
     &mut self,
     function: pd::Function<'context>,
-  ) -> Result<ad::Function<'context>, Diag<'context>> {
+  ) -> Result<sd::Function<'context>, Diag<'context>> {
     let pd::Function {
       body,
       declarator,
@@ -635,7 +636,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     self.environment.declare_symbol(name, symbol.clone());
 
     let function =
-      ad::Function::new(symbol, parameters, function_specifier, None, span);
+      sd::Function::new(symbol, parameters, function_specifier, None, span);
 
     match body {
       Some(body) => match self.current_function {
@@ -659,8 +660,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn function_with_body(
     &mut self,
     body: ps::Compound<'context>,
-    function: ad::Function<'context>,
-  ) -> Result<ad::Function<'context>, Diag<'context>> {
+    function: sd::Function<'context>,
+  ) -> Result<sd::Function<'context>, Diag<'context>> {
     self.current_function = Some(function);
 
     self.environment.enter();
@@ -691,7 +692,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       .current_function
       .as_mut()
       .shall_ok("impossible; no current function?")
-      .body = Some(astmt::Compound::new(statements, body.span));
+      .body = Some(ss::Compound::new(statements, body.span));
     // verify labels and gotos
     let function =
       std::mem::take(&mut self.current_function).expect("never fails");
@@ -707,7 +708,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   pub fn vardef(
     &mut self,
     vardef: pd::VarDef<'context>,
-  ) -> Result<ad::VarDef<'context>, Diag<'context>> {
+  ) -> Result<sd::VarDef<'context>, Diag<'context>> {
     let pd::VarDef {
       declarator,
       declspecs,
@@ -835,7 +836,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     initializer: pd::Initializer<'context>,
     target_type: &QualifiedType<'context>,
     requires_folding: bool,
-  ) -> Option<ad::Initializer<'context>> {
+  ) -> Option<sd::Initializer<'context>> {
     match initializer {
       pd::Initializer::Expression(expression) => self
         .expression(*expression)
@@ -846,7 +847,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
             .handle_or_default(self)
         })
         .map(|expr| {
-          Some(ad::Initializer::Scalar(if !requires_folding {
+          Some(sd::Initializer::Scalar(if !requires_folding {
             expr
           } else {
             expr
@@ -877,17 +878,17 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     storage: Option<Storage>,
     qualified_type: QualifiedType<'context>,
     name: StrRef<'context>,
-    initializer: Option<ad::Initializer<'context>>,
+    initializer: Option<sd::Initializer<'context>>,
     span: SourceSpan,
-  ) -> Result<ad::VarDef<'context>, Diag<'context>> {
+  ) -> Result<sd::VarDef<'context>, Diag<'context>> {
     Ok(match (storage, initializer) {
       (None, None) => {
         let symbol = Symbol::tentative(qualified_type, Storage::Extern, name);
-        ad::VarDef::new(symbol, None, span)
+        sd::VarDef::new(symbol, None, span)
       },
       (None, Some(initializer)) => {
         let symbol = Symbol::def(qualified_type, Storage::Extern, name);
-        ad::VarDef::new(symbol, Some(initializer), span)
+        sd::VarDef::new(symbol, Some(initializer), span)
       },
       (Some(storage), None) => {
         let storage = if storage.is_register() {
@@ -896,7 +897,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
         } else {
           storage
         };
-        ad::VarDef::new(Symbol::decl(qualified_type, storage, name), None, span)
+        sd::VarDef::new(Symbol::decl(qualified_type, storage, name), None, span)
       },
       (Some(storage), Some(initializer)) => {
         let storage = match storage {
@@ -914,7 +915,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           },
           _ => storage,
         };
-        ad::VarDef::new(
+        sd::VarDef::new(
           Symbol::def(qualified_type, storage, name),
           Some(initializer),
           span,
@@ -928,14 +929,14 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     storage: Storage,
     qualified_type: QualifiedType<'context>,
     name: StrRef<'context>,
-    initializer: Option<ad::Initializer<'context>>,
+    initializer: Option<sd::Initializer<'context>>,
     span: SourceSpan,
-  ) -> Result<ad::VarDef<'context>, Diag<'context>> {
+  ) -> Result<sd::VarDef<'context>, Diag<'context>> {
     if storage == Storage::Extern && initializer.is_some() {
       self.add_error(LocalExternVarWithInitializer(name.to_string()), span);
     }
     let symbol = Symbol::def(qualified_type, storage, name);
-    Ok(ad::VarDef::new(symbol, initializer, span))
+    Ok(sd::VarDef::new(symbol, initializer, span))
   }
 }
 
@@ -943,7 +944,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn expression(
     &self,
     expression: pe::Expression<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     match expression {
       pe::Expression::Empty(_) => Ok(Default::default()),
       pe::Expression::Constant(constant) => self.constant(constant),
@@ -967,19 +968,19 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn sizeof(
     &self,
     sizeof: pe::SizeOf<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     match sizeof.sizeof {
       pe::SizeOfKind::Expression(expression) => {
         let analyzed_expr = self.expression(*expression).handle_with(
           self,
-          ae::Expression::new_error_node(
+          se::Expression::new_error_node(
             self.context().ulong_long_type().into(),
           ),
         );
         let size = analyzed_expr.unqualified_type().size();
-        Ok(ae::Expression::new_rvalue(
-          ae::RawExpr::Constant(
-            ae::ConstantLiteral::Integral(size.into()).into_with(SourceSpan {
+        Ok(se::Expression::new_rvalue(
+          se::RawExpr::Constant(
+            se::ConstantLiteral::Integral(size.into()).into_with(SourceSpan {
               end: analyzed_expr.span().end,
               ..sizeof.span
             }),
@@ -997,9 +998,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
             self.parse_declspecs(declspecs).shall_ok("sizeof type");
           self.apply_modifiers_for_varty(base_type, declarator.modifiers)
         };
-        Ok(ae::Expression::new_rvalue(
-          ae::RawExpr::Constant(
-            ae::ConstantLiteral::Integral(qualified_type.size().into())
+        Ok(se::Expression::new_rvalue(
+          se::RawExpr::Constant(
+            se::ConstantLiteral::Integral(qualified_type.size().into())
               .into_with(sizeof.span),
           ),
           self.context().ulong_long_type().into(),
@@ -1011,7 +1012,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn call(
     &self,
     call: pe::Call<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let pe::Call {
       arguments,
       callee,
@@ -1061,8 +1062,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           .handle_or_default(self)
       })
       .collect();
-    Ok(ae::Expression::new_rvalue(
-      ae::Call::new(analyzed_callee, converted_analyzed_arguments, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Call::new(analyzed_callee, converted_analyzed_arguments, span).into(),
       expr_type,
     ))
   }
@@ -1070,12 +1071,12 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn paren(
     &self,
     paren: pe::Paren<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let pe::Paren { expr, span } = paren;
     let analyzed_expr = self.expression(*expr)?;
     let expr_type = *analyzed_expr.qualified_type();
-    Ok(ae::Expression::new_rvalue(
-      ae::Paren::new(analyzed_expr, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Paren::new(analyzed_expr, span).into(),
       expr_type,
     ))
   }
@@ -1083,14 +1084,14 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn cast(
     &self,
     _: pe::CStyleCast,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     not_implemented_feature!("C-style cast is not implemented yet");
   }
 
   fn variable(
     &self,
     variable: pe::Variable<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let symbol = self.environment.find(variable.name).ok_or(
       UndefinedVariable(variable.name)
         .into_with(Severity::Error)
@@ -1101,8 +1102,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
         "variable cannot be a typedef; this should be handled in parser"
       );
     } else {
-      Ok(ae::Expression::new_lvalue(
-        ae::Variable::new(symbol.clone(), variable.span).into(),
+      Ok(se::Expression::new_lvalue(
+        se::Variable::new(symbol.clone(), variable.span).into(),
         symbol.borrow().qualified_type,
       ))
     }
@@ -1111,15 +1112,15 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn constant(
     &self,
     constant: pe::Constant<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let pe::Constant {
       value: constant,
       span,
     } = constant;
     let unqualified_type = constant.unqualified_type(self.context());
 
-    Ok(ae::Expression::new_rvalue(
-      ae::Constant::new(constant, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Constant::new(constant, span).into(),
       unqualified_type.into(),
     ))
   }
@@ -1127,7 +1128,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn unary(
     &self,
     unary: pe::Unary<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let pe::Unary {
       operator,
       operand: pe_expr,
@@ -1151,7 +1152,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn binary(
     &self,
     binary: pe::Binary<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let pe::Binary {
       left: pe_left,
       operator,
@@ -1176,7 +1177,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn ternary(
     &self,
     ternary: pe::Ternary<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let pe::Ternary {
       condition: pe_condition,
       then_expr: pe_then_expr,
@@ -1189,24 +1190,24 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
 
     match (then_expr.unqualified_type(), else_expr.unqualified_type()) {
       (Type::Primitive(Primitive::Void), Type::Primitive(Primitive::Void)) =>
-        Ok(ae::Expression::new_rvalue(
-          ae::Ternary::new(condition, then_expr, else_expr, span).into(),
+        Ok(se::Expression::new_rvalue(
+          se::Ternary::new(condition, then_expr, else_expr, span).into(),
           self.context().void_type().into(),
         )),
-      (Type::Primitive(Primitive::Void), _) => Ok(ae::Expression::new_rvalue(
-        ae::Ternary::new(
+      (Type::Primitive(Primitive::Void), _) => Ok(se::Expression::new_rvalue(
+        se::Ternary::new(
           condition,
           then_expr,
-          ae::Expression::void_conversion(else_expr, self.context()),
+          se::Expression::void_conversion(else_expr, self.context()),
           span,
         )
         .into(),
         self.context().void_type().into(),
       )),
-      (_, Type::Primitive(Primitive::Void)) => Ok(ae::Expression::new_rvalue(
-        ae::Ternary::new(
+      (_, Type::Primitive(Primitive::Void)) => Ok(se::Expression::new_rvalue(
+        se::Ternary::new(
           condition,
-          ae::Expression::void_conversion(then_expr, self.context()),
+          se::Expression::void_conversion(then_expr, self.context()),
           else_expr,
           span,
         )
@@ -1218,13 +1219,13 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
         if left_type.is_arithmetic() && right_type.is_arithmetic() =>
       {
         let (then_converted, else_converted, result_type) =
-          ae::Expression::usual_arithmetic_conversion(
+          se::Expression::usual_arithmetic_conversion(
             then_expr,
             else_expr,
             self.context(),
           )?;
-        Ok(ae::Expression::new_rvalue(
-          ae::Ternary::new(condition, then_converted, else_converted, span)
+        Ok(se::Expression::new_rvalue(
+          se::Ternary::new(condition, then_converted, else_converted, span)
             .into(),
           result_type,
         ))
@@ -1242,8 +1243,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           let result_type = Type::Pointer(Pointer::new(qualified_type))
             .lookup(self.context())
             .into();
-          Ok(ae::Expression::new_rvalue(
-            ae::Ternary::new(condition, then_expr, else_expr, span).into(),
+          Ok(se::Expression::new_rvalue(
+            se::Ternary::new(condition, then_expr, else_expr, span).into(),
             result_type,
           ))
         } else {
@@ -1264,14 +1265,14 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn member_access(
     &self,
     _member_access: pe::MemberAccess,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     todo!()
   }
 
   fn array_subscript(
     &self,
     array_subscript: pe::ArraySubscript<'context>,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     // a[i] = *(a + i)
     let pe::ArraySubscript {
       array: pe_array,
@@ -1301,9 +1302,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
 
     if let Type::Pointer(ptr) = analyzed_array.unqualified_type() {
       let elem_type = ptr.pointee;
-      Ok(ae::Expression::new_lvalue(
+      Ok(se::Expression::new_lvalue(
         // store the pointer(decayed array) and index here, not the array here... maybe a wrong idesa, idk for now.
-        ae::ArraySubscript::new(analyzed_array, analyzed_index, span).into(),
+        se::ArraySubscript::new(analyzed_array, analyzed_index, span).into(),
         elem_type,
       ))
     } else {
@@ -1318,7 +1319,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn compound_literal(
     &self,
     _compound_literal: pe::CompoundLiteral,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     todo!()
   }
 }
@@ -1327,9 +1328,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn unary_arithmetic(
     &self,
     operator: Operator,
-    operand: ae::Expression<'context>,
+    operand: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     assert!(matches!(operator, Operator::Plus | Operator::Minus));
     let operand = operand.lvalue_conversion().decay(self.context());
 
@@ -1343,8 +1344,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       let converted_operand =
         operand.usual_arithmetic_conversion_unary(self.context())?;
       let expr_type = *converted_operand.qualified_type();
-      Ok(ae::Expression::new_rvalue(
-        ae::Unary::prefix(operator, converted_operand, span).into(),
+      Ok(se::Expression::new_rvalue(
+        se::Unary::prefix(operator, converted_operand, span).into(),
         expr_type,
       ))
     }
@@ -1354,16 +1355,16 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn ppmm(
     &self,
     operator: Operator,
-    operand: ae::Expression<'context>,
-    kind: ae::UnaryKind,
+    operand: se::Expression<'context>,
+    kind: se::UnaryKind,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     assert!(matches!(
       operator,
       Operator::PlusPlus | Operator::MinusMinus
     ));
     let operand = operand.decay(self.context());
-    if operand.value_category() != ae::ValueCategory::LValue {
+    if operand.value_category() != se::ValueCategory::LValue {
       Err(
         ExprNotAssignable(operand.to_string())
           .into_with(Severity::Error)
@@ -1380,8 +1381,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       let converted_operand =
         operand.usual_arithmetic_conversion_unary_unchecked(self.context())?;
       let expr_type = *converted_operand.qualified_type();
-      Ok(ae::Expression::new_rvalue(
-        ae::Unary::new(operator, converted_operand, kind, span).into(),
+      Ok(se::Expression::new_rvalue(
+        se::Unary::new(operator, converted_operand, kind, span).into(),
         expr_type,
       ))
     }
@@ -1394,9 +1395,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn tilde(
     &self,
     operator: Operator,
-    operand: ae::Expression<'context>,
+    operand: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Tilde);
     let operand = operand.lvalue_conversion().decay(self.context());
 
@@ -1410,8 +1411,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       let converted_operand =
         operand.usual_arithmetic_conversion_unary(self.context())?;
       let expr_type = *converted_operand.qualified_type();
-      Ok(ae::Expression::new_rvalue(
-        ae::Unary::prefix(operator, converted_operand, span).into(),
+      Ok(se::Expression::new_rvalue(
+        se::Unary::prefix(operator, converted_operand, span).into(),
         expr_type,
       ))
     }
@@ -1421,15 +1422,15 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn logical_not(
     &self,
     operator: Operator,
-    operand: ae::Expression<'context>,
+    operand: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Not);
     let operand = operand.lvalue_conversion().decay(self.context());
 
     let converted_operand = operand.conditional_conversion(self.context())?;
-    Ok(ae::Expression::new_rvalue(
-      ae::Unary::prefix(operator, converted_operand, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Unary::prefix(operator, converted_operand, span).into(),
       self.context().bool_type().into(),
     ))
   }
@@ -1442,9 +1443,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn addressof(
     &self,
     operator: Operator,
-    operand: ae::Expression<'context>,
+    operand: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Ampersand);
     if !operand.is_lvalue() {
       Err(
@@ -1452,7 +1453,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           .into_with(Severity::Error)
           .into_with(span),
       )
-    } else if matches!(operand.raw_expr(), ae::RawExpr::Variable(variable) if variable.name.borrow().storage_class.is_register())
+    } else if matches!(operand.raw_expr(), se::RawExpr::Variable(variable) if variable.name.borrow().storage_class.is_register())
     {
       Err(
         AddressofOperandRegVar(operand.to_string())
@@ -1461,8 +1462,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       )
     } else {
       let pointee = *operand.qualified_type();
-      Ok(ae::Expression::new_rvalue(
-        ae::Unary::prefix(operator, operand, span).into(),
+      Ok(se::Expression::new_rvalue(
+        se::Unary::prefix(operator, operand, span).into(),
         Type::Pointer(Pointer::new(pointee))
           .lookup(self.context())
           .into(),
@@ -1477,9 +1478,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn indirect(
     &self,
     operator: Operator,
-    operand: ae::Expression<'context>,
+    operand: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     assert_eq!(operator, Operator::Star);
 
     let operand = operand.lvalue_conversion().decay(self.context());
@@ -1507,8 +1508,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       // If the operand has type "pointer to type", the result has type "type".
       // If an invalid value has been assigned to the pointer, the behavior is undefined.
       let expr_type = *pointee_type;
-      Ok(ae::Expression::new_lvalue(
-        ae::Unary::prefix(operator, operand, span).into(),
+      Ok(se::Expression::new_lvalue(
+        se::Unary::prefix(operator, operand, span).into(),
         expr_type,
       ))
     }
@@ -1519,10 +1520,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn assignment(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     if !left.is_modifiable_lvalue() {
       self.add_error(ExprNotAssignable(left.to_string()), span);
       return Ok(left);
@@ -1532,8 +1533,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       .decay(self.context())
       .assignment_conversion(left.qualified_type())?;
     let expr_type = *left.qualified_type();
-    Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, left, assigned_expr, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Binary::new(operator, left, assigned_expr, span).into(),
       expr_type,
     ))
   }
@@ -1546,17 +1547,17 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn logical(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let left = left.lvalue_conversion().decay(self.context());
     let right = right.lvalue_conversion().decay(self.context());
 
     let lhs = left.conditional_conversion(self.context())?;
     let rhs = right.conditional_conversion(self.context())?;
-    Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Binary::new(operator, lhs, rhs, span).into(),
       self.context().bool_type().into(), // todo: this should be an `int` according to standard(?)
     ))
   }
@@ -1567,10 +1568,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn relational(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let left = left.lvalue_conversion().decay(self.context());
     let right = right.lvalue_conversion().decay(self.context());
 
@@ -1579,14 +1580,14 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       && right.unqualified_type().is_arithmetic()
     {
       let (lhs, rhs, _common_type) =
-        ae::Expression::usual_arithmetic_conversion(
+        se::Expression::usual_arithmetic_conversion(
           left,
           right,
           self.context(),
         )?;
 
-      return Ok(ae::Expression::new_rvalue(
-        ae::Binary::new(operator, lhs, rhs, span).into(),
+      return Ok(se::Expression::new_rvalue(
+        se::Binary::new(operator, lhs, rhs, span).into(),
         self.context().bool_type().into(), // ditto
       ));
     }
@@ -1596,10 +1597,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn arithmetic(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let left = left.lvalue_conversion().decay(self.context());
     let right = right.lvalue_conversion().decay(self.context());
 
@@ -1626,20 +1627,20 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn usual_arithmetic(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     debug_assert!(
       left.unqualified_type().is_arithmetic()
         && right.unqualified_type().is_arithmetic()
     );
 
     let (lhs, rhs, result_type) =
-      ae::Expression::usual_arithmetic_conversion(left, right, self.context())?;
+      se::Expression::usual_arithmetic_conversion(left, right, self.context())?;
 
-    Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Binary::new(operator, lhs, rhs, span).into(),
       result_type,
     ))
   }
@@ -1647,10 +1648,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn pointer_arithematic(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     debug_assert!(
       left.unqualified_type().is_pointer()
         || right.unqualified_type().is_pointer()
@@ -1660,8 +1661,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       (Type::Pointer(left_ptr), Type::Pointer(right_ptr))
         if operator == Operator::Minus =>
         match Compatibility::compatible(&left_ptr.pointee, &right_ptr.pointee) {
-          true => Ok(ae::Expression::new_rvalue(
-            ae::Binary::new(operator, left, right, span).into(),
+          true => Ok(se::Expression::new_rvalue(
+            se::Binary::new(operator, left, right, span).into(),
             self.context().ptrdiff_type().into(), // no qual for pointer difference
           )),
           false => Err(
@@ -1678,8 +1679,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
         if lhs.is_integer() && operator == Operator::Plus =>
       {
         let ptrty = right.unqualified_type().clone().lookup(self.context());
-        Ok(ae::Expression::new_rvalue(
-          ae::Binary::new(
+        Ok(se::Expression::new_rvalue(
+          se::Binary::new(
             operator,
             left.ptrdiff_conversion_unchecked(self.context()),
             right,
@@ -1695,8 +1696,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           && matches!(operator, Operator::Plus | Operator::Minus) =>
       {
         let ptrty = left.unqualified_type().clone().lookup(self.context());
-        Ok(ae::Expression::new_rvalue(
-          ae::Binary::new(
+        Ok(se::Expression::new_rvalue(
+          se::Binary::new(
             operator,
             left,
             right.ptrdiff_conversion_unchecked(self.context()),
@@ -1712,8 +1713,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           operator.category(),
           OperatorCategory::Logical | OperatorCategory::Relational
         ) =>
-        Ok(ae::Expression::new_rvalue(
-          ae::Binary::new(operator, left, right, span).into(),
+        Ok(se::Expression::new_rvalue(
+          se::Binary::new(operator, left, right, span).into(),
           self.context().bool_type().into(),
         )),
       _ => Err(
@@ -1734,10 +1735,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn bitwise(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let left = left.lvalue_conversion().decay(self.context());
     let right = right.lvalue_conversion().decay(self.context());
 
@@ -1755,10 +1756,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     }
 
     let (lhs, rhs, result_type) =
-      ae::Expression::usual_arithmetic_conversion(left, right, self.context())?;
+      se::Expression::usual_arithmetic_conversion(left, right, self.context())?;
 
-    Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Binary::new(operator, lhs, rhs, span).into(),
       result_type,
     ))
   }
@@ -1769,10 +1770,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn bitshift(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     let lhs = left
       .lvalue_conversion()
       .decay(self.context())
@@ -1793,8 +1794,8 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     }
 
     let expr_type = *lhs.qualified_type();
-    Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, lhs, rhs, span).into(),
+    Ok(se::Expression::new_rvalue(
+      se::Binary::new(operator, lhs, rhs, span).into(),
       expr_type,
     ))
   }
@@ -1805,14 +1806,14 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn comma(
     &self,
     operator: Operator,
-    left: ae::Expression<'context>,
-    right: ae::Expression<'context>,
+    left: se::Expression<'context>,
+    right: se::Expression<'context>,
     span: SourceSpan,
-  ) -> Result<ae::Expression<'context>, Diag<'context>> {
+  ) -> Result<se::Expression<'context>, Diag<'context>> {
     // the result is the right expression, and the left is void converted, that's it. done.
     let expr_type = *right.qualified_type();
-    Ok(ae::Expression::new_rvalue(
-      ae::Binary::new(operator, left /* .void_conversion()*/, right, span)
+    Ok(se::Expression::new_rvalue(
+      se::Binary::new(operator, left /* .void_conversion()*/, right, span)
         .into(),
       expr_type,
     ))
@@ -1822,7 +1823,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn statements(
     &mut self,
     statements: Vec<ps::Statement<'context>>,
-  ) -> Vec<astmt::Statement<'context>> {
+  ) -> Vec<ss::Statement<'context>> {
     statements
       .into_iter()
       .filter_map(|statement| match self.statement(statement) {
@@ -1838,12 +1839,12 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn statement(
     &mut self,
     statement: ps::Statement<'context>,
-  ) -> Result<astmt::Statement<'context>, Diag<'context>> {
+  ) -> Result<ss::Statement<'context>, Diag<'context>> {
     match statement {
       ps::Statement::Expression(expression) => self.exprstmt(expression),
       ps::Statement::Compound(compound_stmt) =>
         self.compound(compound_stmt).map(Into::into),
-      ps::Statement::Empty(_) => Ok(astmt::Statement::default()),
+      ps::Statement::Empty(_) => Ok(ss::Statement::default()),
       ps::Statement::Return(return_stmt) =>
         self.returnstmt(return_stmt).map(Into::into),
       ps::Statement::Declaration(declaration) =>
@@ -1868,7 +1869,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn compound(
     &mut self,
     compound: ps::Compound<'context>,
-  ) -> Result<astmt::Compound<'context>, Diag<'context>> {
+  ) -> Result<ss::Compound<'context>, Diag<'context>> {
     self.compound_with(compound, |_| {})
   }
 
@@ -1876,7 +1877,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     &mut self,
     compound: ps::Compound<'context>,
     callback: Fn,
-  ) -> Result<astmt::Compound<'context>, Diag<'context>>
+  ) -> Result<ss::Compound<'context>, Diag<'context>>
   where
     Fn: FnOnce(&Self),
   {
@@ -1888,13 +1889,13 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
 
     self.environment.exit();
 
-    Ok(astmt::Compound::new(statements, compound.span))
+    Ok(ss::Compound::new(statements, compound.span))
   }
 
   fn exprstmt(
     &self,
     expr_stmt: pe::Expression<'context>,
-  ) -> Result<astmt::Statement<'context>, Diag<'context>> {
+  ) -> Result<ss::Statement<'context>, Diag<'context>> {
     // todo: unused expression result warning
     Ok(self.expression(expr_stmt)?.into())
   }
@@ -1902,7 +1903,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn returnstmt(
     &self,
     return_stmt: ps::Return<'context>,
-  ) -> Result<astmt::Return<'context>, Diag<'context>> {
+  ) -> Result<ss::Return<'context>, Diag<'context>> {
     let ps::Return { expression, span } = return_stmt;
     let analyzed_expr = match expression {
       Some(expr) => Some(self.expression(expr)?),
@@ -1925,7 +1926,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     };
     match (&analyzed_expr, return_type.unqualified_type) {
       (None, Type::Primitive(Primitive::Void)) =>
-        Ok(astmt::Return::new(None, span)),
+        Ok(ss::Return::new(None, span)),
       (None, _) => Err(
         ReturnTypeMismatch("non-void function must return a value".to_string())
           .into_with(Severity::Error)
@@ -1946,7 +1947,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
         .lvalue_conversion()
         .decay(self.context())
         .assignment_conversion(&return_type)?;
-        Ok(astmt::Return::new(Some(a), span))
+        Ok(ss::Return::new(Some(a), span))
       },
     }
   }
@@ -1954,7 +1955,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn ifstmt(
     &mut self,
     if_stmt: ps::If<'context>,
-  ) -> Result<astmt::If<'context>, Diag<'context>> {
+  ) -> Result<ss::If<'context>, Diag<'context>> {
     let ps::If {
       condition,
       then_branch,
@@ -1966,14 +1967,14 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       .and_then(|e| e.conditional_conversion(self.context()))
       .handle_with(
         self,
-        ae::Expression::new_error_node(self.context().bool_type().into()),
+        se::Expression::new_error_node(self.context().bool_type().into()),
       );
     let analyzed_then_branch =
       self.statement(*then_branch).handle_or_default(self).into();
     let analyzed_else_branch = else_branch.map(|else_branch| {
       self.statement(*else_branch).handle_or_default(self).into()
     });
-    Ok(astmt::If::new(
+    Ok(ss::If::new(
       analyzed_condition,
       analyzed_then_branch,
       analyzed_else_branch,
@@ -1984,7 +1985,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn whilestmt(
     &mut self,
     while_stmt: ps::While<'context>,
-  ) -> Result<astmt::While<'context>, Diag<'context>> {
+  ) -> Result<ss::While<'context>, Diag<'context>> {
     let ps::While {
       condition,
       body,
@@ -1996,10 +1997,10 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       .and_then(|e| e.conditional_conversion(self.context()))
       .handle_with(
         self,
-        ae::Expression::new_error_node(self.context().bool_type().into()),
+        se::Expression::new_error_node(self.context().bool_type().into()),
       );
     let analyzed_body = self.statement(*body).handle_or_default(self).into();
-    Ok(astmt::While::new(
+    Ok(ss::While::new(
       analyzed_condition,
       analyzed_body,
       label,
@@ -2010,7 +2011,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn dowhilestmt(
     &mut self,
     do_while: ps::DoWhile<'context>,
-  ) -> Result<astmt::DoWhile<'context>, Diag<'context>> {
+  ) -> Result<ss::DoWhile<'context>, Diag<'context>> {
     let ps::DoWhile {
       body,
       condition,
@@ -2023,9 +2024,9 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       .and_then(|e| e.conditional_conversion(self.context()))
       .handle_with(
         self,
-        ae::Expression::new_error_node(self.context().bool_type().into()),
+        se::Expression::new_error_node(self.context().bool_type().into()),
       );
-    Ok(astmt::DoWhile::new(
+    Ok(ss::DoWhile::new(
       analyzed_body,
       analyzed_condition,
       label,
@@ -2036,7 +2037,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn forstmt(
     &mut self,
     for_stmt: ps::For<'context>,
-  ) -> Result<astmt::For<'context>, Diag<'context>> {
+  ) -> Result<ss::For<'context>, Diag<'context>> {
     let ps::For {
       initializer,
       condition,
@@ -2050,13 +2051,13 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     let analyzed_condition = condition.map(|cond| {
       self.expression(cond).handle_with(
         self,
-        ae::Expression::new_error_node(self.context().bool_type().into()),
+        se::Expression::new_error_node(self.context().bool_type().into()),
       )
     });
     let analyzed_increment =
       increment.map(|inc| self.expression(inc).handle_or_default(self));
     let analyzed_body = self.statement(*body).handle_or_default(self).into();
-    Ok(astmt::For::new(
+    Ok(ss::For::new(
       analyzed_initializer,
       analyzed_condition,
       analyzed_increment,
@@ -2069,7 +2070,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn switchstmt(
     &mut self,
     switch: ps::Switch<'context>,
-  ) -> Result<astmt::Switch<'context>, Diag<'context>> {
+  ) -> Result<ss::Switch<'context>, Diag<'context>> {
     let ps::Switch {
       cases,
       condition,
@@ -2091,7 +2092,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
       },
       Err(e) => {
         self.add_diag(e);
-        ae::Expression::new_error_node(self.context().int_type().into())
+        se::Expression::new_error_node(self.context().int_type().into())
       },
     };
     let analyzed_cases = cases
@@ -2101,7 +2102,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
 
     let analyzed_default = default
       .map(|default| self.defaultstmt(default).shall_ok("switch default"));
-    Ok(astmt::Switch::new(
+    Ok(ss::Switch::new(
       analyzed_condition,
       analyzed_cases,
       analyzed_default,
@@ -2113,19 +2114,19 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn casestmt(
     &mut self,
     case: ps::Case<'context>,
-  ) -> Result<astmt::Case<'context>, Diag<'context>> {
+  ) -> Result<ss::Case<'context>, Diag<'context>> {
     let ps::Case { body, value, span } = case;
     let analyzed_value = self.expression(value).handle_with(
       self,
-      ae::Expression::new_error_node(self.context().int_type().into()),
+      se::Expression::new_error_node(self.context().int_type().into()),
     );
     let analyzed_body = self.statements(body);
 
-    Ok(astmt::Case::new(
+    Ok(ss::Case::new(
       analyzed_value
         .fold(&self.session.diagnosis)
         .transform(|expr| {
-          if let ae::RawExpr::Constant(constant) = expr.raw_expr() {
+          if let se::RawExpr::Constant(constant) = expr.raw_expr() {
             if constant.is_integral() {
               constant.value.clone()
             } else {
@@ -2147,16 +2148,16 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn defaultstmt(
     &mut self,
     default: ps::Default<'context>,
-  ) -> Result<astmt::Default<'context>, Diag<'context>> {
+  ) -> Result<ss::Default<'context>, Diag<'context>> {
     let ps::Default { body, span } = default;
     let analyzed_body = self.statements(body);
-    Ok(astmt::Default::new(analyzed_body, span))
+    Ok(ss::Default::new(analyzed_body, span))
   }
 
   fn labelstmt(
     &mut self,
     label: ps::Label<'context>,
-  ) -> Result<astmt::Label<'context>, Diag<'context>> {
+  ) -> Result<ss::Label<'context>, Diag<'context>> {
     match self.environment.is_global() {
       true => contract_violation!(
         "label statement in global scope should be handled in parser"
@@ -2174,7 +2175,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           .labels
           .insert((*name).into())
         {
-          true => Ok(astmt::Label::new(
+          true => Ok(ss::Label::new(
             name,
             self.statement(*statement).handle_or_default(self),
             span,
@@ -2192,7 +2193,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn gotostmt(
     &mut self,
     goto: ps::Goto<'context>,
-  ) -> Result<astmt::Goto<'context>, Diag<'context>> {
+  ) -> Result<ss::Goto<'context>, Diag<'context>> {
     match self.environment.is_global() {
       true => contract_violation!(
         "goto statement in global scope should be handled in parser"
@@ -2204,7 +2205,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
           .unwrap()
           .gotos
           .insert((*goto.label).into());
-        Ok(astmt::Goto::new(goto.label, goto.span))
+        Ok(ss::Goto::new(goto.label, goto.span))
       },
     }
   }
@@ -2212,24 +2213,24 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   fn breakstmt(
     &self,
     break_stmt: ps::Break,
-  ) -> Result<astmt::Break<'context>, Diag<'context>> {
+  ) -> Result<ss::Break<'context>, Diag<'context>> {
     match self.environment.is_global() {
       true => contract_violation!(
         "break statement in global scope should be handled in parser"
       ),
-      false => Ok(astmt::Break::new(break_stmt.tag, break_stmt.span)),
+      false => Ok(ss::Break::new(break_stmt.tag, break_stmt.span)),
     }
   }
 
   fn continuestmt(
     &self,
     continue_stmt: ps::Continue,
-  ) -> Result<astmt::Continue<'context>, Diag<'context>> {
+  ) -> Result<ss::Continue<'context>, Diag<'context>> {
     match self.environment.is_global() {
       true => contract_violation!(
         "continue statement in global scope should be handled in parser"
       ),
-      false => Ok(astmt::Continue::new(continue_stmt.tag, continue_stmt.span)),
+      false => Ok(ss::Continue::new(continue_stmt.tag, continue_stmt.span)),
     }
   }
 }

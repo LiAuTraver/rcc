@@ -12,7 +12,7 @@ use crate::{
     DiagData::{self, *},
     Diagnosis,
   },
-  parser::{
+  parse::{
     declaration::{
       ArrayModifier, DeclSpecs, Declaration, Declarator, DeclaratorType,
       Function, FunctionSignature, Initializer, Modifier, Parameter, Program,
@@ -1241,7 +1241,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
     }
   }
 
-  /// this should return [`ae::SizeOf`].
+  /// this should return [`se::SizeOf`].
   fn next_sizeof(&mut self) -> Expression<'context> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Sizeof }>();
