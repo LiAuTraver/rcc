@@ -51,7 +51,8 @@ fn main() {
   };
   let arena = Bump::new();
   let context = Context::new(&arena);
-  let session = Session::new(&source_manager, &context);
+  let ir_context = rcc_core::ir::Context::new(&arena);
+  let session = Session::new(&source_manager, &context, &ir_context);
   pipeline(session, stage, false);
 }
 
@@ -232,7 +233,8 @@ int main(int argc, char **argv) { //
     manager.add_string(source.into());
     let arena = Bump::new();
     let context = Context::new(&arena);
-    let session = Session::new(&manager, &context);
+    let ir_context = rcc_core::ir::Context::new(&arena);
+    let session = Session::new(&manager, &context, &ir_context);
     pipeline(session, Stage::Analyze, true)
   }
   #[test]

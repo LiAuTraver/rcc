@@ -10,7 +10,7 @@ use crate::common::StrRef;
 #[derive(Debug)]
 pub struct Context<'context> {
   arena: &'context Bump,
-  type_interner: RefCell<HashSet<&'context Type<'context>>>,
+  type_interner: RefCell<HashSet<TypeRef<'context>>>,
   string_interner: RefCell<HashSet<StrRef<'context>>>,
 
   nullptr_type: TypeRef<'context>,
@@ -37,7 +37,7 @@ pub struct Context<'context> {
 impl<'context> Context<'context> {
   pub fn new(arena: &'context Bump) -> Self {
     let void_type = arena.alloc(Primitive::Void.into());
-    Self {
+    let this = Self {
       arena,
       type_interner: Default::default(),
       string_interner: Default::default(),
@@ -61,7 +61,29 @@ impl<'context> Context<'context> {
       voidptr_type: arena
         .alloc(Pointer::new(QualifiedType::new_unqualified(void_type)).into()),
       unnamed_str: arena.alloc_str("<unnamed>"),
+    };
+    {
+      let mut refmut = this.type_interner.borrow_mut();
+      refmut.insert(this.int_type);
+      refmut.insert(this.float_type);
+      refmut.insert(this.short_type);
+      refmut.insert(this.ptrdiff_type);
+      refmut.insert(this.uint_type);
+      refmut.insert(this.ulong_type);
+      refmut.insert(this.ulong_long_type);
+      refmut.insert(this.char_type);
+      refmut.insert(this.uchar_type);
+      refmut.insert(this.ushort_type);
+      refmut.insert(this.long_type);
+      refmut.insert(this.long_long_type);
+      refmut.insert(this.void_type);
+      refmut.insert(this.nullptr_type);
+      refmut.insert(this.double_type);
+      refmut.insert(this.bool_type);
+      refmut.insert(this.voidptr_type);
     }
+    this.string_interner.borrow_mut().insert(this.unnamed_str);
+    this
   }
 
   pub fn arena(&self) -> &'context Bump {

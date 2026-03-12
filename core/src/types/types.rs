@@ -70,8 +70,7 @@ impl<'context> Type<'context> {
     if cfg!(debug_assertions) && !::std::ptr::eq(lhs, rhs) && lhs == rhs {
       eprintln!(
         "INTERNAL INVARIANT: comparing types by pointer but they are actually \
-         the same: {:p}: {:?} and {:p}: {:?}. This is known bug in CallExpr's \
-         function formal and actual params.",
+         the same: {:p}: {:?} and {:p}: {:?}.",
         lhs, lhs, rhs, rhs
       );
       return true;

@@ -80,7 +80,7 @@ pub enum Value<'context> {
 #[derive(Debug)]
 pub struct ValueData<'context> {
   pub qualified_type: QualifiedType<'context>,
-  // pub ir_type
+  pub ir_type: super::TypeRef<'context>,
   pub value: Value<'context>,
   pub users: Vec<InstID>,
 }
@@ -88,10 +88,12 @@ pub struct ValueData<'context> {
 impl<'context> ValueData<'context> {
   pub fn new(
     qualified_type: QualifiedType<'context>,
+    ir_type: super::TypeRef<'context>,
     value: Value<'context>,
   ) -> Self {
     Self {
       qualified_type,
+      ir_type,
       value,
       users: Default::default(),
     }

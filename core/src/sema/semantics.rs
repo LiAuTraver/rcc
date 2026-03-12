@@ -127,7 +127,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
   }
 
   pub fn context(&self) -> &'context Context<'context> {
-    self.session.context
+    self.session.ast_context
   }
 
   pub fn add_diag(&self, diag: Diag<'context>) {
@@ -341,7 +341,7 @@ impl<'context> Sema<'_, 'context, '_> {
         let symbol = Symbol::new_ref(Symbol::new(
           qualified_type,
           Storage::Automatic,
-          name.unwrap_or_else(|| self.session.context.unnamed_str()),
+          name.unwrap_or_else(|| self.session.ast_context.unnamed_str()),
           VarDeclKind::Declaration,
         ));
         sd::Parameter::new(symbol, span)

@@ -400,7 +400,7 @@ impl<'context> Parser<'_, 'context, '_> {
           Some(
             self
               .session
-              .context
+              .ast_context
               .intern_str(&self.tokens[name_idx].to_owned_string()),
           )
         } else {

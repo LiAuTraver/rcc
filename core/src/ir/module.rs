@@ -37,10 +37,19 @@ pub struct Variable<'context> {
   pub initializer: Option<Initializer<'context>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BasicBlock {
   pub instructions: Vec<InstID>,
   pub terminator: InstID,
+}
+
+impl BasicBlock {
+  pub fn new(instructions: Vec<InstID>, terminator: InstID) -> Self {
+    Self {
+      instructions,
+      terminator,
+    }
+  }
 }
 
 /// **Static** initializer.

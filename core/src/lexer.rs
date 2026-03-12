@@ -319,7 +319,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
       Ok(keyword) =>
         Token::keyword(keyword, self.span(start)).transform_alternative(),
       Err(_) => Token::identifier(
-        self.session.context.intern_str(text),
+        self.session.ast_context.intern_str(text),
         self.span(start),
       ),
     }
@@ -596,7 +596,7 @@ impl<'session, 'source, 'context> Lexer<'session, 'source, 'context> {
 
     let text = self.slice(start, end);
     Some(Token::string(
-      self.session.context.intern_str(text),
+      self.session.ast_context.intern_str(text),
       self.span(start),
     ))
   }

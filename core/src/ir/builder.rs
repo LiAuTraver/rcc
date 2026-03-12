@@ -49,10 +49,11 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
     qualified_type: QualifiedType<'context>,
     value: Value<'context>,
   ) -> ValueID {
-    self
-      .module
-      .values
-      .insert(ValueData::new(qualified_type, value))
+    self.module.values.insert(ValueData::new(
+      qualified_type,
+      self.session.ir_context.ir_type(&qualified_type),
+      value,
+    ))
   }
 
   /// Emit an instruction into the current block. Returns its InstID.
@@ -87,10 +88,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
   fn push_block(&mut self) {
     self.seal_current_block();
-    self.current_block = Some(BasicBlock {
-      instructions: Vec::new(),
-      terminator: InstID::null(),
-    });
+    self.current_block = Some(BasicBlock::default());
   }
 
   fn seal_current_block(&mut self) {

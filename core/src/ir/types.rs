@@ -1,6 +1,6 @@
 /// IR Type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Type<'context> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Type<'ir> {
   Void,
   Label,
   IEEE32Float,
@@ -8,25 +8,51 @@ pub enum Type<'context> {
 
   Pointer,
   Integer(u8),
-  Array(Array<'context>),
-  Function(Function<'context>),
+  Array(Array<'ir>),
+  Function(Function<'ir>),
   // TODO: complete it later, placeholder now vvv
   Struct,
 }
 
-pub type TypeRef<'context> = &'context Type<'context>;
-pub type TypeRefMut<'context> = &'context mut Type<'context>;
+pub type TypeRef<'ir> = &'ir Type<'ir>;
+pub type TypeRefMut<'ir> = &'ir mut Type<'ir>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 
-pub struct Array<'context> {
-  element_type: TypeRef<'context>,
+pub struct Array<'ir> {
+  element_type: TypeRef<'ir>,
   length: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Function<'context> {
-  result_type: TypeRef<'context>,
-  params: &'context [TypeRef<'context>],
+impl<'ir> Array<'ir> {
+  pub fn new(element_type: TypeRef<'ir>, length: usize) -> Self {
+    Self {
+      element_type,
+      length,
+    }
+  }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Function<'ir> {
+  result_type: TypeRef<'ir>,
+  params: &'ir [TypeRef<'ir>],
   is_variadic: bool,
 }
+
+impl<'ir> Function<'ir> {
+  pub fn new(
+    result_type: TypeRef<'ir>,
+    params: &'ir [TypeRef<'ir>],
+    is_variadic: bool,
+  ) -> Self {
+    Self {
+      result_type,
+      params,
+      is_variadic,
+    }
+  }
+}
+
+::rcc_utils::interconvert!(Array, Type, 'ir);
+::rcc_utils::interconvert!(Function, Type, 'ir);
