@@ -1,29 +1,23 @@
-use ::rcc_utils::SmallString;
-use ::slotmap::new_key_type;
-
-use super::value::{BlockID, ValueID};
-use crate::{
-  common::StrRef,
-  types::{Constant, QualifiedType},
-};
+use super::value::ValueID;
+use crate::types::QualifiedType;
 
 /// result = phi [val1, label1], [val2, label2]
 ///
 /// left here as placeholder, do it later.
 #[derive(Debug, Clone)]
 pub struct Phi {
-  pub incomings: Vec<(ValueID, BlockID)>, // (Value, From_Block_Label)
+  pub incomings: Vec<(ValueID, ValueID)>, // (Value, From_Block_Label)
 }
 
 #[derive(Debug)]
 pub struct Jump {
-  pub label: BlockID,
+  pub label: ValueID,
 }
 #[derive(Debug)]
 pub struct Branch {
   pub cond: ValueID,
-  pub true_label: BlockID,
-  pub false_label: BlockID,
+  pub true_label: ValueID,
+  pub false_label: ValueID,
 }
 #[derive(Debug)]
 pub struct Return {

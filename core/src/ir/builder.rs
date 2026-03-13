@@ -1,11 +1,12 @@
 use ::rcc_utils::contract_violation;
-use ::slotmap::{Key, SlotMap};
+use ::slotmap::Key;
 use ::std::collections::HashMap;
 
 use super::{
+  Argument, Value,
   instruction::{self as inst, Instruction, Terminator},
   module::{self, BasicBlock, Module},
-  value::{BlockID, FuncID, InstID, Value, ValueData, ValueID},
+  value::{ValueData, ValueID},
 };
 use crate::{
   common::StrRef,
@@ -13,7 +14,14 @@ use crate::{
   session::Session,
   types::{CastType, QualifiedType},
 };
-
+/// Overload helper.
+pub trait Emitable<'a, ValueType> {
+  fn emit(
+    &mut self,
+    value: ValueType,
+    qualified_type: QualifiedType<'a>,
+  ) -> ValueID;
+}
 pub struct ModuleBuilder<'session, 'context, 'source>
 where
   'context: 'session,
@@ -23,7 +31,7 @@ where
   /// The basic block currently being written into
   current_block: Option<BasicBlock>,
   /// Blocks finalized in the current function
-  current_blocks: Vec<BlockID>,
+  current_blocks: Vec<ValueID>,
   locals: HashMap<StrRef<'context>, ValueID>,
   /// function name → ValueID for call resolution
   func_values: HashMap<StrRef<'context>, ValueID>,
@@ -41,51 +49,115 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
     }
   }
 }
-
-impl<'context> ModuleBuilder<'_, 'context, '_> {
-  /// Create a new Value and return its ValueID.
-  fn make_value(
+impl<'context> Emitable<'context, Terminator>
+  for ModuleBuilder<'_, 'context, '_>
+{
+  fn emit(
     &mut self,
+    terminator: Terminator,
     qualified_type: QualifiedType<'context>,
-    value: Value<'context>,
+  ) -> ValueID {
+    if let Some(block) = &mut self.current_block {
+      assert!(block.terminator.is_null(), "block already has a terminator");
+      let value_id = self.module.values.insert(ValueData::new(
+        qualified_type,
+        self.session.ir_context.ir_type(&qualified_type),
+        Into::<Instruction>::into(terminator).into(),
+      ));
+      block.terminator = value_id;
+      value_id
+    } else {
+      panic!("no block to emit terminator into")
+    }
+  }
+}
+impl<'context, InstType: Into<Instruction<'context>>>
+  Emitable<'context, InstType> for ModuleBuilder<'_, 'context, '_>
+{
+  default fn emit(
+    &mut self,
+    value: InstType,
+    qualified_type: QualifiedType<'context>,
+  ) -> ValueID {
+    if let Some(block) = &mut self.current_block {
+      let value_id = self.module.values.insert(ValueData::new(
+        qualified_type,
+        self.session.ir_context.ir_type(&qualified_type),
+        value.into().into(),
+      ));
+      block.instructions.push(value_id);
+      value_id
+    } else {
+      panic!("no block to emit into")
+    }
+  }
+}
+
+impl<'context> Emitable<'context, module::Function<'context>>
+  for ModuleBuilder<'_, 'context, '_>
+{
+  fn emit(
+    &mut self,
+    value: module::Function<'context>,
+    qualified_type: QualifiedType<'context>,
+  ) -> ValueID {
+    let value_id = self.module.values.insert(ValueData::new(
+      qualified_type,
+      self.session.ir_context.ir_type(&qualified_type),
+      value.into(),
+    ));
+    self.module.globals.push(value_id);
+    value_id
+  }
+}
+impl<'context> Emitable<'context, module::Variable<'context>>
+  for ModuleBuilder<'_, 'context, '_>
+{
+  fn emit(
+    &mut self,
+    value: module::Variable<'context>,
+    qualified_type: QualifiedType<'context>,
+  ) -> ValueID {
+    let value_id = self.module.values.insert(ValueData::new(
+      qualified_type,
+      self.session.ir_context.ir_type(&qualified_type),
+      value.into(),
+    ));
+    self.module.globals.push(value_id);
+    value_id
+  }
+}
+impl<'context> Emitable<'context, se::Constant<'context>>
+  for ModuleBuilder<'_, 'context, '_>
+{
+  fn emit(
+    &mut self,
+    value: se::Constant<'context>,
+    qualified_type: QualifiedType<'context>,
   ) -> ValueID {
     self.module.values.insert(ValueData::new(
       qualified_type,
       self.session.ir_context.ir_type(&qualified_type),
-      value,
+      value.into(),
     ))
   }
-
-  /// Emit an instruction into the current block. Returns its InstID.
-  fn emit(&mut self, instruction: Instruction<'context>) -> InstID {
-    if let Some(block) = &mut self.current_block {
-      let inst_id = self.module.instructions.insert(instruction);
-      block.instructions.push(inst_id);
-      return inst_id;
-    }
-    panic!("no block to emit into")
-  }
-
-  /// Emit an instruction that produces a value. Returns the result ValueID.
-  fn emit_value(
+}
+impl<'context> Emitable<'context, Argument>
+  for ModuleBuilder<'_, 'context, '_>
+{
+  fn emit(
     &mut self,
-    instruction: Instruction<'context>,
+    value: Argument,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    let inst_id = self.emit(instruction);
-    self.make_value(qualified_type, Value::Instruction(inst_id))
+    self.module.values.insert(ValueData::new(
+      qualified_type,
+      self.session.ir_context.ir_type(&qualified_type),
+      value.into(),
+    ))
   }
-
-  fn emit_terminator(&mut self, terminator: Terminator) {
-    if let Some(block) = &mut self.current_block {
-      assert!(block.terminator.is_null(), "block already has a terminator");
-      let inst_id = self.module.instructions.insert(terminator.into());
-      block.terminator = inst_id;
-      return;
-    }
-    panic!("no block to emit terminator into")
-  }
-
+}
+impl<'context> ModuleBuilder<'_, 'context, '_> {
   fn push_block(&mut self) {
     self.seal_current_block();
     self.current_block = Some(BasicBlock::default());
@@ -93,9 +165,14 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
   fn seal_current_block(&mut self) {
     if let Some(block) = self.current_block.take() {
-      let block_id = self.module.blocks.insert(block);
+      let block_id = self.module.values.insert(ValueData::new(
+        self.session.ast_context.void_type().into(),
+        self.session.ir_context.label_type(),
+        block.into(),
+      ));
       self.current_blocks.push(block_id);
     }
+    // do nothing
   }
 }
 
@@ -106,10 +183,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
   ) -> Module<'context> {
     let declarations = translation_unit.declarations;
 
-    self.module.functions =
-      SlotMap::with_capacity_and_key(declarations.len() * 3 / 4 + 1);
-    self.module.globals =
-      SlotMap::with_capacity_and_key(declarations.len() / 4 + 1);
+    self.module.globals = Vec::with_capacity(declarations.len() / 4 + 1);
 
     // Pre-register all functions so forward references resolve.
     for decl in &declarations {
@@ -117,20 +191,15 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
         let sym = f.symbol.borrow();
         let name = sym.name;
         let qualified_type = sym.qualified_type;
-        let proto = qualified_type.as_functionproto_unchecked();
-        let return_type = proto.return_type;
-        let is_variadic = proto.is_variadic;
+        let is_variadic =
+          qualified_type.as_functionproto_unchecked().is_variadic;
         drop(sym);
 
-        let func_id = self.module.functions.insert(module::Function {
-          name,
-          return_type,
-          params: Vec::new(),
-          blocks: Vec::new(),
-          is_variadic,
-        });
-        let vid = self.make_value(qualified_type, Value::Function(func_id));
-        self.func_values.insert(name, vid);
+        let value_id = self.emit(
+          module::Function::new_empty(name, is_variadic),
+          qualified_type,
+        );
+        self.func_values.insert(name, value_id);
       }
     }
 
@@ -139,17 +208,15 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
       match decl {
         sd::ExternalDeclaration::Function(function) => {
           let name = function.symbol.borrow().name;
-          let vid = self.func_values[name];
-          let func_id = match self.module.values[vid].value {
-            Value::Function(fid) => fid,
-            _ => unreachable!(),
-          };
-          let ir_func = self.function(function, func_id);
-          self.module.functions[func_id] = ir_func;
+          let value_id = self.func_values[name];
+          let ir_func = self.function(function, value_id);
+          // replace the empty function with the one with body.
+          self.module.values[value_id].value = ir_func.into();
         },
         sd::ExternalDeclaration::Variable(variable) => {
+          let qualified_type = variable.symbol.borrow().qualified_type;
           let variable = self.vardef(variable);
-          self.module.globals.insert(variable);
+          self.emit(variable, qualified_type);
         },
       }
     }
@@ -161,7 +228,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
   fn function(
     &mut self,
     function: sd::Function<'context>,
-    func_id: FuncID,
+    function_id: ValueID,
   ) -> module::Function<'context> {
     let sd::Function {
       symbol,
@@ -182,12 +249,12 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
     let params: Vec<ValueID> = parameters
       .into_iter()
       .enumerate()
-      .map(|(i, p)| {
+      .map(|(index, p)| {
         let sym = p.symbol.borrow();
-        let value_id =
-          self.make_value(sym.qualified_type, Value::Argument(func_id, i));
-        self.locals.insert(sym.name, value_id);
-        value_id
+        let param_value_id =
+          self.emit(Argument::new(function_id, index), sym.qualified_type);
+        self.locals.insert(sym.name, param_value_id);
+        param_value_id
       })
       .collect();
 
@@ -199,14 +266,14 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
     self.locals.clear();
 
     let sym = symbol.borrow();
-    let proto = sym.qualified_type.as_functionproto_unchecked();
-    module::Function {
-      name: sym.name,
+    let is_variadic =
+      sym.qualified_type.as_functionproto_unchecked().is_variadic;
+    module::Function::new(
+      sym.name,
       params,
-      blocks: std::mem::take(&mut self.current_blocks),
-      return_type: proto.return_type,
-      is_variadic: proto.is_variadic,
-    }
+      std::mem::take(&mut self.current_blocks),
+      is_variadic,
+    )
   }
 
   fn vardef(
@@ -214,11 +281,9 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
     variable: sd::VarDef<'context>,
   ) -> module::Variable<'context> {
     let sym = variable.symbol.borrow();
-    module::Variable {
-      name: sym.name,
-      qualified_type: sym.qualified_type,
-      initializer: None, // TODO: handle initializers
-    }
+    module::Variable::new(
+      sym.name, None, // TODO: handle initializers
+    )
   }
 }
 
@@ -250,10 +315,12 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
   fn returnstmt(&mut self, return_stmt: ss::Return<'context>) {
     let ss::Return { expression, .. } = return_stmt;
+    let qualified_type = expression.as_ref().map(|e| *e.qualified_type());
     let operand = expression.and_then(|e| self.expression(e));
-    self.emit_terminator(inst::Terminator::Return(inst::Return {
-      result: operand,
-    }));
+    self.emit(
+      inst::Terminator::Return(inst::Return { result: operand }),
+      qualified_type.unwrap(),
+    );
   }
 
   fn compound(&mut self, body: ss::Compound<'context>) {
@@ -270,9 +337,9 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
     &mut self,
     expression: se::Expression<'context>,
   ) -> Option<ValueID> {
-    /// the fold here is redundant, yet seems valid,
-    /// e.g., `2 + 3 + getint(4 + 5)` adn be firstly folded to `5 + getint(4 + 5)`
-    /// and when the callexpr evaluates its args, it'll fold to `5 + getint(9)` further.
+    // the fold here is redundant, yet seems valid,
+    // e.g., `2 + 3 + getint(4 + 5)` adn be firstly folded to `5 + getint(4 + 5)`
+    // and when the callexpr evaluates its args, it'll fold to `5 + getint(9)` further.
     let (raw_expr, qualified_type, ..) = expression
       .fold(&self.session.diagnosis)
       .unwrap()
@@ -305,7 +372,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
     constant: se::Constant<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> Option<ValueID> {
-    Some(self.make_value(qualified_type, Value::Constant(constant.value)))
+    Some(self.emit(constant, qualified_type))
   }
 
   fn variable(
@@ -360,12 +427,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
     let call_inst = inst::Call { callee, args };
 
-    if qualified_type.is_void() {
-      self.emit(call_inst.into());
-      None
-    } else {
-      Some(self.emit_value(call_inst.into(), qualified_type))
-    }
+    Some(self.emit(call_inst, qualified_type))
   }
 
   #[inline]

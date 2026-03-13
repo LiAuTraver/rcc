@@ -7,12 +7,14 @@ mod module;
 mod types;
 mod value;
 
+use self::value::Lookup;
 pub use self::{
   builder::ModuleBuilder,
   context::Context,
   module::{
-    BasicBlock, Function as IRFunction, Initializer as IRStaticInitializer,
-    Module, Variable as IRGlobalValue,
+    Argument, BasicBlock, Function as IRFunction,
+    Initializer as IRStaticInitializer, Module, Variable as IRGlobalValue,
   },
   types::{Type, TypeRef, TypeRefMut},
+  value::{Value, ValueData, ValueID},
 };

@@ -190,9 +190,8 @@ impl<'context> Constant<'context> {
 
   pub fn to_floating(self, format: FloatFormat) -> Self {
     match self {
-      Self::Integral(integral) =>
-        Constant::Floating(integral.to_floating(format)),
-      Self::Floating(floating) => Constant::Floating(floating),
+      Self::Integral(integral) => Self::Floating(integral.to_floating(format)),
+      Self::Floating(floating) => Self::Floating(floating),
       _ => unreachable!("handled elsewhere"),
     }
   }

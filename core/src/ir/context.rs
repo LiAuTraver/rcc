@@ -1,4 +1,4 @@
-use ::bumpalo::{Bump, collections::CollectIn};
+use ::bumpalo::Bump;
 use ::std::{cell::RefCell, collections::HashSet};
 
 use super::{
@@ -24,8 +24,8 @@ impl<'ir> Context<'ir> {
     let this = Self {
       void_type: arena.alloc(Type::Void),
       label_type: arena.alloc(Type::Label),
-      float32_type: arena.alloc(Type::IEEE32Float),
-      float64_type: arena.alloc(Type::IEEE64Float),
+      float32_type: arena.alloc(Type::Float),
+      float64_type: arena.alloc(Type::Double),
       pointer_type: arena.alloc(Type::Pointer),
       common_integer_types: [
         arena.alloc(Type::Integer(1)),
@@ -89,7 +89,15 @@ impl<'ir> Context<'ir> {
   }
 
   pub fn make_integer(&self, bits: u8) -> TypeRef<'ir> {
-    self.intern(Type::Integer(bits))
+    match bits {
+      1 => self.common_integer_types[0],
+      8 => self.common_integer_types[1],
+      16 => self.common_integer_types[2],
+      32 => self.common_integer_types[3],
+      64 => self.common_integer_types[4],
+      128 => self.common_integer_types[5],
+      _ => self.intern(Type::Integer(bits)),
+    }
   }
 
   pub fn make_array(
@@ -110,32 +118,25 @@ impl<'ir> Context<'ir> {
   }
 }
 
-use crate::types::{self, Primitive, TypeInfo};
+use crate::types;
 impl<'ir> Context<'ir> {
-  pub fn ir_type(&self, ast_type: &types::QualifiedType<'ir>) -> TypeRef<'ir> {
-    match ast_type.unqualified_type {
+  pub fn ir_type(
+    &self,
+    qualified_type: &types::QualifiedType<'ir>,
+  ) -> TypeRef<'ir> {
+    use Primitive::*;
+    use types::{Primitive, TypeInfo};
+    match qualified_type.unqualified_type {
       types::Type::Primitive(primitive) => match primitive {
-        Primitive::Float => self.float32_type,
-        Primitive::Double => self.float64_type,
-        Primitive::Void => self.void_type,
-        Primitive::Nullptr => self.pointer_type,
-        Primitive::Bool => self.common_integer_types[0],
-        integer @ (Primitive::Char
-        | Primitive::SChar
-        | Primitive::Short
-        | Primitive::Int
-        | Primitive::Long
-        | Primitive::LongLong
-        | Primitive::UChar
-        | Primitive::UShort
-        | Primitive::UInt
-        | Primitive::ULong
-        | Primitive::ULongLong) => self.make_integer(integer.size_bits() as u8),
-        placeholder @ (Primitive::LongDouble
-        | Primitive::ComplexFloat
-        | Primitive::ComplexDouble
-        | Primitive::ComplexLongDouble) =>
-          todo!("{placeholder:#?} not implemented"),
+        Float => self.float32_type,
+        Double => self.float64_type,
+        Void => self.void_type,
+        Nullptr => self.pointer_type,
+        integer @ (Bool | Char | SChar | Short | Int | Long | LongLong
+        | UChar | UShort | UInt | ULong | ULongLong) =>
+          self.make_integer(integer.size_bits() as u8),
+        placeholder @ (LongDouble | ComplexFloat | ComplexDouble
+        | ComplexLongDouble) => todo!("{placeholder:#?} not implemented"),
       },
       types::Type::Pointer(pointer) => self.pointer_type,
       types::Type::Array(array) => self.make_array(

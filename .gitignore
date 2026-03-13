@@ -7,3 +7,4 @@ test_compiler.ps1
 out.txt
 test.ll
 test.s
+test2.ll

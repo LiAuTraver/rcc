@@ -1,3 +1,5 @@
+#![allow(incomplete_features)]
+#![feature(specialization)]
 // C/C++ like default initialization in struct fields
 #![feature(default_field_values)]
 // const for Box::new
