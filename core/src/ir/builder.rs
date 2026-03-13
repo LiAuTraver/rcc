@@ -14,7 +14,7 @@ use crate::{
   session::Session,
   types::{CastType, QualifiedType},
 };
-/// Overload helper.
+/// Overload helper. I love overloading.
 pub trait Emitable<'a, ValueType> {
   fn emit(
     &mut self,
@@ -315,11 +315,14 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
   fn returnstmt(&mut self, return_stmt: ss::Return<'context>) {
     let ss::Return { expression, .. } = return_stmt;
-    let qualified_type = expression.as_ref().map(|e| *e.qualified_type());
+    let qualified_type = expression
+      .as_ref()
+      .map(|e| *e.qualified_type())
+      .unwrap_or(self.session.ast_context.void_type().into());
     let operand = expression.and_then(|e| self.expression(e));
     self.emit(
-      inst::Terminator::Return(inst::Return { result: operand }),
-      qualified_type.unwrap(),
+      inst::Terminator::Return(inst::Return::new(operand)),
+      qualified_type,
     );
   }
 

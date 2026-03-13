@@ -8,8 +8,10 @@ use crate::{common::StrRef, types::Constant};
 
 #[derive(Debug, Default)]
 pub struct Module<'context> {
+  /// the arena.
   pub values: SlotMap<ValueID, ValueData<'context>>,
-  pub globals: Vec<ValueID>, // global function and variable entry.
+  /// global function and variable entry.
+  pub globals: Vec<ValueID>,
 }
 
 impl<'a> Module<'a> {
@@ -85,6 +87,7 @@ pub trait Global {}
 impl Global for Variable<'_> {}
 impl Global for Function<'_> {}
 
+/// type should always be [`super::Type::Label`].
 #[derive(Debug, Default)]
 pub struct BasicBlock {
   pub instructions: Vec<ValueID>,

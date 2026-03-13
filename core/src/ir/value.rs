@@ -13,6 +13,15 @@ pub(super) trait Lookup<KeyType, ValueType> {
   fn lookup(&self, key: KeyType) -> &ValueType;
 }
 
+impl<'context> ValueID {
+  pub(super) fn lookup(
+    &self,
+    arena: &'context impl Lookup<ValueID, ValueData<'context>>,
+  ) -> &ValueData<'context> {
+    arena.lookup(*self)
+  }
+}
+
 #[derive(Debug)]
 pub enum Value<'context> {
   Instruction(Instruction<'context>),
@@ -28,7 +37,7 @@ pub struct ValueData<'context> {
   pub qualified_type: QualifiedType<'context>,
   pub ir_type: TypeRef<'context>,
   pub value: Value<'context>,
-  pub users: Vec<ValueID>, // instructions
+  pub users: Vec<ValueID>,
 }
 
 impl<'context> ValueData<'context> {

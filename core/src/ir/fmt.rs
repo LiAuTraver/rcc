@@ -60,10 +60,8 @@ impl Module<'_> {
     )?;
     if func.is_definition() {
       writeln!(f, "{{")?;
-      write!(
-        f,
-        "{}",
-        func
+      write!(f, "{}", {
+        let mut s = func
           .blocks
           .iter()
           .map(|block_id| {
@@ -112,9 +110,10 @@ impl Module<'_> {
               .collect::<Vec<_>>()
               .join("\n")
           })
-          .collect::<Vec<_>>()
-          .join("\n")
-      )?;
+          .collect::<Vec<_>>();
+        s.push("<A terminator>".to_string());
+        s.join("\n")
+      })?;
       writeln!(f, "\n}}")
     } else {
       writeln!(f)
@@ -152,7 +151,7 @@ impl Display for Type<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       Self::Void => write!(f, "void"),
-      Self::Label => write!(f, "<label>"),
+      Self::Label => write!(f, "label"),
       Self::Float => write!(f, "float"),
       Self::Double => write!(f, "double"),
       Self::Pointer => write!(f, "ptr"),

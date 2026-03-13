@@ -9,19 +9,30 @@ pub struct Phi {
   pub incomings: Vec<(ValueID, ValueID)>, // (Value, From_Block_Label)
 }
 
+/// Creater must ensure [`Jump::label`] must be am ID points to a [`super::BasicBlock`].
 #[derive(Debug)]
 pub struct Jump {
   pub label: ValueID,
 }
+/// Creater must ensure [`Branch::true_label`] and [`Branch::false_label`] must be am ID points to a [`super::BasicBlock`].
+///
+/// The owner of this instruction must ensure the type of [`Branch::cond`] is i1 (boolean).
 #[derive(Debug)]
 pub struct Branch {
   pub cond: ValueID,
   pub true_label: ValueID,
   pub false_label: ValueID,
 }
+/// Must match the return type of the function. For void function, [`Return::result`] should be [`None`].
 #[derive(Debug)]
 pub struct Return {
   pub result: Option<ValueID>,
+}
+
+impl Return {
+  pub fn new(result: Option<ValueID>) -> Self {
+    Self { result }
+  }
 }
 #[derive(Debug)]
 pub enum Terminator {
@@ -46,6 +57,9 @@ pub enum UnaryOp {
   Compl,
 }
 /// result = binary_op lhs, rhs
+///
+/// - The type of `lhs` and `rhs` must be the same.
+/// - `lhs` and `rhs` cannot be [`super::module::Function`], [`super::module::BasicBlock`] or [`super::module::Variable`].  
 #[derive(Debug)]
 pub struct Binary {
   pub operator: BinaryOp,
@@ -87,6 +101,8 @@ pub enum ICmpPredicate {
   Uge,
 }
 /// Store value to address: *addr = value
+///
+/// [`Store::addr`] must have pointer type
 #[derive(Debug)]
 pub struct Store {
   pub addr: ValueID,
@@ -98,18 +114,21 @@ pub struct Store {
 pub struct Load {
   pub addr: ValueID,
 }
-#[derive(Debug)]
-pub enum Memory<'context> {
-  Store(Store),
-  Load(Load),
-  Alloca(Alloca<'context>),
-}
 /// Stack allocation.
 /// result = alloca typeof(type)
 /// Used for local variables that must live in memory (e.g., if their address is taken).
 #[derive(Debug)]
 pub struct Alloca<'context> {
-  pub qualified_type: QualifiedType<'context>,
+  _placeholder: &'context u8,
+}
+/// memory opeartion's `addr` must have type [`super::Type::Pointer`]
+/// and the pointee type cannot be [`super::Type::Function`] or [`super::Type::Label`] (opaque pointer, we cannotr know, MUST check at construction),
+/// which means the `Value` behind `ValueID` cannnot be a [`super::module::Function`] or [`super::BasicBlock`].
+#[derive(Debug)]
+pub enum Memory<'context> {
+  Store(Store),
+  Load(Load),
+  Alloca(Alloca<'context>),
 }
 
 #[derive(Debug)]
@@ -119,6 +138,10 @@ pub enum Cast<'a> {
 }
 
 /// Function call: result = call func(args)
+///
+/// - [`Call::callee`] is usually a [`super::module::Function`], but can also be other except [`super::BasicBlock`].
+/// - [`Call::args`] cannot contain [`super::BasicBlock`] and [`super::Function`] (always as a pointer form -- load ptr inst)
+/// - The size of [`Call::args`] must match the parameter count of the parameter counts in [`super::types::Function`].
 #[derive(Debug)]
 pub struct Call {
   pub callee: ValueID,
