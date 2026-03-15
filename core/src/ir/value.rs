@@ -9,6 +9,12 @@ use crate::types::QualifiedType;
     pub struct ValueID;
 }
 
+impl ::std::fmt::Display for ValueID {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    self.0.as_ffi().fmt(f)
+  }
+}
+
 pub(super) trait Lookup<KeyType, ValueType> {
   fn lookup(&self, key: KeyType) -> &ValueType;
 }
@@ -16,14 +22,14 @@ pub(super) trait Lookup<KeyType, ValueType> {
 impl<'context> ValueID {
   pub(super) fn lookup(
     &self,
-    arena: &'context impl Lookup<ValueID, ValueData<'context>>,
-  ) -> &ValueData<'context> {
+    arena: &'context impl Lookup<ValueID, Value<'context>>,
+  ) -> &Value<'context> {
     arena.lookup(*self)
   }
 }
 
 #[derive(Debug)]
-pub enum Value<'context> {
+pub enum Data<'context> {
   Instruction(Instruction),
   Constant(Constant<'context>),
   Function(Function<'context>),
@@ -33,39 +39,39 @@ pub enum Value<'context> {
 }
 
 #[derive(Debug)]
-pub struct ValueData<'context> {
+pub struct Value<'context> {
   pub qualified_type: QualifiedType<'context>,
   pub ir_type: TypeRef<'context>,
-  pub value: Value<'context>,
+  pub data: Data<'context>,
   pub users: Vec<ValueID>,
 }
 
-impl<'context> ValueData<'context> {
+impl<'context> Value<'context> {
   pub fn new(
     qualified_type: QualifiedType<'context>,
     ir_type: TypeRef<'context>,
-    value: Value<'context>,
+    value: Data<'context>,
   ) -> Self {
     Self {
       qualified_type,
       ir_type,
-      value,
+      data: value,
       users: Default::default(),
     }
   }
 }
 
 use ::rcc_utils::{interconvert, make_trio_for};
-interconvert!(Instruction, Value<'context>);
-interconvert!(Function, Value, 'context);
-interconvert!(Constant, Value, 'context);
-interconvert!(Variable, Value, 'context);
-interconvert!(BasicBlock, Value<'context>);
-interconvert!(Argument, Value<'context>);
+interconvert!(Instruction, Data<'context>);
+interconvert!(Function, Data, 'context);
+interconvert!(Constant, Data, 'context);
+interconvert!(Variable, Data, 'context);
+interconvert!(BasicBlock, Data<'context>);
+interconvert!(Argument, Data<'context>);
 
-make_trio_for!(Instruction, Value<'context>);
-make_trio_for!(Function, Value, 'context);
-make_trio_for!(Constant, Value, 'context);
-make_trio_for!(Variable, Value, 'context);
-make_trio_for!(BasicBlock, Value<'context>);
-make_trio_for!(Argument, Value<'context>);
+make_trio_for!(Instruction, Data<'context>);
+make_trio_for!(Function, Data, 'context);
+make_trio_for!(Constant, Data, 'context);
+make_trio_for!(Variable, Data, 'context);
+make_trio_for!(BasicBlock, Data<'context>);
+make_trio_for!(Argument, Data<'context>);

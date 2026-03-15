@@ -8,7 +8,7 @@ type Interner<T> = RefCell<HashSet<T>>;
 #[derive(Debug)]
 pub struct Storage<'context> {
   pub ast_arena: &'context Arena,
-  pub ir_arena: RefCell<SlotMap<ir::ValueID, ir::ValueData<'context>>>,
+  pub ir_arena: RefCell<SlotMap<ir::ValueID, ir::Value<'context>>>,
 
   pub ast_type_interner: Interner<types::TypeRef<'context>>,
   pub str_interner: Interner<StrRef<'context>>,
@@ -50,7 +50,7 @@ impl Arena {
 
     if const { ::std::mem::needs_drop::<T>() } {
       if const { cfg!(debug_assertions) } {
-        static THRESHOLD: usize = 0;
+        static THRESHOLD: usize = 16;
         *self.counter.borrow_mut() += 1;
         if *self.counter.borrow() >= THRESHOLD {
           eprintln!(
@@ -61,13 +61,14 @@ impl Arena {
         }
       }
 
-      let raw_ptr = ptr as *mut T as *mut u8;
-
-      unsafe fn drop_type<T>(p: *mut u8) {
-        unsafe { ::std::ptr::drop_in_place(p as *mut T) };
+      unsafe fn drop_fn<T>(ptr: *mut u8) {
+        unsafe { ::std::ptr::drop_in_place(ptr as *mut T) };
       }
 
-      self.registry.borrow_mut().push((raw_ptr, drop_type::<T>));
+      self
+        .registry
+        .borrow_mut()
+        .push((&raw mut *ptr as *mut u8, drop_fn::<T>));
     }
 
     ptr

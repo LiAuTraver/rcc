@@ -2,7 +2,7 @@ use super::{
   Array, Enum, FunctionProto, Pointer, Primitive, QualifiedType, Record, Type,
   Union,
 };
-use crate::common::{DumpRes, Dumpable, Dumper, Palette};
+use crate::common::{FakeDumpRes, Dumpable, Dumper, Palette};
 
 impl Dumpable for QualifiedType<'_> {
   fn dump<'source, 'context, 'session>(
@@ -11,19 +11,19 @@ impl Dumpable for QualifiedType<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
   {
-    dumper.print_indent(prefix, is_last)?;
-    dumper.write("QualifiedType", &palette.node_type)?;
-    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
+    dumper.print_indent(prefix, is_last);
+    dumper.write("QualifiedType", &palette.node_type);
+    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
 
     dumper.write_fmt(
       format_args!("{} {}\n", self.unqualified_type, self.qualifiers),
       &palette.meta,
-    )?;
+    );
 
     let subprefix = dumper.child_prefix(prefix, is_last);
     self
@@ -39,7 +39,7 @@ impl Dumpable for Type<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
@@ -58,14 +58,14 @@ impl Dumpable for Primitive {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
   {
-    dumper.print_indent(prefix, is_last)?;
-    dumper.write("Primitive", &palette.node_type)?;
-    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
+    dumper.print_indent(prefix, is_last);
+    dumper.write("Primitive", &palette.node_type);
+    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
     dumper.write_fmt(format_args!("{}\n", self), &palette.meta)
   }
 }
@@ -77,15 +77,15 @@ impl Dumpable for Pointer<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
   {
-    dumper.print_indent(prefix, is_last)?;
-    dumper.write("Pointer", &palette.node_type)?;
-    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
-    dumper.write_fmt(format_args!("{}\n", self), &palette.meta)?;
+    dumper.print_indent(prefix, is_last);
+    dumper.write("Pointer", &palette.node_type);
+    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
+    dumper.write_fmt(format_args!("{}\n", self), &palette.meta);
 
     let subprefix = dumper.child_prefix(prefix, is_last);
     self.pointee.dump(dumper, &subprefix, true, palette)
@@ -98,18 +98,18 @@ impl Dumpable for Array<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
   {
-    dumper.print_indent(prefix, is_last)?;
-    dumper.write("Array", &palette.node_type)?;
-    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
+    dumper.print_indent(prefix, is_last);
+    dumper.write("Array", &palette.node_type);
+    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
     dumper.write_fmt(
       format_args!("{}, {} elements\n", self.element_type, self.size),
       &palette.meta,
-    )?;
+    );
 
     let subprefix = dumper.child_prefix(prefix, is_last);
     self.element_type.dump(dumper, &subprefix, true, palette)
@@ -123,14 +123,14 @@ impl Dumpable for FunctionProto<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
   {
-    dumper.print_indent(prefix, is_last)?;
-    dumper.write("FunctionProto", &palette.node_type)?;
-    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim)?;
+    dumper.print_indent(prefix, is_last);
+    dumper.write("FunctionProto", &palette.node_type);
+    dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
     dumper.write_fmt(format_args!("{}\n", self), &palette.meta)
   }
 }
@@ -142,7 +142,7 @@ impl Dumpable for Enum<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
@@ -159,7 +159,7 @@ impl Dumpable for Record<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
@@ -175,7 +175,7 @@ impl Dumpable for Union<'_> {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,

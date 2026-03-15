@@ -19,5 +19,5 @@ pub use self::{
     Initializer as IRStaticInitializer, Module, Variable as IRGlobalValue,
   },
   types::{Type, TypeRef, TypeRefMut},
-  value::{Value, ValueData, ValueID},
+  value::{Data as ValueData, Value, ValueID},
 };

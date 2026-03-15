@@ -5,44 +5,65 @@ use ::termcolor::{
 use super::SourceSpan;
 use crate::session::Session;
 
-pub type DumpRes = ::std::io::Result<()>;
+pub type FakeDumpRes = ();
+type DumpRes = ::std::io::Result<()>;
 
 use ::std::{
   io::Write,
   ops::{Deref, DerefMut},
 };
 
-// struct StickyWriter<W: Write> {
-//   inner: W,
-//   error: ::std::io::Result<()>,
-// }
+pub struct StickyWriter<W: Write> {
+  inner: W,
+  error: DumpRes,
+}
+impl<W: Write> Deref for StickyWriter<W> {
+  type Target = W;
 
-// impl<W: Write> StickyWriter<W> {
-//   fn new(inner: W) -> Self {
-//     Self {
-//       inner,
-//       error: Ok(()),
-//     }
-//   }
+  fn deref(&self) -> &Self::Target {
+    &self.inner
+  }
+}
+impl<W: Write> DerefMut for StickyWriter<W> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.inner
+  }
+}
+impl<W: Write> StickyWriter<W> {
+  fn new(inner: W) -> Self {
+    Self {
+      inner,
+      error: Ok(()),
+    }
+  }
 
-//   fn write_fmt(&mut self, args: std::fmt::Arguments) {
-//     if self.error.is_ok()
-//       && let Err(e) = self.inner.write_fmt(args)
-//     {
-//       self.error = Err(e);
-//     }
-//   }
+  fn write_fmt(&mut self, args: std::fmt::Arguments) {
+    if self.error.is_ok()
+      && let Err(e) = self.inner.write_fmt(args)
+    {
+      self.error = Err(e);
+    }
+  }
 
-//   fn finish(self) -> ::std::io::Result<()> {
-//     self.error
-//   }
-// }
+  fn finish(self) -> DumpRes {
+    self.error
+  }
+}
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct FlushOnDropRAII<W: Write> {
+  inner: W,
+}
 
-pub struct FlushOnDropRAII<W: Write>(W);
+impl<W: Write> FlushOnDropRAII<W> {
+  pub fn new(inner: W) -> Self {
+    Self { inner }
+  }
+}
 impl<W: Write> Drop for FlushOnDropRAII<W> {
   fn drop(&mut self) {
-    if let Err(e) = self.0.flush()
-      && cfg!(debug_assertions)
+    if let Err(e) = self.inner.flush()
+      && const { cfg!(debug_assertions) }
     {
       eprintln!("\nWarning: stream flush failed: {e}");
     }
@@ -53,12 +74,35 @@ impl<W: Write> Deref for FlushOnDropRAII<W> {
   type Target = W;
 
   fn deref(&self) -> &Self::Target {
-    &self.0
+    &self.inner
   }
 }
 impl<W: Write> DerefMut for FlushOnDropRAII<W> {
   fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
+    &mut self.inner
+  }
+}
+impl<W: Write> Write for FlushOnDropRAII<W> {
+  fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    self.inner.write(buf)
+  }
+
+  /// no effect.
+  fn flush(&mut self) -> std::io::Result<()> {
+    Ok(())
+  }
+}
+impl<W: Write + WriteColor> WriteColor for FlushOnDropRAII<W> {
+  fn supports_color(&self) -> bool {
+    self.inner.supports_color()
+  }
+
+  fn set_color(&mut self, spec: &ColorSpec) -> std::io::Result<()> {
+    self.inner.set_color(spec)
+  }
+
+  fn reset(&mut self) -> std::io::Result<()> {
+    self.inner.reset()
   }
 }
 #[derive(Default, Clone)]
@@ -113,11 +157,11 @@ where
   'context: 'session,
 {
   #[inline(always)]
-  fn write(&mut self, text: &str, spec: &ColorSpec) -> DumpRes {
+  fn write(&mut self, text: &str, spec: &ColorSpec) -> FakeDumpRes {
     self.write_fmt(format_args!("{}", text), spec)
   }
   #[inline(always)]
-  fn writeln(&mut self, text: &str, spec: &ColorSpec) -> DumpRes {
+  fn writeln(&mut self, text: &str, spec: &ColorSpec) -> FakeDumpRes {
     self.write_fmt(format_args!("{}\n", text), spec)
   }
 
@@ -125,11 +169,11 @@ where
     &mut self,
     args: ::std::fmt::Arguments<'_>,
     spec: &ColorSpec,
-  ) -> DumpRes;
+  ) -> FakeDumpRes;
 
-  fn newline(&mut self) -> DumpRes;
-  fn reset(&mut self) -> DumpRes;
-  fn print_indent(&mut self, prefix: &str, is_last: bool) -> DumpRes;
+  fn newline(&mut self) -> FakeDumpRes;
+  fn reset(&mut self) -> FakeDumpRes;
+  fn print_indent(&mut self, prefix: &str, is_last: bool) -> FakeDumpRes;
 
   /// Build the new prefix for children based on whether the current node is the last child.
   #[must_use]
@@ -137,13 +181,15 @@ where
 
   #[must_use]
   fn palette(&self) -> &Palette;
+
+  fn finish(self) -> DumpRes;
   #[must_use]
   fn session(&self) -> &'session Session<'source, 'context>;
 }
 pub struct Default<
-  'session,
-  'context,
   'source,
+  'context,
+  'session,
   const INDENT_BODY: &'static str = "    ",
   const INDENT_LAST: &'static str = "    ",
   const PARENT_BODY: &'static str = "    ",
@@ -153,14 +199,14 @@ pub struct Default<
   'source: 'context,
   'context: 'session,
 {
-  pub(crate) stream: FlushOnDropRAII<BufferedStandardStream>,
-  pub(crate) palette: Palette,
-  pub(crate) session: &'session Session<'source, 'context>,
+  pub stream: StickyWriter<FlushOnDropRAII<BufferedStandardStream>>,
+  pub palette: Palette,
+  pub session: &'session Session<'source, 'context>,
 }
 impl<
-  'session,
-  'context,
   'source,
+  'context,
+  'session,
   const INDENT_BODY: &'static str,
   const INDENT_LAST: &'static str,
   const PARENT_BODY: &'static str,
@@ -168,33 +214,36 @@ impl<
   const PREFIX_LEFT: &'static str,
 > Dumper<'source, 'context, 'session>
   for Default<
-    'session,
-    'context,
     'source,
+    'context,
+    'session,
     INDENT_BODY,
     INDENT_LAST,
     PARENT_BODY,
     PARENT_LAST,
     PREFIX_LEFT,
   >
+where
+  'source: 'context,
+  'context: 'session,
 {
   #[inline]
   fn write_fmt(
     &mut self,
     args: ::std::fmt::Arguments<'_>,
     spec: &ColorSpec,
-  ) -> DumpRes {
-    self.stream.set_color(spec)?;
+  ) -> FakeDumpRes {
+    let _ = self.stream.set_color(spec);
     self.stream.write_fmt(args)
   }
 
   #[inline(always)]
-  fn newline(&mut self) -> DumpRes {
+  fn newline(&mut self) -> FakeDumpRes {
     writeln!(self.stream)
   }
 
-  fn print_indent(&mut self, prefix: &str, is_last: bool) -> DumpRes {
-    self.stream.set_color(&self.palette.skeleton)?;
+  fn print_indent(&mut self, prefix: &str, is_last: bool) -> FakeDumpRes {
+    let _ = self.stream.set_color(&self.palette.skeleton);
     write!(
       self.stream,
       "{}{}",
@@ -221,8 +270,13 @@ impl<
   }
 
   #[inline(always)]
-  fn reset(&mut self) -> DumpRes {
-    self.stream.reset()
+  fn reset(&mut self) -> FakeDumpRes {
+    let _ = self.stream.reset();
+  }
+
+  #[inline(always)]
+  fn finish(self) -> DumpRes {
+    self.stream.finish()
   }
 
   #[inline(always)]
@@ -231,9 +285,9 @@ impl<
   }
 }
 impl<
-  'session,
-  'context,
   'source,
+  'context,
+  'session,
   const INDENT_BODY: &'static str,
   const INDENT_LAST: &'static str,
   const PARENT_BODY: &'static str,
@@ -241,9 +295,9 @@ impl<
   const PREFIX_LEFT: &'static str,
 >
   Default<
-    'session,
-    'context,
     'source,
+    'context,
+    'session,
     INDENT_BODY,
     INDENT_LAST,
     PARENT_BODY,
@@ -262,18 +316,21 @@ impl<
   {
     let mut dumper = Self::new(
       session,
-      FlushOnDropRAII(BufferedStandardStream::stdout(ColorChoice::Auto)),
+      StickyWriter::new(FlushOnDropRAII::new(BufferedStandardStream::stdout(
+        ColorChoice::Auto,
+      ))),
       Palette::colored(),
     );
     let palette = dumper.palette().clone();
-    dumpable.dump(&mut dumper, PREFIX_LEFT, true, &palette)?;
-    dumper.reset()
+    dumpable.dump(&mut dumper, PREFIX_LEFT, true, &palette);
+    dumper.reset();
+    dumper.finish()
   }
 }
 impl<
-  'session,
-  'context,
   'source,
+  'context,
+  'session,
   const INDENT_BODY: &'static str,
   const INDENT_LAST: &'static str,
   const PARENT_BODY: &'static str,
@@ -281,9 +338,9 @@ impl<
   const PREFIX_LEFT: &'static str,
 >
   Default<
-    'session,
-    'context,
     'source,
+    'context,
+    'session,
     INDENT_BODY,
     INDENT_LAST,
     PARENT_BODY,
@@ -293,7 +350,7 @@ impl<
 {
   pub fn new(
     session: &'session Session<'source, 'context>,
-    stream: FlushOnDropRAII<BufferedStandardStream>,
+    stream: StickyWriter<FlushOnDropRAII<BufferedStandardStream>>,
     palette: Palette,
   ) -> Self {
     Self {
@@ -320,7 +377,7 @@ pub trait Dumpable {
     prefix: &str,
     is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session;
@@ -333,18 +390,18 @@ impl Dumpable for SourceSpan {
     _prefix: &str,
     _is_last: bool,
     palette: &Palette,
-  ) -> DumpRes
+  ) -> FakeDumpRes
   where
     'source: 'context,
     'context: 'session,
   {
-    dumper.write("<", &palette.skeleton)?;
+    dumper.write("<", &palette.skeleton);
     let (l, c) = dumper
       .session()
       .manager
       .lookup_line_col(*self)
       .destructure();
-    dumper.write_fmt(format_args!("{}:{}", l, c), &palette.dim)?;
+    dumper.write_fmt(format_args!("{}:{}", l, c), &palette.dim);
     dumper.write("> ", &palette.skeleton)
   }
 }

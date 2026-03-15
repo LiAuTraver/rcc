@@ -3,7 +3,7 @@ use ::slotmap::SlotMap;
 use ::std::{cell::RefCell, collections::HashSet};
 
 use super::{
-  Type, TypeRef, ValueData, ValueID,
+  Type, TypeRef, Value, ValueID,
   types::{Array, Function},
 };
 /// Although the lifetime speficier here is `'context`, but it should actually be the same as `'context` in [`crate::session::Session`] who owns it.
@@ -118,15 +118,15 @@ impl<'context> Context<'context> {
 }
 use ::std::cell::{Ref, RefMut};
 impl<'context> Context<'context> {
-  pub fn insert(&self, value: ValueData<'context>) -> ValueID {
+  pub fn insert(&self, value: Value<'context>) -> ValueID {
     self.storage.ir_arena.borrow_mut().insert(value)
   }
 
-  pub fn get(&self, id: ValueID) -> Ref<'_, ValueData<'context>> {
+  pub fn get(&self, id: ValueID) -> Ref<'_, Value<'context>> {
     Ref::map(self.storage.ir_arena.borrow(), |slotmap| &slotmap[id])
   }
 
-  pub fn get_mut(&self, id: ValueID) -> RefMut<'_, ValueData<'context>> {
+  pub fn get_mut(&self, id: ValueID) -> RefMut<'_, Value<'context>> {
     RefMut::map(self.storage.ir_arena.borrow_mut(), |slotmap| {
       &mut slotmap[id]
     })

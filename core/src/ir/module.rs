@@ -2,13 +2,13 @@ use ::slotmap::SlotMap;
 
 use super::{
   Constant, Lookup,
-  value::{ValueData, ValueID},
+  value::{Value, ValueID},
 };
 use crate::common::StrRef;
 
 #[derive(Debug, Default)]
 pub struct Module {
-  /// global function and variable entry.
+  /// global function and variable entry. Shall be either [`Function`] or [`Variable`].
   pub globals: Vec<ValueID>,
 }
 
@@ -16,7 +16,9 @@ pub struct Module {
 #[derive(Debug)]
 pub struct Function<'context> {
   pub name: StrRef<'context>,
+  /// Shall be [`Argument`].
   pub params: Vec<ValueID>,
+  /// Shall be [`BasicBlock`].
   pub blocks: Vec<ValueID>,
   pub is_variadic: bool,
 }
@@ -70,7 +72,9 @@ impl<'context> Variable<'context> {
 /// type should always be [`super::Type::Label`].
 #[derive(Debug, Default)]
 pub struct BasicBlock {
+  /// Shall be [`super::instruction::Instruction`].
   pub instructions: Vec<ValueID>,
+  /// Shall be [`super::instruction::Terminator`].
   pub terminator: ValueID,
 }
 
@@ -85,6 +89,7 @@ impl BasicBlock {
 
 #[derive(Debug)]
 pub struct Argument {
+  /// Shall be [`Function`].
   pub function: ValueID,
   pub index: usize,
 }

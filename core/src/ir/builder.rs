@@ -3,10 +3,10 @@ use ::slotmap::Key;
 use ::std::collections::HashMap;
 
 use super::{
-  Argument, Value,
+  Argument, ValueData,
   instruction::{self as inst, Instruction, Terminator},
   module::{self, BasicBlock, Module},
-  value::{ValueData, ValueID},
+  value::{Value, ValueID},
 };
 use crate::{
   common::StrRef,
@@ -64,7 +64,7 @@ impl<'context> Emitable<'context, Terminator>
   ) -> ValueID {
     if let Some(block) = &mut self.current_block {
       assert!(block.terminator.is_null(), "block already has a terminator");
-      let value_id = self.session.ir_context.insert(ValueData::new(
+      let value_id = self.session.ir_context.insert(Value::new(
         qualified_type,
         ir_type!(self, qualified_type),
         Into::<Instruction>::into(terminator).into(),
@@ -85,7 +85,7 @@ impl<'context, InstType: Into<Instruction>> Emitable<'context, InstType>
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
     if let Some(block) = &mut self.current_block {
-      let value_id = self.session.ir_context.insert(ValueData::new(
+      let value_id = self.session.ir_context.insert(Value::new(
         qualified_type,
         ir_type!(self, qualified_type),
         value.into().into(),
@@ -106,7 +106,7 @@ impl<'context> Emitable<'context, module::Function<'context>>
     value: module::Function<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    let value_id = self.session.ir_context.insert(ValueData::new(
+    let value_id = self.session.ir_context.insert(Value::new(
       qualified_type,
       ir_type!(self, qualified_type),
       value.into(),
@@ -123,7 +123,7 @@ impl<'context> Emitable<'context, module::Variable<'context>>
     value: module::Variable<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    let value_id = self.session.ir_context.insert(ValueData::new(
+    let value_id = self.session.ir_context.insert(Value::new(
       qualified_type,
       ir_type!(self, qualified_type),
       value.into(),
@@ -140,7 +140,7 @@ impl<'context> Emitable<'context, se::Constant<'context>>
     value: se::Constant<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    self.session.ir_context.insert(ValueData::new(
+    self.session.ir_context.insert(Value::new(
       qualified_type,
       ir_type!(self, qualified_type),
       value.into(),
@@ -155,7 +155,7 @@ impl<'context> Emitable<'context, Argument>
     value: Argument,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    self.session.ir_context.insert(ValueData::new(
+    self.session.ir_context.insert(Value::new(
       qualified_type,
       ir_type!(self, qualified_type),
       value.into(),
@@ -170,7 +170,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
   fn seal_current_block(&mut self) {
     if let Some(block) = self.current_block.take() {
-      let block_id = self.session.ir_context.insert(ValueData::new(
+      let block_id = self.session.ir_context.insert(Value::new(
         self.session.ast_context.void_type().into(),
         self.session.ir_context.label_type(),
         block.into(),
@@ -216,7 +216,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
           let value_id = self.func_values[name];
           let ir_func = self.function(function, value_id);
           // replace the empty function with the one with body.
-          self.session.ir_context.get_mut(value_id).value = ir_func.into();
+          self.session.ir_context.get_mut(value_id).data = ir_func.into();
         },
         sd::ExternalDeclaration::Variable(variable) => {
           let qualified_type = variable.symbol.borrow().qualified_type;
