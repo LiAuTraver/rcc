@@ -1,3 +1,4 @@
+#![feature(unsized_const_params)]
 #![allow(incomplete_features)]
 #![feature(specialization)]
 // C/C++ like default initialization in struct fields
@@ -23,3 +24,11 @@ pub mod parse;
 pub mod sema;
 pub mod session;
 pub mod types;
+#[macro_export]
+macro_rules! lifetime_req {
+    () => {
+      where 'source:'context,
+      'context:'ir,
+      'ir:'session
+    };
+}

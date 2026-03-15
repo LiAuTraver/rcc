@@ -68,15 +68,15 @@ pub struct Variable<'context> {
 }
 
 mod fmt {
-  use ::rcc_utils::static_dispatch;
   use ::std::fmt::Display;
 
   use super::*;
 
   impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      static_dispatch!(
-        self.fmt(f),
+      ::rcc_utils::static_dispatch!(
+        self,
+        |variant| variant.fmt(f) =>
         Empty Constant Unary Binary Variable Call Paren MemberAccess Ternary SizeOf CStyleCast ArraySubscript CompoundLiteral
       )
     }

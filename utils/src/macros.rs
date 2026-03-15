@@ -244,15 +244,28 @@ macro_rules! ensure_is_pod {
 }
 #[macro_export]
 macro_rules! static_dispatch {
-  ($this:ident.$func:ident $args:tt, $($variant:ident)*) => {
-    match $this {
-      $(
-        Self::$variant(v) => v.$func $args,
-      )*
-    }
-  }
-}
+    (
+        $enum_type:ident:      // The Enum
+        $target:expr,       // The thing to match
+        |$v:ident| $body:expr => // The binder call expr
+        $($variant:ident)* // List of variants
+    ) => {
+        match $target {
+            $(
+                $enum_type::$variant($v) => $body,
+            )*
+        }
+    };
 
+    // wrapper for `Self`
+    (
+        $target:expr,
+        |$v:ident| $body:expr =>
+        $($variant:ident)*
+    ) => {
+        $crate::static_dispatch!(Self: $target, |$v| $body => $($variant)*)
+    };
+}
 /// This macro acts like `assert!`,
 /// but with more clarification that it's the program's error, not the user's.
 #[macro_export]

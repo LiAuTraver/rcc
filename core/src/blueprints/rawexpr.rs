@@ -60,7 +60,8 @@ macro_rules! type_alias_expr {
       impl<'context> ::std::fmt::Display for RawExpr<'context> {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
           ::rcc_utils::static_dispatch!(
-            self.fmt(f),
+            self,
+            |variant| variant.fmt(f) =>
             Empty Constant Unary Binary Variable Call Paren MemberAccess Ternary SizeOf CStyleCast ArraySubscript CompoundLiteral
             $($extra)*
           )

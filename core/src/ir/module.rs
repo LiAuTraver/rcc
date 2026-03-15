@@ -1,30 +1,15 @@
 use ::slotmap::SlotMap;
 
 use super::{
-  Lookup,
+  Constant, Lookup,
   value::{ValueData, ValueID},
 };
-use crate::{common::StrRef, types::Constant};
+use crate::common::StrRef;
 
 #[derive(Debug, Default)]
-pub struct Module<'context> {
-  /// the arena.
-  pub values: SlotMap<ValueID, ValueData<'context>>,
+pub struct Module {
   /// global function and variable entry.
   pub globals: Vec<ValueID>,
-}
-
-impl<'a> Module<'a> {
-  #[inline(always)]
-  pub fn insert(&mut self, value: ValueData<'a>) -> ValueID {
-    self.values.insert(value)
-  }
-}
-
-impl<'a> Lookup<ValueID, ValueData<'a>> for Module<'a> {
-  fn lookup(&self, key: ValueID) -> &ValueData<'a> {
-    &self.values[key]
-  }
 }
 
 /// **Global** function in TAC-SSA form
@@ -82,11 +67,6 @@ impl<'context> Variable<'context> {
   }
 }
 
-/// currently no use, just a atag.
-pub trait Global {}
-impl Global for Variable<'_> {}
-impl Global for Function<'_> {}
-
 /// type should always be [`super::Type::Label`].
 #[derive(Debug, Default)]
 pub struct BasicBlock {
@@ -120,4 +100,9 @@ impl Argument {
 pub enum Initializer<'context> {
   Scalar(Constant<'context>),
   Aggregate(Vec<Initializer<'context>>),
+}
+impl Clone for Constant<'_> {
+  fn clone(&self) -> Self {
+    Self::new(self.value.clone(), self.span)
+  }
 }

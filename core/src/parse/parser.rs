@@ -31,24 +31,27 @@ use crate::{
   types::{FunctionSpecifier, Qualifiers},
 };
 #[derive(Debug)]
-pub struct Parser<'session, 'context, 'source>
+pub struct Parser<'source, 'context, 'ir, 'session>
 where
-  'context: 'session,
   'source: 'context,
+  'context: 'ir,
+  'ir: 'session,
 {
   tokens: Vec<Token<'context>>,
   cursor: usize,
   loop_labels: Vec<SmallString>,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope<'context>,
-  session: &'session Session<'context, 'source>,
+  session: &'session Session<'source, 'context, 'ir>,
 }
 
 /// utility functions -- allow unused to suppress those annoying warnings.
-impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
+impl<'source, 'context, 'ir, 'session>
+  Parser<'source, 'context, 'ir, 'session>
+{
   pub fn new(
     tokens: Vec<Token<'context>>,
-    session: &'session Session<'context, 'source>,
+    session: &'session Session<'source, 'context, 'ir>,
   ) -> Self {
     assert_eq!(
       tokens.last().map(|t| &t.literal),
@@ -64,7 +67,7 @@ impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
   }
 }
 #[allow(unused)]
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   pub fn parse(&mut self) -> Program<'context> {
     let mut program = Program::new();
 
@@ -229,7 +232,7 @@ impl<'context> Parser<'_, 'context, '_> {
   }
 }
 /// diagnostic functions
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   fn add_error(&self, data: DiagData<'context>, span: SourceSpan) {
     self.session.diagnosis.add_error(data, span);
   }
@@ -239,7 +242,7 @@ impl<'context> Parser<'_, 'context, '_> {
   }
 }
 /// opt checks
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   fn ios_c_strict_check_for_decl(&self, statement: &Statement) {
     if matches!(statement, Statement::Declaration(_)) {
       self.add_warning(DeprecatedStmtDeclCvt, *self.peek_loc());
@@ -247,7 +250,7 @@ impl<'context> Parser<'_, 'context, '_> {
   }
 }
 /// meta parse
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   fn parse_type_specifier(&self) -> Option<TypeSpecifier<'context>> {
     match self.peek_lit() {
       Literal::Keyword(Keyword::Struct) => todo!(),
@@ -688,7 +691,7 @@ impl<'context> Parser<'_, 'context, '_> {
   }
 }
 /// declarations
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   fn next_vardef(
     &mut self,
     declspecs: DeclSpecs<'context>,
@@ -793,7 +796,7 @@ impl<'context> Parser<'_, 'context, '_> {
   }
 }
 /// statements
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   fn next_function_body(
     &mut self,
     declspecs: DeclSpecs<'context>,
@@ -949,7 +952,7 @@ impl<'context> Parser<'_, 'context, '_> {
         },
       };
       fn parse_optional_expression<'a, const OP: Operator>(
-        parser: &mut Parser<'_, 'a, '_>,
+        parser: &mut Parser<'_, 'a, '_, '_>,
       ) -> Option<Expression<'a>> {
         match parser.peek_lit() {
           Literal::Operator(op) if op == OP => {
@@ -1165,7 +1168,7 @@ impl<'context> Parser<'_, 'context, '_> {
   }
 }
 /// expressions
-impl<'context> Parser<'_, 'context, '_> {
+impl<'context> Parser<'_, 'context, '_, '_> {
   fn next_factor(&mut self) -> Expression<'context> {
     let location = *self.peek_loc();
     match self.peek_lit().clone() {
@@ -1280,7 +1283,9 @@ impl<'context> Parser<'_, 'context, '_> {
     }
   }
 }
-impl<'session, 'context, 'source> Parser<'session, 'context, 'source> {
+impl<'source, 'context, 'ir, 'session>
+  Parser<'source, 'context, 'ir, 'session>
+{
   /// I refactored the expression parser to use *Pratt Parsing* technique instead of
   /// the previous precedence climbing method.
   ///

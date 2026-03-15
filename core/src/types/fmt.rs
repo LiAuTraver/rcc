@@ -1,4 +1,3 @@
-use ::rcc_utils::static_dispatch;
 use ::std::fmt::Display;
 
 use super::{
@@ -69,8 +68,9 @@ impl Display for FunctionProto<'_> {
 
 impl Display for Type<'_> {
   fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-    static_dispatch!(
-      self.fmt(f),
+    ::rcc_utils::static_dispatch!(
+      self,
+      |variant| variant.fmt(f) =>
       Primitive FunctionProto Pointer Array Enum Record Union
     )
   }

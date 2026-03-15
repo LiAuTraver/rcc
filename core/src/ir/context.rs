@@ -1,26 +1,36 @@
 use ::bumpalo::Bump;
+use ::slotmap::SlotMap;
 use ::std::{cell::RefCell, collections::HashSet};
 
 use super::{
-  Type, TypeRef,
+  Type, TypeRef, ValueData, ValueID,
   types::{Array, Function},
 };
-/// Although the lifetime speficier here is `'ir`, but it should actually be the same as `'context` in [`crate::session::Session`] who owns it.
+/// Although the lifetime speficier here is `'context`, but it should actually be the same as `'context` in [`crate::session::Session`] who owns it.
 #[derive(Debug)]
-pub struct Context<'ir> {
-  void_type: TypeRef<'ir>,
-  label_type: TypeRef<'ir>,
-  float32_type: TypeRef<'ir>,
-  float64_type: TypeRef<'ir>,
-  pointer_type: TypeRef<'ir>,
-  common_integer_types: [TypeRef<'ir>; 6],
+pub struct Context<'context, 'ir>
+where
+  'context: 'ir,
+{
+  void_type: TypeRef<'context>,
+  label_type: TypeRef<'context>,
+  float32_type: TypeRef<'context>,
+  float64_type: TypeRef<'context>,
+  pointer_type: TypeRef<'context>,
+  common_integer_types: [TypeRef<'context>; 6],
 
-  type_interner: RefCell<HashSet<TypeRef<'ir>>>,
-  arena: &'ir Bump,
+  type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
+  type_arena: &'context Bump,
+
+  ir_slotmap: &'ir RefCell<SlotMap<ValueID, ValueData<'context>>>,
 }
 
-impl<'ir> Context<'ir> {
-  pub fn new(arena: &'ir Bump) -> Self {
+impl<'context, 'ir> Context<'context, 'ir> {
+  pub fn new(
+    arena: &'context Bump,
+    type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
+    slotmap: &'ir RefCell<SlotMap<ValueID, ValueData<'context>>>,
+  ) -> Self {
     let this = Self {
       void_type: arena.alloc(Type::Void),
       label_type: arena.alloc(Type::Label),
@@ -36,8 +46,9 @@ impl<'ir> Context<'ir> {
         arena.alloc(Type::Integer(128)),
       ],
 
-      type_interner: Default::default(),
-      arena,
+      type_interner,
+      type_arena: arena,
+      ir_slotmap: slotmap,
     };
     {
       let mut refmut = this.type_interner.borrow_mut();
@@ -53,42 +64,42 @@ impl<'ir> Context<'ir> {
     this
   }
 }
-impl<'ir> Context<'ir> {
-  pub fn void_type(&self) -> TypeRef<'ir> {
+impl<'context> Context<'context, '_> {
+  pub fn void_type(&self) -> TypeRef<'context> {
     self.void_type
   }
 
-  pub fn label_type(&self) -> TypeRef<'ir> {
+  pub fn label_type(&self) -> TypeRef<'context> {
     self.label_type
   }
 
-  pub fn float32_type(&self) -> TypeRef<'ir> {
+  pub fn float32_type(&self) -> TypeRef<'context> {
     self.float32_type
   }
 
-  pub fn float64_type(&self) -> TypeRef<'ir> {
+  pub fn float64_type(&self) -> TypeRef<'context> {
     self.float64_type
   }
 
-  pub fn pointer_type(&self) -> TypeRef<'ir> {
+  pub fn pointer_type(&self) -> TypeRef<'context> {
     self.pointer_type
   }
 
-  fn do_intern(&self, value: Type<'ir>) -> TypeRef<'ir> {
+  fn do_intern(&self, value: Type<'context>) -> TypeRef<'context> {
     if let Some(existing) = self.type_interner.borrow().get(&value) {
       existing
     } else {
-      let interned = self.arena.alloc(value);
+      let interned = self.type_arena.alloc(value);
       self.type_interner.borrow_mut().insert(interned);
       interned
     }
   }
 
-  pub fn intern<T: Into<Type<'ir>>>(&self, value: T) -> TypeRef<'ir> {
+  pub fn intern<T: Into<Type<'context>>>(&self, value: T) -> TypeRef<'context> {
     self.do_intern(value.into())
   }
 
-  pub fn make_integer(&self, bits: u8) -> TypeRef<'ir> {
+  pub fn make_integer(&self, bits: u8) -> TypeRef<'context> {
     match bits {
       1 => self.common_integer_types[0],
       8 => self.common_integer_types[1],
@@ -102,28 +113,41 @@ impl<'ir> Context<'ir> {
 
   pub fn make_array(
     &self,
-    element_type: TypeRef<'ir>,
+    element_type: TypeRef<'context>,
     length: usize,
-  ) -> TypeRef<'ir> {
+  ) -> TypeRef<'context> {
     self.intern(Array::new(element_type, length))
   }
 
   pub fn make_function(
     &self,
-    result_type: TypeRef<'ir>,
-    params: &'ir [TypeRef<'ir>],
+    result_type: TypeRef<'context>,
+    params: &'context [TypeRef<'context>],
     is_variadic: bool,
-  ) -> TypeRef<'ir> {
+  ) -> TypeRef<'context> {
     self.intern(Function::new(result_type, params, is_variadic))
   }
 }
+use ::std::cell::{Ref, RefMut};
+impl<'context, 'ir> Context<'context, 'ir> {
+  pub fn insert(&self, value: ValueData<'context>) -> ValueID {
+    self.ir_slotmap.borrow_mut().insert(value)
+  }
 
+  pub fn get(&self, id: ValueID) -> Ref<'_, ValueData<'context>> {
+    Ref::map(self.ir_slotmap.borrow(), |slotmap| &slotmap[id])
+  }
+
+  pub fn get_mut(&self, id: ValueID) -> RefMut<'_, ValueData<'context>> {
+    RefMut::map(self.ir_slotmap.borrow_mut(), |slotmap| &mut slotmap[id])
+  }
+}
 use crate::types;
-impl<'ir> Context<'ir> {
+impl<'context> Context<'context, '_> {
   pub fn ir_type(
     &self,
-    qualified_type: &types::QualifiedType<'ir>,
-  ) -> TypeRef<'ir> {
+    qualified_type: &types::QualifiedType<'context>,
+  ) -> TypeRef<'context> {
     use Primitive::*;
     use types::{Primitive, TypeInfo};
     match qualified_type.unqualified_type {
@@ -148,7 +172,7 @@ impl<'ir> Context<'ir> {
       ),
       types::Type::FunctionProto(function_proto) => self.make_function(
         self.ir_type(&function_proto.return_type),
-        self.arena.alloc_slice_fill_iter(
+        self.type_arena.alloc_slice_fill_iter(
           function_proto
             .parameter_types
             .iter()

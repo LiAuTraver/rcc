@@ -52,15 +52,15 @@ impl<'context> ::std::default::Default for Statement<'context> {
 }
 
 mod fmt {
-  use ::rcc_utils::static_dispatch;
   use ::std::fmt::Display;
 
   use super::Statement;
 
   impl<'context> Display for Statement<'context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      static_dispatch!(
-        self.fmt(f),
+      ::rcc_utils::static_dispatch!(
+        self,
+        |variant| variant.fmt(f) =>
         Empty Return Expression Declaration Compound If While DoWhile For Switch Goto Label Break Continue
       )
     }

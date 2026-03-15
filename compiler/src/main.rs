@@ -1,13 +1,12 @@
-use ::bumpalo::Bump;
 use ::rcc_core::{
-  common::{ASTDumper, SourceManager},
+  common::SourceManager,
   diagnosis::Diagnosis,
-  ir::ModuleBuilder,
+  ir::{Context as IRContext, IRDumper, ModuleBuilder},
   lexer::Lexer,
   parse::Parser,
-  sema::Sema,
+  sema::{ASTDumper, Sema},
   session::Session,
-  types::Context,
+  types::Context as ASTContext,
 };
 use ::rcc_utils::DisplayWith;
 enum Stage {
@@ -49,10 +48,15 @@ fn main() {
       ::std::process::exit(1);
     },
   };
-  let arena = Bump::new();
-  let context = Context::new(&arena);
-  let ir_context = rcc_core::ir::Context::new(&arena);
-  let session = Session::new(&source_manager, &context, &ir_context);
+  let arena = Default::default();
+  let ast_type_interner = Default::default();
+  let ast_str_interner = Default::default();
+  let ast_context =
+    ASTContext::new(&arena, &ast_type_interner, &ast_str_interner);
+  let ir_type_interner = Default::default();
+  let slotmap = Default::default();
+  let ir_context = IRContext::new(&arena, &ir_type_interner, &slotmap);
+  let session = Session::new(&source_manager, &ast_context, &ir_context);
   pipeline(session, stage, false);
 }
 
@@ -136,9 +140,10 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
   }
   assert!(matches!(stage, Stage::Ir));
   let builder = ModuleBuilder::new(&session);
-  let m = builder.build(translation_unit);
-  println!("{m}");
 
+  let m = builder.build(translation_unit);
+  println!("{m:#?}");
+  IRDumper::dump(&m, &session).unwrap();
   0
 }
 
@@ -229,12 +234,17 @@ int main(int argc, char **argv) { //
     assert_eq!(test_str(s), 0);
   }
   fn test_str(source: &str) -> i32 {
-    let mut manager = SourceManager::default();
-    manager.add_string(source.into());
-    let arena = Bump::new();
-    let context = Context::new(&arena);
-    let ir_context = rcc_core::ir::Context::new(&arena);
-    let session = Session::new(&manager, &context, &ir_context);
+    let mut source_manager = SourceManager::default();
+    source_manager.add_string(source.into());
+    let arena = Default::default();
+    let ast_type_interner = Default::default();
+    let ast_str_interner = Default::default();
+    let ast_context =
+      ASTContext::new(&arena, &ast_type_interner, &ast_str_interner);
+    let ir_type_interner = Default::default();
+    let slotmap = Default::default();
+    let ir_context = IRContext::new(&arena, &ir_type_interner, &slotmap);
+    let session = Session::new(&source_manager, &ast_context, &ir_context);
     pipeline(session, Stage::Analyze, true)
   }
   #[test]

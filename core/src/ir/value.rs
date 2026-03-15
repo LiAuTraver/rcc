@@ -1,9 +1,9 @@
 use super::{
-  Argument, BasicBlock, TypeRef,
+  Argument, BasicBlock, Constant, TypeRef,
   instruction::Instruction,
   module::{Function, Variable},
 };
-use crate::{sema::expression::Constant, types::QualifiedType};
+use crate::types::QualifiedType;
 
 ::slotmap::new_key_type! {
     pub struct ValueID;
@@ -24,7 +24,7 @@ impl<'context> ValueID {
 
 #[derive(Debug)]
 pub enum Value<'context> {
-  Instruction(Instruction<'context>),
+  Instruction(Instruction),
   Constant(Constant<'context>),
   Function(Function<'context>),
   Variable(Variable<'context>),
@@ -56,14 +56,14 @@ impl<'context> ValueData<'context> {
 }
 
 use ::rcc_utils::{interconvert, make_trio_for};
-interconvert!(Instruction, Value, 'context);
+interconvert!(Instruction, Value<'context>);
 interconvert!(Function, Value, 'context);
 interconvert!(Constant, Value, 'context);
 interconvert!(Variable, Value, 'context);
 interconvert!(BasicBlock, Value<'context>);
 interconvert!(Argument, Value<'context>);
 
-make_trio_for!(Instruction, Value, 'context);
+make_trio_for!(Instruction, Value<'context>);
 make_trio_for!(Function, Value, 'context);
 make_trio_for!(Constant, Value, 'context);
 make_trio_for!(Variable, Value, 'context);

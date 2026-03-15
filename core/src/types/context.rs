@@ -10,8 +10,8 @@ use crate::common::StrRef;
 #[derive(Debug)]
 pub struct Context<'context> {
   arena: &'context Bump,
-  type_interner: RefCell<HashSet<TypeRef<'context>>>,
-  string_interner: RefCell<HashSet<StrRef<'context>>>,
+  type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
+  string_interner: &'context RefCell<HashSet<StrRef<'context>>>,
 
   nullptr_type: TypeRef<'context>,
   void_type: TypeRef<'context>,
@@ -35,12 +35,16 @@ pub struct Context<'context> {
   unnamed_str: StrRef<'context>,
 }
 impl<'context> Context<'context> {
-  pub fn new(arena: &'context Bump) -> Self {
+  pub fn new(
+    arena: &'context Bump,
+    type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
+    string_interner: &'context RefCell<HashSet<StrRef<'context>>>,
+  ) -> Self {
     let void_type = arena.alloc(Primitive::Void.into());
     let this = Self {
       arena,
-      type_interner: Default::default(),
-      string_interner: Default::default(),
+      type_interner,
+      string_interner,
       int_type: arena.alloc(Primitive::Int.into()),
       float_type: arena.alloc(Primitive::Float.into()),
       short_type: arena.alloc(Primitive::Short.into()),

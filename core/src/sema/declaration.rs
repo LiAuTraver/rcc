@@ -138,7 +138,8 @@ mod fmt {
   impl<'context> Display for ExternalDeclaration<'context> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       ::rcc_utils::static_dispatch!(
-        self.fmt(f),
+        self,
+        |variant| variant.fmt(f) =>
         Function Variable
       )
     }

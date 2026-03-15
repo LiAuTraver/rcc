@@ -118,7 +118,8 @@ impl<'context> Folding<'context> for RawExpr<'context> {
     diag: &impl Diagnosis<'context>,
   ) -> FoldingResult<Expression<'context>> {
     ::rcc_utils::static_dispatch!(
-      self.fold(target_type, value_category, diag),
+      self,
+      |variant| variant.fold(target_type, value_category, diag) =>
       Empty Constant Unary Binary Call Paren MemberAccess Ternary SizeOf CStyleCast ArraySubscript CompoundLiteral Variable ImplicitCast Assignment
     )
   }

@@ -9,6 +9,7 @@ mod semantics;
 mod testing;
 
 pub use self::{
+  dump::ASTDumper,
   folding::{Folding, FoldingResult},
   semantics::Sema,
 };

@@ -9,7 +9,7 @@ mod storage;
 mod token;
 
 pub use self::{
-  dumper::{ASTDumper, DumpRes, Dumpable, Dumper, Palette},
+  dumper::{Default as TreeDumper, DumpRes, Dumpable, Dumper, Palette},
   environment::{Environment, Symbol, SymbolRef, UnitScope, VarDeclKind},
   floating::{Floating, Format as FloatFormat},
   integral::{Integral, Signedness},

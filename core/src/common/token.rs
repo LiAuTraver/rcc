@@ -247,7 +247,7 @@ mod fmt {
   impl<'context> Display for Literal<'context> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      ::rcc_utils::static_dispatch!(self.fmt(f), Operator Number String Identifier Keyword)
+      ::rcc_utils::static_dispatch!(self, |variant| variant.fmt(f) => Operator Number String Identifier Keyword)
     }
   }
 }

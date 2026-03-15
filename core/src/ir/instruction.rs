@@ -118,23 +118,20 @@ pub struct Load {
 /// result = alloca typeof(type)
 /// Used for local variables that must live in memory (e.g., if their address is taken).
 #[derive(Debug)]
-pub struct Alloca<'context> {
-  _placeholder: &'context u8,
-}
+pub struct Alloca {}
 /// memory opeartion's `addr` must have type [`super::Type::Pointer`]
 /// and the pointee type cannot be [`super::Type::Function`] or [`super::Type::Label`] (opaque pointer, we cannotr know, MUST check at construction),
 /// which means the `Value` behind `ValueID` cannnot be a [`super::module::Function`] or [`super::BasicBlock`].
 #[derive(Debug)]
-pub enum Memory<'context> {
+pub enum Memory {
   Store(Store),
   Load(Load),
-  Alloca(Alloca<'context>),
+  Alloca(Alloca),
 }
 
 #[derive(Debug)]
-pub enum Cast<'a> {
+pub enum Cast {
   // add later.
-  Placeholder(&'a u8),
 }
 
 /// Function call: result = call func(args)
@@ -150,25 +147,25 @@ pub struct Call {
 
 /// This mimics LLVM ir's catagory.
 #[derive(Debug)]
-pub enum Instruction<'context> {
+pub enum Instruction {
   Phi(Phi),
   Terminator(Terminator),
   Unary(Unary),
   Binary(Binary),
-  Memory(Memory<'context>),
-  Cast(Cast<'context>),
+  Memory(Memory),
+  Cast(Cast),
   Call(Call),
   ICmp(ICmp),
   // etc...
 }
 
-::rcc_utils::interconvert!(Phi, Instruction<'context>);
-::rcc_utils::interconvert!(Terminator, Instruction<'context>);
-::rcc_utils::interconvert!(Unary, Instruction<'context>);
-::rcc_utils::interconvert!(Binary, Instruction<'context>);
-::rcc_utils::interconvert!(Memory, Instruction,'context);
-::rcc_utils::interconvert!(Cast, Instruction,'context);
-::rcc_utils::interconvert!(Call, Instruction<'context>);
-::rcc_utils::interconvert!(ICmp, Instruction<'context>);
+::rcc_utils::interconvert!(Phi, Instruction);
+::rcc_utils::interconvert!(Terminator, Instruction);
+::rcc_utils::interconvert!(Unary, Instruction);
+::rcc_utils::interconvert!(Binary, Instruction);
+::rcc_utils::interconvert!(Memory, Instruction);
+::rcc_utils::interconvert!(Cast, Instruction);
+::rcc_utils::interconvert!(Call, Instruction);
+::rcc_utils::interconvert!(ICmp, Instruction);
 
-::rcc_utils::make_trio_for!(Call, Instruction<'context>);
+::rcc_utils::make_trio_for!(Call, Instruction);

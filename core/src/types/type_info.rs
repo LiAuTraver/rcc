@@ -29,7 +29,8 @@ impl<'context> TypeInfo for Type<'context> {
   #[inline]
   fn size(&self) -> usize {
     ::rcc_utils::static_dispatch!(
-      self.size(),
+      self,
+      |variant| variant.size() =>
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }
@@ -37,7 +38,8 @@ impl<'context> TypeInfo for Type<'context> {
   #[inline]
   fn is_scalar(&self) -> bool {
     ::rcc_utils::static_dispatch!(
-      self.is_scalar(),
+      self,
+      |variant| variant.is_scalar() =>
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }

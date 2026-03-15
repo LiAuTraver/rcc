@@ -70,11 +70,11 @@ trait ImplHelper2<T, Listener> {
   fn handle_with(self, context: &Listener, default: T) -> T;
 }
 
-impl<'context, T> ImplHelper2<T, Sema<'_, 'context, '_>>
+impl<'context, T> ImplHelper2<T, Sema<'_, 'context, '_, '_>>
   for Result<T, Diag<'context>>
 {
   /// if it's error, log it, and return a default value (means error)
-  fn handle_with(self, context: &Sema<'_, 'context, '_>, default: T) -> T {
+  fn handle_with(self, context: &Sema<'_, 'context, '_, '_>, default: T) -> T {
     match self {
       Ok(t) => t,
       Err(e) => {
@@ -90,9 +90,9 @@ trait ImplHelper3<T, Listener> {
 }
 
 impl<'context, T: ::std::default::Default>
-  ImplHelper3<T, Sema<'_, 'context, '_>> for Result<T, Diag<'context>>
+  ImplHelper3<T, Sema<'_, 'context, '_, '_>> for Result<T, Diag<'context>>
 {
-  fn handle_or_default(self, context: &Sema<'_, 'context, '_>) -> T {
+  fn handle_or_default(self, context: &Sema<'_, 'context, '_, '_>) -> T {
     match self {
       Ok(t) => t,
       Err(e) => {
@@ -102,21 +102,22 @@ impl<'context, T: ::std::default::Default>
     }
   }
 }
-pub struct Sema<'session, 'context, 'source>
+pub struct Sema<'source, 'context, 'ir, 'session>
 where
-  'context: 'session,
   'source: 'context,
+  'context: 'ir,
+  'ir: 'session,
 {
   program: pd::Program<'context>,
   environment: Environment<'context>,
   current_function: Option<sd::Function<'context>>,
-  session: &'session Session<'context, 'source>,
+  session: &'session Session<'source, 'context, 'ir>,
 }
 
-impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
+impl<'source, 'context, 'ir, 'session> Sema<'source, 'context, 'ir, 'session> {
   pub fn new(
     program: pd::Program<'context>,
-    session: &'session Session<'context, 'source>,
+    session: &'session Session<'source, 'context, 'ir>,
   ) -> Self {
     Self {
       program,
@@ -150,7 +151,7 @@ impl<'session, 'context, 'source> Sema<'session, 'context, 'source> {
     translation_unit
   }
 }
-impl<'context> Sema<'_, 'context, '_> {
+impl<'context> Sema<'_, 'context, '_, '_> {
   /// IMPORTANT: currently, caller shoould check:
   /// 1. whether the `restrict` is valid; (it's only valid for pointers and non-static local variable.)
   /// 2. the type is complete or not, via [`TypeInfo::size`].
@@ -501,7 +502,7 @@ impl<'context> Sema<'_, 'context, '_> {
   }
 }
 
-impl<'context> Sema<'_, 'context, '_> {
+impl<'context> Sema<'_, 'context, '_, '_> {
   fn externaldecl(&mut self) -> Vec<sd::ExternalDeclaration<'context>> {
     let mut declarations = Vec::new();
     std::mem::take(&mut self.program)
@@ -936,7 +937,7 @@ impl<'context> Sema<'_, 'context, '_> {
   }
 }
 
-impl<'context> Sema<'_, 'context, '_> {
+impl<'context> Sema<'_, 'context, '_, '_> {
   fn expression(
     &self,
     expression: pe::Expression<'context>,
@@ -1324,7 +1325,7 @@ impl<'context> Sema<'_, 'context, '_> {
     todo!()
   }
 }
-impl<'context> Sema<'_, 'context, '_> {
+impl<'context> Sema<'_, 'context, '_, '_> {
   /// unary arithmetic operators: `+`, `-`
   fn unary_arithmetic(
     &self,
@@ -1515,7 +1516,7 @@ impl<'context> Sema<'_, 'context, '_> {
     }
   }
 }
-impl<'context> Sema<'_, 'context, '_> {
+impl<'context> Sema<'_, 'context, '_, '_> {
   /// assignment operator `=`
   fn assignment(
     &self,
@@ -1819,7 +1820,7 @@ impl<'context> Sema<'_, 'context, '_> {
     ))
   }
 }
-impl<'context> Sema<'_, 'context, '_> {
+impl<'context> Sema<'_, 'context, '_, '_> {
   fn statements(
     &mut self,
     statements: Vec<ps::Statement<'context>>,

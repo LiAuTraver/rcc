@@ -22,12 +22,14 @@ pub trait Emitable<'a, ValueType> {
     qualified_type: QualifiedType<'a>,
   ) -> ValueID;
 }
-pub struct ModuleBuilder<'session, 'context, 'source>
+pub struct ModuleBuilder<'source, 'context, 'ir, 'session>
 where
   'context: 'session,
   'source: 'context,
+  'ir: 'session,
+  'source: 'ir,
 {
-  session: &'session Session<'context, 'source>,
+  session: &'session Session<'source, 'context, 'ir>,
   /// The basic block currently being written into
   current_block: Option<BasicBlock>,
   /// Blocks finalized in the current function
@@ -35,10 +37,17 @@ where
   locals: HashMap<StrRef<'context>, ValueID>,
   /// function name → ValueID for call resolution
   func_values: HashMap<StrRef<'context>, ValueID>,
-  module: Module<'context>,
+  module: Module,
 }
-impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
-  pub fn new(session: &'session Session<'context, 'source>) -> Self {
+macro_rules! ir_type {
+  ($self:ident, $qualified_type:ident) => {
+    $self.session.ir_context.ir_type(&$qualified_type)
+  };
+}
+impl<'source, 'context, 'ir, 'session>
+  ModuleBuilder<'source, 'context, 'ir, 'session>
+{
+  pub fn new(session: &'session Session<'source, 'context, 'ir>) -> Self {
     Self {
       session,
       current_block: Default::default(),
@@ -50,7 +59,7 @@ impl<'session, 'context, 'source> ModuleBuilder<'session, 'context, 'source> {
   }
 }
 impl<'context> Emitable<'context, Terminator>
-  for ModuleBuilder<'_, 'context, '_>
+  for ModuleBuilder<'_, 'context, '_, '_>
 {
   fn emit(
     &mut self,
@@ -59,9 +68,9 @@ impl<'context> Emitable<'context, Terminator>
   ) -> ValueID {
     if let Some(block) = &mut self.current_block {
       assert!(block.terminator.is_null(), "block already has a terminator");
-      let value_id = self.module.values.insert(ValueData::new(
+      let value_id = self.session.ir_context.insert(ValueData::new(
         qualified_type,
-        self.session.ir_context.ir_type(&qualified_type),
+        ir_type!(self, qualified_type),
         Into::<Instruction>::into(terminator).into(),
       ));
       block.terminator = value_id;
@@ -71,8 +80,8 @@ impl<'context> Emitable<'context, Terminator>
     }
   }
 }
-impl<'context, InstType: Into<Instruction<'context>>>
-  Emitable<'context, InstType> for ModuleBuilder<'_, 'context, '_>
+impl<'context, InstType: Into<Instruction>> Emitable<'context, InstType>
+  for ModuleBuilder<'_, 'context, '_, '_>
 {
   default fn emit(
     &mut self,
@@ -80,9 +89,9 @@ impl<'context, InstType: Into<Instruction<'context>>>
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
     if let Some(block) = &mut self.current_block {
-      let value_id = self.module.values.insert(ValueData::new(
+      let value_id = self.session.ir_context.insert(ValueData::new(
         qualified_type,
-        self.session.ir_context.ir_type(&qualified_type),
+        ir_type!(self, qualified_type),
         value.into().into(),
       ));
       block.instructions.push(value_id);
@@ -94,16 +103,16 @@ impl<'context, InstType: Into<Instruction<'context>>>
 }
 
 impl<'context> Emitable<'context, module::Function<'context>>
-  for ModuleBuilder<'_, 'context, '_>
+  for ModuleBuilder<'_, 'context, '_, '_>
 {
   fn emit(
     &mut self,
     value: module::Function<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    let value_id = self.module.values.insert(ValueData::new(
+    let value_id = self.session.ir_context.insert(ValueData::new(
       qualified_type,
-      self.session.ir_context.ir_type(&qualified_type),
+      ir_type!(self, qualified_type),
       value.into(),
     ));
     self.module.globals.push(value_id);
@@ -111,16 +120,16 @@ impl<'context> Emitable<'context, module::Function<'context>>
   }
 }
 impl<'context> Emitable<'context, module::Variable<'context>>
-  for ModuleBuilder<'_, 'context, '_>
+  for ModuleBuilder<'_, 'context, '_, '_>
 {
   fn emit(
     &mut self,
     value: module::Variable<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    let value_id = self.module.values.insert(ValueData::new(
+    let value_id = self.session.ir_context.insert(ValueData::new(
       qualified_type,
-      self.session.ir_context.ir_type(&qualified_type),
+      ir_type!(self, qualified_type),
       value.into(),
     ));
     self.module.globals.push(value_id);
@@ -128,36 +137,36 @@ impl<'context> Emitable<'context, module::Variable<'context>>
   }
 }
 impl<'context> Emitable<'context, se::Constant<'context>>
-  for ModuleBuilder<'_, 'context, '_>
+  for ModuleBuilder<'_, 'context, '_, '_>
 {
   fn emit(
     &mut self,
     value: se::Constant<'context>,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    self.module.values.insert(ValueData::new(
+    self.session.ir_context.insert(ValueData::new(
       qualified_type,
-      self.session.ir_context.ir_type(&qualified_type),
+      ir_type!(self, qualified_type),
       value.into(),
     ))
   }
 }
 impl<'context> Emitable<'context, Argument>
-  for ModuleBuilder<'_, 'context, '_>
+  for ModuleBuilder<'_, 'context, '_, '_>
 {
   fn emit(
     &mut self,
     value: Argument,
     qualified_type: QualifiedType<'context>,
   ) -> ValueID {
-    self.module.values.insert(ValueData::new(
+    self.session.ir_context.insert(ValueData::new(
       qualified_type,
-      self.session.ir_context.ir_type(&qualified_type),
+      ir_type!(self, qualified_type),
       value.into(),
     ))
   }
 }
-impl<'context> ModuleBuilder<'_, 'context, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   fn push_block(&mut self) {
     self.seal_current_block();
     self.current_block = Some(BasicBlock::default());
@@ -165,7 +174,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
 
   fn seal_current_block(&mut self) {
     if let Some(block) = self.current_block.take() {
-      let block_id = self.module.values.insert(ValueData::new(
+      let block_id = self.session.ir_context.insert(ValueData::new(
         self.session.ast_context.void_type().into(),
         self.session.ir_context.label_type(),
         block.into(),
@@ -176,11 +185,11 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   pub fn build(
     mut self,
     translation_unit: sd::TranslationUnit<'context>,
-  ) -> Module<'context> {
+  ) -> Module {
     let declarations = translation_unit.declarations;
 
     self.module.globals = Vec::with_capacity(declarations.len() / 4 + 1);
@@ -211,7 +220,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
           let value_id = self.func_values[name];
           let ir_func = self.function(function, value_id);
           // replace the empty function with the one with body.
-          self.module.values[value_id].value = ir_func.into();
+          self.session.ir_context.get_mut(value_id).value = ir_func.into();
         },
         sd::ExternalDeclaration::Variable(variable) => {
           let qualified_type = variable.symbol.borrow().qualified_type;
@@ -224,7 +233,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   fn function(
     &mut self,
     function: sd::Function<'context>,
@@ -287,7 +296,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   fn statement(&mut self, statement: ss::Statement<'context>) {
     use ss::Statement::*;
     match statement {
@@ -335,7 +344,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   fn expression(
     &mut self,
     expression: se::Expression<'context>,
