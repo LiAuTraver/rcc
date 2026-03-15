@@ -3,11 +3,10 @@ use super::{
 };
 use crate::common::{DumpRes, Dumpable, Dumper, Palette, TreeDumper};
 // no tree structure for IR
-pub type IRDumper<'source, 'context, 'ir, 'session> = TreeDumper<
+pub type IRDumper<'source, 'context, 'session> = TreeDumper<
   'session,
   'context,
   'source,
-  'ir,
   /* "    ", */
   /* "    ", */
   /* "    ", */
@@ -22,17 +21,16 @@ macro_rules! ctx {
 }
 
 impl Dumpable for Module {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     self.globals.iter().try_for_each(|value_id| {
       Dumpable::dump(
@@ -47,17 +45,16 @@ impl Dumpable for Module {
 }
 
 impl Dumpable for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     ::rcc_utils::static_dispatch!(
         Value: &self.value,
@@ -70,9 +67,9 @@ trait Dump<ValueTy> {
   /// This is a special version of [`Dumpable::dump`] for dumping a specific variant of [`ValueData`].
   ///
   /// Please refer to the doc of [`Dumpable::dump`] for the meaning of the parameters.
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -80,17 +77,16 @@ trait Dump<ValueTy> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session;
+    'context: 'session;
 }
 /// Useless stuffs toi bypass type checker for now.
 #[allow(unused)]
 macro_rules! please_dump_me {
   ($ValueTy:ty) => {
     impl Dump<$ValueTy> for ValueData<'_> {
-      fn dump<'source, 'context, 'ir, 'session>(
+      fn dump<'source, 'context, 'session>(
         &self,
-        dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+        dumper: &mut impl Dumper<'source, 'context, 'session>,
         prefix: &str,
         is_last: bool,
         palette: &Palette,
@@ -98,8 +94,7 @@ macro_rules! please_dump_me {
       ) -> DumpRes
       where
         'source: 'context,
-        'context: 'ir,
-        'ir: 'session,
+        'context: 'session,
       {
         todo!()
       }
@@ -107,9 +102,9 @@ macro_rules! please_dump_me {
   };
 }
 impl Dump<inst::Instruction> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -117,8 +112,7 @@ impl Dump<inst::Instruction> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     // my static_dispatch uses `ident` instead of
     // `type` of the 1st arg(qual path is unstable and rust-analyzer is having a hard time to hightlighing that).
@@ -133,9 +127,9 @@ impl Dump<inst::Instruction> for ValueData<'_> {
 }
 
 impl Dump<Constant<'_>> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -143,16 +137,15 @@ impl Dump<Constant<'_>> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     todo!()
   }
 }
 impl Dump<module::Function<'_>> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -160,16 +153,15 @@ impl Dump<module::Function<'_>> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     todo!()
   }
 }
 impl Dump<module::Variable<'_>> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -177,16 +169,15 @@ impl Dump<module::Variable<'_>> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     todo!()
   }
 }
 impl Dump<module::BasicBlock> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -194,16 +185,15 @@ impl Dump<module::BasicBlock> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     todo!()
   }
 }
 impl Dump<module::Argument> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -211,8 +201,7 @@ impl Dump<module::Argument> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     todo!()
   }
@@ -220,9 +209,9 @@ impl Dump<module::Argument> for ValueData<'_> {
 
 please_dump_me!(inst::Phi);
 impl Dump<inst::Terminator> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
@@ -230,8 +219,7 @@ impl Dump<inst::Terminator> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     use inst::Terminator;
     ::rcc_utils::static_dispatch!(
@@ -251,9 +239,9 @@ please_dump_me!(inst::ICmp);
 please_dump_me!(inst::Jump);
 please_dump_me!(inst::Branch);
 impl Dump<inst::Return> for ValueData<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     _is_last: bool,
     palette: &Palette,
@@ -261,8 +249,7 @@ impl Dump<inst::Return> for ValueData<'_> {
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     debug_assert!(_is_last);
     dumper.print_indent(prefix, true)?;

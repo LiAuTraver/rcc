@@ -22,14 +22,12 @@ pub trait Emitable<'a, ValueType> {
     qualified_type: QualifiedType<'a>,
   ) -> ValueID;
 }
-pub struct ModuleBuilder<'source, 'context, 'ir, 'session>
+pub struct ModuleBuilder<'source, 'context, 'session>
 where
   'context: 'session,
   'source: 'context,
-  'ir: 'session,
-  'source: 'ir,
 {
-  session: &'session Session<'source, 'context, 'ir>,
+  session: &'session Session<'source, 'context>,
   /// The basic block currently being written into
   current_block: Option<BasicBlock>,
   /// Blocks finalized in the current function
@@ -44,10 +42,8 @@ macro_rules! ir_type {
     $self.session.ir_context.ir_type(&$qualified_type)
   };
 }
-impl<'source, 'context, 'ir, 'session>
-  ModuleBuilder<'source, 'context, 'ir, 'session>
-{
-  pub fn new(session: &'session Session<'source, 'context, 'ir>) -> Self {
+impl<'source, 'context, 'session> ModuleBuilder<'source, 'context, 'session> {
+  pub fn new(session: &'session Session<'source, 'context>) -> Self {
     Self {
       session,
       current_block: Default::default(),
@@ -59,7 +55,7 @@ impl<'source, 'context, 'ir, 'session>
   }
 }
 impl<'context> Emitable<'context, Terminator>
-  for ModuleBuilder<'_, 'context, '_, '_>
+  for ModuleBuilder<'_, 'context, '_>
 {
   fn emit(
     &mut self,
@@ -81,7 +77,7 @@ impl<'context> Emitable<'context, Terminator>
   }
 }
 impl<'context, InstType: Into<Instruction>> Emitable<'context, InstType>
-  for ModuleBuilder<'_, 'context, '_, '_>
+  for ModuleBuilder<'_, 'context, '_>
 {
   default fn emit(
     &mut self,
@@ -103,7 +99,7 @@ impl<'context, InstType: Into<Instruction>> Emitable<'context, InstType>
 }
 
 impl<'context> Emitable<'context, module::Function<'context>>
-  for ModuleBuilder<'_, 'context, '_, '_>
+  for ModuleBuilder<'_, 'context, '_>
 {
   fn emit(
     &mut self,
@@ -120,7 +116,7 @@ impl<'context> Emitable<'context, module::Function<'context>>
   }
 }
 impl<'context> Emitable<'context, module::Variable<'context>>
-  for ModuleBuilder<'_, 'context, '_, '_>
+  for ModuleBuilder<'_, 'context, '_>
 {
   fn emit(
     &mut self,
@@ -137,7 +133,7 @@ impl<'context> Emitable<'context, module::Variable<'context>>
   }
 }
 impl<'context> Emitable<'context, se::Constant<'context>>
-  for ModuleBuilder<'_, 'context, '_, '_>
+  for ModuleBuilder<'_, 'context, '_>
 {
   fn emit(
     &mut self,
@@ -152,7 +148,7 @@ impl<'context> Emitable<'context, se::Constant<'context>>
   }
 }
 impl<'context> Emitable<'context, Argument>
-  for ModuleBuilder<'_, 'context, '_, '_>
+  for ModuleBuilder<'_, 'context, '_>
 {
   fn emit(
     &mut self,
@@ -166,7 +162,7 @@ impl<'context> Emitable<'context, Argument>
     ))
   }
 }
-impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_> {
   fn push_block(&mut self) {
     self.seal_current_block();
     self.current_block = Some(BasicBlock::default());
@@ -185,7 +181,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_> {
   pub fn build(
     mut self,
     translation_unit: sd::TranslationUnit<'context>,
@@ -233,7 +229,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_> {
   fn function(
     &mut self,
     function: sd::Function<'context>,
@@ -296,7 +292,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_> {
   fn statement(&mut self, statement: ss::Statement<'context>) {
     use ss::Statement::*;
     match statement {
@@ -344,7 +340,7 @@ impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
   }
 }
 
-impl<'context> ModuleBuilder<'_, 'context, '_, '_> {
+impl<'context> ModuleBuilder<'_, 'context, '_> {
   fn expression(
     &mut self,
     expression: se::Expression<'context>,

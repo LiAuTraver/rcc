@@ -8,10 +8,7 @@ use super::{
 };
 /// Although the lifetime speficier here is `'context`, but it should actually be the same as `'context` in [`crate::session::Session`] who owns it.
 #[derive(Debug)]
-pub struct Context<'context, 'ir>
-where
-  'context: 'ir,
-{
+pub struct Context<'context> {
   void_type: TypeRef<'context>,
   label_type: TypeRef<'context>,
   float32_type: TypeRef<'context>,
@@ -19,39 +16,30 @@ where
   pointer_type: TypeRef<'context>,
   common_integer_types: [TypeRef<'context>; 6],
 
-  type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
-  type_arena: &'context Bump,
-
-  ir_slotmap: &'ir RefCell<SlotMap<ValueID, ValueData<'context>>>,
+  storage: StorageRef<'context>,
 }
 
-impl<'context, 'ir> Context<'context, 'ir> {
-  pub fn new(
-    arena: &'context Bump,
-    type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
-    slotmap: &'ir RefCell<SlotMap<ValueID, ValueData<'context>>>,
-  ) -> Self {
+impl<'context> Context<'context> {
+  pub fn new(storage: StorageRef<'context>) -> Self {
     let this = Self {
-      void_type: arena.alloc(Type::Void),
-      label_type: arena.alloc(Type::Label),
-      float32_type: arena.alloc(Type::Float),
-      float64_type: arena.alloc(Type::Double),
-      pointer_type: arena.alloc(Type::Pointer),
+      void_type: storage.ast_arena.alloc(Type::Void),
+      label_type: storage.ast_arena.alloc(Type::Label),
+      float32_type: storage.ast_arena.alloc(Type::Float),
+      float64_type: storage.ast_arena.alloc(Type::Double),
+      pointer_type: storage.ast_arena.alloc(Type::Pointer),
       common_integer_types: [
-        arena.alloc(Type::Integer(1)),
-        arena.alloc(Type::Integer(8)),
-        arena.alloc(Type::Integer(16)),
-        arena.alloc(Type::Integer(32)),
-        arena.alloc(Type::Integer(64)),
-        arena.alloc(Type::Integer(128)),
+        storage.ast_arena.alloc(Type::Integer(1)),
+        storage.ast_arena.alloc(Type::Integer(8)),
+        storage.ast_arena.alloc(Type::Integer(16)),
+        storage.ast_arena.alloc(Type::Integer(32)),
+        storage.ast_arena.alloc(Type::Integer(64)),
+        storage.ast_arena.alloc(Type::Integer(128)),
       ],
 
-      type_interner,
-      type_arena: arena,
-      ir_slotmap: slotmap,
+      storage,
     };
     {
-      let mut refmut = this.type_interner.borrow_mut();
+      let mut refmut = this.storage.ir_type_interner.borrow_mut();
       refmut.insert(this.void_type);
       refmut.insert(this.label_type);
       refmut.insert(this.float32_type);
@@ -64,7 +52,7 @@ impl<'context, 'ir> Context<'context, 'ir> {
     this
   }
 }
-impl<'context> Context<'context, '_> {
+impl<'context> Context<'context> {
   pub fn void_type(&self) -> TypeRef<'context> {
     self.void_type
   }
@@ -86,11 +74,11 @@ impl<'context> Context<'context, '_> {
   }
 
   fn do_intern(&self, value: Type<'context>) -> TypeRef<'context> {
-    if let Some(existing) = self.type_interner.borrow().get(&value) {
+    if let Some(existing) = self.storage.ir_type_interner.borrow().get(&value) {
       existing
     } else {
-      let interned = self.type_arena.alloc(value);
-      self.type_interner.borrow_mut().insert(interned);
+      let interned = self.storage.ast_arena.alloc(value);
+      self.storage.ir_type_interner.borrow_mut().insert(interned);
       interned
     }
   }
@@ -129,21 +117,23 @@ impl<'context> Context<'context, '_> {
   }
 }
 use ::std::cell::{Ref, RefMut};
-impl<'context, 'ir> Context<'context, 'ir> {
+impl<'context> Context<'context> {
   pub fn insert(&self, value: ValueData<'context>) -> ValueID {
-    self.ir_slotmap.borrow_mut().insert(value)
+    self.storage.ir_arena.borrow_mut().insert(value)
   }
 
   pub fn get(&self, id: ValueID) -> Ref<'_, ValueData<'context>> {
-    Ref::map(self.ir_slotmap.borrow(), |slotmap| &slotmap[id])
+    Ref::map(self.storage.ir_arena.borrow(), |slotmap| &slotmap[id])
   }
 
   pub fn get_mut(&self, id: ValueID) -> RefMut<'_, ValueData<'context>> {
-    RefMut::map(self.ir_slotmap.borrow_mut(), |slotmap| &mut slotmap[id])
+    RefMut::map(self.storage.ir_arena.borrow_mut(), |slotmap| {
+      &mut slotmap[id]
+    })
   }
 }
-use crate::types;
-impl<'context> Context<'context, '_> {
+use crate::{storage::StorageRef, types};
+impl<'context> Context<'context> {
   pub fn ir_type(
     &self,
     qualified_type: &types::QualifiedType<'context>,
@@ -172,7 +162,7 @@ impl<'context> Context<'context, '_> {
       ),
       types::Type::FunctionProto(function_proto) => self.make_function(
         self.ir_type(&function_proto.return_type),
-        self.type_arena.alloc_slice_fill_iter(
+        self.storage.ast_arena.alloc_slice_fill_iter(
           function_proto
             .parameter_types
             .iter()

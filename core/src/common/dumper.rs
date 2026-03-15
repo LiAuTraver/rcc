@@ -107,11 +107,10 @@ impl Palette {
   }
 }
 
-pub trait Dumper<'source, 'context, 'ir, 'session>
+pub trait Dumper<'source, 'context, 'session>
 where
   'source: 'context,
-  'context: 'ir,
-  'ir: 'session,
+  'context: 'session,
 {
   #[inline(always)]
   fn write(&mut self, text: &str, spec: &ColorSpec) -> DumpRes {
@@ -139,12 +138,11 @@ where
   #[must_use]
   fn palette(&self) -> &Palette;
   #[must_use]
-  fn session(&self) -> &'session Session<'source, 'context, 'ir>;
+  fn session(&self) -> &'session Session<'source, 'context>;
 }
 pub struct Default<
   'session,
   'context,
-  'ir,
   'source,
   const INDENT_BODY: &'static str = "    ",
   const INDENT_LAST: &'static str = "    ",
@@ -153,28 +151,25 @@ pub struct Default<
   const PREFIX_LEFT: &'static str = "",
 > where
   'source: 'context,
-  'context: 'ir,
-  'ir: 'session,
+  'context: 'session,
 {
   pub(crate) stream: FlushOnDropRAII<BufferedStandardStream>,
   pub(crate) palette: Palette,
-  pub(crate) session: &'session Session<'context, 'source, 'ir>,
+  pub(crate) session: &'session Session<'source, 'context>,
 }
 impl<
   'session,
   'context,
-  'ir,
   'source,
   const INDENT_BODY: &'static str,
   const INDENT_LAST: &'static str,
   const PARENT_BODY: &'static str,
   const PARENT_LAST: &'static str,
   const PREFIX_LEFT: &'static str,
-> Dumper<'source, 'context, 'ir, 'session>
+> Dumper<'source, 'context, 'session>
   for Default<
     'session,
     'context,
-    'ir,
     'source,
     INDENT_BODY,
     INDENT_LAST,
@@ -231,14 +226,13 @@ impl<
   }
 
   #[inline(always)]
-  fn session(&self) -> &'session Session<'context, 'source, 'ir> {
+  fn session(&self) -> &'session Session<'source, 'context> {
     self.session
   }
 }
 impl<
   'session,
   'context,
-  'ir,
   'source,
   const INDENT_BODY: &'static str,
   const INDENT_LAST: &'static str,
@@ -249,7 +243,6 @@ impl<
   Default<
     'session,
     'context,
-    'ir,
     'source,
     INDENT_BODY,
     INDENT_LAST,
@@ -261,12 +254,11 @@ impl<
   #[inline(never)]
   pub fn dump(
     dumpable: &impl Dumpable,
-    session: &'session Session<'source, 'context, 'ir>,
+    session: &'session Session<'source, 'context>,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     let mut dumper = Self::new(
       session,
@@ -281,7 +273,6 @@ impl<
 impl<
   'session,
   'context,
-  'ir,
   'source,
   const INDENT_BODY: &'static str,
   const INDENT_LAST: &'static str,
@@ -292,7 +283,6 @@ impl<
   Default<
     'session,
     'context,
-    'ir,
     'source,
     INDENT_BODY,
     INDENT_LAST,
@@ -302,7 +292,7 @@ impl<
   >
 {
   pub fn new(
-    session: &'session Session<'source, 'context, 'ir>,
+    session: &'session Session<'source, 'context>,
     stream: FlushOnDropRAII<BufferedStandardStream>,
     palette: Palette,
   ) -> Self {
@@ -324,31 +314,29 @@ pub trait Dumpable {
   /// 1. print the indent for **this** node. i.e., use [`Dumper::print_indent`] with the given `prefix` and `is_last`.
   /// 2. print the node header info like type name, address, span, etc. using [`Dumper::write_fmt`].
   /// 3. compute the prefix for children using [`Dumper::child_prefix`] and recurse into children with the new `prefix` and correct `is_last`.
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session;
+    'context: 'session;
 }
 
 impl Dumpable for SourceSpan {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     _prefix: &str,
     _is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.write("<", &palette.skeleton)?;
     let (l, c) = dumper

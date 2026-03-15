@@ -1,17 +1,14 @@
 use ::bumpalo::Bump;
 use ::rcc_utils::IntoWith;
-use ::std::{cell::RefCell, collections::HashSet};
 
 use super::{
   Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
   Primitive, QualifiedType, Type, TypeRef,
 };
-use crate::common::StrRef;
+use crate::{common::StrRef, storage::StorageRef};
 #[derive(Debug)]
 pub struct Context<'context> {
-  arena: &'context Bump,
-  type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
-  string_interner: &'context RefCell<HashSet<StrRef<'context>>>,
+  storage: StorageRef<'context>,
 
   nullptr_type: TypeRef<'context>,
   void_type: TypeRef<'context>,
@@ -35,39 +32,34 @@ pub struct Context<'context> {
   unnamed_str: StrRef<'context>,
 }
 impl<'context> Context<'context> {
-  pub fn new(
-    arena: &'context Bump,
-    type_interner: &'context RefCell<HashSet<TypeRef<'context>>>,
-    string_interner: &'context RefCell<HashSet<StrRef<'context>>>,
-  ) -> Self {
-    let void_type = arena.alloc(Primitive::Void.into());
+  pub fn new(storage: StorageRef<'context>) -> Self {
+    let void_type = storage.ast_arena.alloc(Primitive::Void.into());
     let this = Self {
-      arena,
-      type_interner,
-      string_interner,
-      int_type: arena.alloc(Primitive::Int.into()),
-      float_type: arena.alloc(Primitive::Float.into()),
-      short_type: arena.alloc(Primitive::Short.into()),
-      ptrdiff_type: arena.alloc(Primitive::LongLong.into()),
-      uintptr_type: arena.alloc(Primitive::ULongLong.into()),
+      storage,
+      int_type: storage.ast_arena.alloc(Primitive::Int.into()),
+      float_type: storage.ast_arena.alloc(Primitive::Float.into()),
+      short_type: storage.ast_arena.alloc(Primitive::Short.into()),
+      ptrdiff_type: storage.ast_arena.alloc(Primitive::LongLong.into()),
+      uintptr_type: storage.ast_arena.alloc(Primitive::ULongLong.into()),
       void_type,
-      char_type: arena.alloc(Primitive::Char.into()),
-      uchar_type: arena.alloc(Primitive::UChar.into()),
-      ushort_type: arena.alloc(Primitive::UShort.into()),
-      uint_type: arena.alloc(Primitive::UInt.into()),
-      ulong_long_type: arena.alloc(Primitive::ULongLong.into()),
-      long_type: arena.alloc(Primitive::Long.into()),
-      ulong_type: arena.alloc(Primitive::ULong.into()),
-      nullptr_type: arena.alloc(Primitive::Nullptr.into()),
-      double_type: arena.alloc(Primitive::Double.into()),
-      bool_type: arena.alloc(Primitive::Bool.into()),
-      long_long_type: arena.alloc(Primitive::LongLong.into()),
-      voidptr_type: arena
+      char_type: storage.ast_arena.alloc(Primitive::Char.into()),
+      uchar_type: storage.ast_arena.alloc(Primitive::UChar.into()),
+      ushort_type: storage.ast_arena.alloc(Primitive::UShort.into()),
+      uint_type: storage.ast_arena.alloc(Primitive::UInt.into()),
+      ulong_long_type: storage.ast_arena.alloc(Primitive::ULongLong.into()),
+      long_type: storage.ast_arena.alloc(Primitive::Long.into()),
+      ulong_type: storage.ast_arena.alloc(Primitive::ULong.into()),
+      nullptr_type: storage.ast_arena.alloc(Primitive::Nullptr.into()),
+      double_type: storage.ast_arena.alloc(Primitive::Double.into()),
+      bool_type: storage.ast_arena.alloc(Primitive::Bool.into()),
+      long_long_type: storage.ast_arena.alloc(Primitive::LongLong.into()),
+      voidptr_type: storage
+        .ast_arena
         .alloc(Pointer::new(QualifiedType::new_unqualified(void_type)).into()),
-      unnamed_str: arena.alloc_str("<unnamed>"),
+      unnamed_str: storage.ast_arena.alloc_str("<unnamed>"),
     };
     {
-      let mut refmut = this.type_interner.borrow_mut();
+      let mut refmut = this.storage.ast_type_interner.borrow_mut();
       refmut.insert(this.int_type);
       refmut.insert(this.float_type);
       refmut.insert(this.short_type);
@@ -86,12 +78,16 @@ impl<'context> Context<'context> {
       refmut.insert(this.bool_type);
       refmut.insert(this.voidptr_type);
     }
-    this.string_interner.borrow_mut().insert(this.unnamed_str);
+    this
+      .storage
+      .str_interner
+      .borrow_mut()
+      .insert(this.unnamed_str);
     this
   }
 
   pub fn arena(&self) -> &'context Bump {
-    self.arena
+    self.storage.ast_arena
   }
 }
 
@@ -99,21 +95,22 @@ pub type ArenaVec<'a, T> = ::bumpalo::collections::Vec<'a, T>;
 
 impl<'context> Context<'context> {
   fn do_intern(&self, value: Type<'context>) -> TypeRef<'context> {
-    if let Some(&interned) = self.type_interner.borrow().get(&value) {
+    if let Some(&interned) = self.storage.ast_type_interner.borrow().get(&value)
+    {
       interned
     } else {
-      let interned = self.arena.alloc(value);
-      self.type_interner.borrow_mut().insert(interned);
+      let interned = self.storage.ast_arena.alloc(value);
+      self.storage.ast_type_interner.borrow_mut().insert(interned);
       interned
     }
   }
 
   pub fn intern_str(&self, value: &str) -> StrRef<'context> {
-    if let Some(&interned) = self.string_interner.borrow().get(value) {
+    if let Some(&interned) = self.storage.str_interner.borrow().get(value) {
       interned
     } else {
-      let interned = self.arena.alloc_str(value);
-      self.string_interner.borrow_mut().insert(interned);
+      let interned = self.storage.ast_arena.alloc_str(value);
+      self.storage.str_interner.borrow_mut().insert(interned);
       // ... weird syntax to make &mut str into &str
       &*interned
     }
@@ -124,12 +121,12 @@ impl<'context> Context<'context> {
   }
 
   pub fn alloc_vec<T>(&self, capacity: usize) -> ArenaVec<'context, T> {
-    ArenaVec::with_capacity_in(capacity, self.arena)
+    ArenaVec::with_capacity_in(capacity, self.storage.ast_arena)
   }
 
   // Helper to allocate slices
   pub fn alloc_slice<T: Copy>(&self, values: &[T]) -> &'context [T] {
-    self.arena.alloc_slice_copy(values)
+    self.storage.ast_arena.alloc_slice_copy(values)
   }
 
   pub fn make_function_proto(

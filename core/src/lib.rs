@@ -2,7 +2,7 @@
 #![allow(incomplete_features)]
 #![feature(specialization)]
 // C/C++ like default initialization in struct fields
-#![feature(default_field_values)]
+// #![feature(default_field_values)]
 // const for Box::new
 #![feature(const_convert)]
 // for `impl const` traits
@@ -23,12 +23,5 @@ pub mod lexer;
 pub mod parse;
 pub mod sema;
 pub mod session;
+pub mod storage;
 pub mod types;
-#[macro_export]
-macro_rules! lifetime_req {
-    () => {
-      where 'source:'context,
-      'context:'ir,
-      'ir:'session
-    };
-}

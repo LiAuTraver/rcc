@@ -17,11 +17,10 @@ use crate::{
   types::Constant as NumberConstant,
 };
 
-pub struct Lexer<'source, 'context, 'ir, 'session>
+pub struct Lexer<'source, 'context, 'session>
 where
   'source: 'context,
-  'context: 'ir,
-  'ir: 'session,
+  'context: 'session,
 {
   /// the [`SourceManager`](crate::common::SourceManager) owns the [`String`].
   source: &'source str,
@@ -36,12 +35,12 @@ where
   coords: Coordinate,
 
   /// Context.
-  session: &'session Session<'source, 'context, 'ir>,
+  session: &'session Session<'source, 'context>,
 }
-impl<'source, 'context, 'ir, 'session> Lexer<'source, 'context, 'ir, 'session> {
+impl<'source, 'context, 'session> Lexer<'source, 'context, 'session> {
   pub fn new(
     source: &'source str,
-    session: &'session Session<'source, 'context, 'ir>,
+    session: &'session Session<'source, 'context>,
   ) -> Self {
     Self {
       source,

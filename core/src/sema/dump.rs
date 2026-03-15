@@ -10,10 +10,9 @@ use super::{
 };
 use crate::common::{DumpRes, Dumpable, Dumper, Palette, TreeDumper};
 
-pub type ASTDumper<'source, 'context, 'ir, 'session> = TreeDumper<
+pub type ASTDumper<'source, 'context, 'session> = TreeDumper<
   'session,
   'context,
-  'ir,
   'source,
   "├── ",
   "└── ",
@@ -22,17 +21,16 @@ pub type ASTDumper<'source, 'context, 'ir, 'session> = TreeDumper<
 >;
 
 impl Dumpable for Expression<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     use super::expression::{RawExpr::*, *};
 
@@ -194,17 +192,16 @@ impl Dumpable for Expression<'_> {
   }
 }
 impl Dumpable for TranslationUnit<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.write("TranslationUnit", &palette.node_type)?;
     dumper.write_fmt(format_args!(" {:p}\n", self), &palette.dim)?;
@@ -225,17 +222,16 @@ impl Dumpable for TranslationUnit<'_> {
   }
 }
 impl Dumpable for ExternalDeclaration<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     ::rcc_utils::static_dispatch!(
       self,
@@ -246,17 +242,16 @@ impl Dumpable for ExternalDeclaration<'_> {
 }
 
 impl Dumpable for VarDef<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.print_indent(prefix, is_last)?;
     let borrowed = self.symbol.borrow();
@@ -298,17 +293,16 @@ impl Dumpable for VarDef<'_> {
   }
 }
 impl Dumpable for Function<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Function", &palette.node_type)?;
@@ -348,17 +342,16 @@ impl Dumpable for Function<'_> {
 }
 
 impl Dumpable for Initializer<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Initializer", &palette.node_type)?;
@@ -376,17 +369,16 @@ impl Dumpable for Initializer<'_> {
 }
 
 impl Dumpable for Statement<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     ::rcc_utils::static_dispatch!(
       self,
@@ -397,17 +389,16 @@ impl Dumpable for Statement<'_> {
 }
 
 impl Dumpable for statement::Empty {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("EmptyStmt", &palette.node_type)?;
@@ -433,17 +424,16 @@ macro_rules! headers {
 }
 
 impl Dumpable for Return<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Return")?;
 
@@ -456,17 +446,16 @@ impl Dumpable for Return<'_> {
 }
 
 impl Dumpable for Compound<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Compound")?;
 
@@ -482,17 +471,16 @@ impl Dumpable for Compound<'_> {
 }
 
 impl Dumpable for If<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "If")?;
 
@@ -512,17 +500,16 @@ impl Dumpable for If<'_> {
 }
 
 impl Dumpable for While<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "While")?;
 
@@ -533,17 +520,16 @@ impl Dumpable for While<'_> {
 }
 
 impl Dumpable for DoWhile<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "DoWhile")?;
 
@@ -554,17 +540,16 @@ impl Dumpable for DoWhile<'_> {
 }
 
 impl Dumpable for For<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "For")?;
 
@@ -583,17 +568,16 @@ impl Dumpable for For<'_> {
 }
 
 impl Dumpable for Switch<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Switch")?;
 
@@ -614,17 +598,16 @@ impl Dumpable for Switch<'_> {
   }
 }
 impl Dumpable for Case<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Case")?;
 
@@ -637,17 +620,16 @@ impl Dumpable for Case<'_> {
   }
 }
 impl Dumpable for statement::Default<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Default")?;
 
@@ -659,17 +641,16 @@ impl Dumpable for statement::Default<'_> {
 }
 
 impl Dumpable for Goto<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Goto", &palette.node_type)?;
@@ -681,17 +662,16 @@ impl Dumpable for Goto<'_> {
 }
 
 impl Dumpable for Label<'_> {
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     dumper.print_indent(prefix, is_last)?;
     dumper.write("Label", &palette.node_type)?;
@@ -710,17 +690,16 @@ impl Dumpable for Label<'_> {
 
 impl Dumpable for Break<'_> {
   #[inline]
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Break")
   }
@@ -728,17 +707,16 @@ impl Dumpable for Break<'_> {
 
 impl Dumpable for Continue<'_> {
   #[inline]
-  fn dump<'source, 'context, 'ir, 'session>(
+  fn dump<'source, 'context, 'session>(
     &self,
-    dumper: &mut impl Dumper<'source, 'context, 'ir, 'session>,
+    dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
     is_last: bool,
     palette: &Palette,
   ) -> DumpRes
   where
     'source: 'context,
-    'context: 'ir,
-    'ir: 'session,
+    'context: 'session,
   {
     headers!(self, dumper, prefix, is_last, palette, "Continue")
   }
