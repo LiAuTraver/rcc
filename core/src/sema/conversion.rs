@@ -4,7 +4,7 @@ use ::rcc_utils::IntoWith;
 
 use super::expression::{Expression, ImplicitCast};
 use crate::{
-  common::SourceSpan,
+  common::{RefEq, SourceSpan},
   diagnosis::{Diag, DiagData::*, Severity},
   types::{
     CastType, Compatibility, Context, Pointer, Primitive, Promotion,
@@ -506,7 +506,7 @@ impl<'context> Expression<'context> {
   #[must_use]
   fn get_cast_type(from: &Type, to: &Type) -> CastType {
     match (from, to) {
-      (from, to) if Type::ref_eq(from, to) => CastType::Noop,
+      (from, to) if RefEq::ref_eq(from, to) => CastType::Noop,
       (Type::Primitive(from_prim), Type::Primitive(to_prim)) => {
         if from_prim.is_integer() && to_prim.is_integer() {
           CastType::IntegralCast

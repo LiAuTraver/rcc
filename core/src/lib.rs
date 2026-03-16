@@ -14,6 +14,7 @@
 #![feature(core_intrinsics)]
 pub(crate) mod blueprints;
 pub mod codegen;
+#[macro_use]
 pub mod common;
 pub mod diagnosis;
 pub mod ir;

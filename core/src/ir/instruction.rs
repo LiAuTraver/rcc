@@ -1,5 +1,4 @@
 use super::value::ValueID;
-use crate::types::QualifiedType;
 
 /// result = phi [val1, label1], [val2, label2]
 ///
@@ -161,6 +160,12 @@ pub enum Cast {
 pub struct Call {
   pub callee: ValueID,
   pub args: Vec<ValueID>,
+}
+
+impl Call {
+  pub fn new(callee: ValueID, args: Vec<ValueID>) -> Self {
+    Self { callee, args }
+  }
 }
 
 /// This mimics LLVM ir's catagory.

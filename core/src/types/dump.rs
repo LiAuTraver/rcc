@@ -2,10 +2,10 @@ use super::{
   Array, Enum, FunctionProto, Pointer, Primitive, QualifiedType, Record, Type,
   Union,
 };
-use crate::common::{FakeDumpRes, Dumpable, Dumper, Palette};
+use crate::common::{Dumpable, Dumper, FakeDumpRes, Palette};
 
-impl Dumpable for QualifiedType<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for QualifiedType<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -32,8 +32,8 @@ impl Dumpable for QualifiedType<'_> {
   }
 }
 
-impl Dumpable for Type<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Type<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -51,8 +51,8 @@ impl Dumpable for Type<'_> {
     )
   }
 }
-impl Dumpable for Primitive {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Primitive {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -70,8 +70,8 @@ impl Dumpable for Primitive {
   }
 }
 
-impl Dumpable for Pointer<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Pointer<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -91,8 +91,8 @@ impl Dumpable for Pointer<'_> {
     self.pointee.dump(dumper, &subprefix, true, palette)
   }
 }
-impl Dumpable for Array<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Array<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -116,8 +116,8 @@ impl Dumpable for Array<'_> {
   }
 }
 
-impl Dumpable for FunctionProto<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for FunctionProto<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -135,8 +135,8 @@ impl Dumpable for FunctionProto<'_> {
   }
 }
 #[allow(unused)]
-impl Dumpable for Enum<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Enum<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -152,8 +152,8 @@ impl Dumpable for Enum<'_> {
 }
 
 #[allow(unused)]
-impl Dumpable for Record<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Record<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -167,9 +167,9 @@ impl Dumpable for Record<'_> {
     todo!()
   }
 }
-impl Dumpable for Union<'_> {
+impl<'context> Dumpable<'context> for Union<'_> {
   #[allow(unused)]
-  fn dump<'source, 'context, 'session>(
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,

@@ -177,8 +177,8 @@ impl<'context> Assignment<'context> {
     match operator.category() {
       OperatorCategory::Assignment => Some(Self {
         operator,
-        left: Box::new(left),
-        right: Box::new(right),
+        left: left.into(),
+        right: right.into(),
         span,
       }),
       _ => None,

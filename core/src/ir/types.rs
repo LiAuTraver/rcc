@@ -1,12 +1,12 @@
 /// IR Type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type<'ir> {
-  Void,
-  Label,
-  Float,
-  Double,
+  Void(),
+  Label(),
+  Float(),
+  Double(),
 
-  Pointer,
+  Pointer(),
   Integer(u8),
   Array(Array<'ir>),
   Function(Function<'ir>),
@@ -57,11 +57,17 @@ impl<'ir> Function<'ir> {
 pub struct Struct<'ir> {
   _placeholder: &'ir ::std::marker::PhantomData<i8>,
 }
-use ::rcc_utils::{interconvert, make_trio_for};
+use ::rcc_utils::{interconvert, make_trio_for, make_trio_for_unit_tuple};
 
 interconvert!(Array, Type, 'ir);
 interconvert!(Function, Type, 'ir);
 interconvert!(Struct, Type, 'ir);
+
+make_trio_for_unit_tuple!(Void, Type<'ir>);
+make_trio_for_unit_tuple!(Label, Type<'ir>);
+make_trio_for_unit_tuple!(Float, Type<'ir>);
+make_trio_for_unit_tuple!(Double, Type<'ir>);
+make_trio_for_unit_tuple!(Pointer, Type<'ir>);
 
 make_trio_for!(Array, Type, 'ir);
 make_trio_for!(Function, Type, 'ir);

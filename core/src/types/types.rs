@@ -4,7 +4,7 @@ use super::{
   Array, ArraySize, Constant, Context, Enum, FunctionProto, Pointer, Primitive,
   Record, TypeInfo, Union,
 };
-use crate::common::{FloatFormat, Floating, Integral, Signedness};
+use crate::common::{FloatFormat, Floating, Integral, RefEq, Signedness};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type<'context> {
@@ -64,9 +64,10 @@ impl<'context> Type<'context> {
   pub fn lookup(self, context: &Context<'context>) -> TypeRef<'context> {
     context.intern(self)
   }
-
+}
+impl RefEq for TypeRef<'_> {
   #[inline]
-  pub fn ref_eq(lhs: TypeRef<'context>, rhs: TypeRef<'context>) -> bool {
+  fn ref_eq(lhs: Self, rhs: Self) -> bool {
     if cfg!(debug_assertions) && !::std::ptr::eq(lhs, rhs) && lhs == rhs {
       eprintln!(
         "INTERNAL INVARIANT: comparing types by pointer but they are actually \

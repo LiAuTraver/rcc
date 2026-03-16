@@ -208,6 +208,25 @@ macro_rules! make_trio_for {
 }
 
 #[macro_export]
+macro_rules! make_trio_for_unit_tuple {
+  ($inner:ident, $main:ident<$main_lt:lifetime>) => {
+    $crate::make_trio_for_unit_tuple!(@impl $inner, $main, [<$main_lt>]);
+  };
+
+  (@impl $variant:ident, $main:ident, [$($main_lt:tt)*]) => {
+    ::paste::paste! {
+      impl$($main_lt)* $main$($main_lt)* {
+        #[inline]
+        pub fn [<is_ $variant:lower>](&self) -> bool {
+          matches!(self, Self::$variant())
+        }
+
+      }
+    }
+  };
+}
+
+#[macro_export]
 #[cfg(debug_assertions)]
 macro_rules! breakpoint {
   () => {

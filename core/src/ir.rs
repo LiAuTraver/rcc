@@ -1,17 +1,17 @@
-#![allow(unused)]
+#[macro_use]
 mod builder;
 mod context;
 mod dump;
+mod emit;
 mod fmt;
 mod instruction;
 mod module;
 mod types;
 mod value;
 
-use self::value::Lookup;
 type Constant<'context> = crate::sema::expression::Constant<'context>;
 pub use self::{
-  builder::ModuleBuilder,
+  builder::Emitter,
   context::Context,
   dump::IRDumper,
   module::{

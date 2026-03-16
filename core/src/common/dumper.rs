@@ -163,16 +163,41 @@ impl Palette {
     }
   }
 }
-
+#[macro_use]
+pub mod macros {
+  macro_rules! quoted {
+    ($quote:literal => $value:expr) => {
+      format_args!("{}{}{}", $quote, $value, $quote)
+    };
+    ($prefix:expr, $value:expr, $suffix:expr) => {
+      format_args!("{}{}{}", $prefix, $value, $suffix)
+    };
+  }
+  macro_rules! pre {
+    ($prefix:literal => $value:expr) => {
+      format_args!("{}{}", $prefix, $value)
+    };
+  }
+  macro_rules! suff {
+    ($suffix:literal => $value:expr) => {
+      format_args!("{}{}", $value, $suffix)
+    };
+  }
+}
 pub trait Dumper<'source, 'context, 'session>
 where
   'source: 'context,
   'context: 'session,
 {
   #[inline(always)]
-  fn write(&mut self, text: &str, spec: &ColorSpec) -> FakeDumpRes {
-    self.write_fmt(format_args!("{}", text), spec)
+  fn write<T: ::std::fmt::Display>(
+    &mut self,
+    arg: T,
+    spec: &ColorSpec,
+  ) -> FakeDumpRes {
+    self.write_fmt(format_args!("{}", arg), spec)
   }
+
   #[inline(always)]
   fn writeln(&mut self, text: &str, spec: &ColorSpec) -> FakeDumpRes {
     self.write_fmt(format_args!("{}\n", text), spec)
@@ -183,6 +208,15 @@ where
     args: ::std::fmt::Arguments<'_>,
     spec: &ColorSpec,
   ) -> FakeDumpRes;
+
+  #[inline(always)]
+  fn writeln_fmt(
+    &mut self,
+    args: ::std::fmt::Arguments<'_>,
+    spec: &ColorSpec,
+  ) -> FakeDumpRes {
+    self.write_fmt(format_args!("{}\n", args), spec)
+  }
 
   fn newline(&mut self) -> FakeDumpRes;
 
@@ -317,7 +351,7 @@ impl<
 {
   #[inline(never)]
   pub fn dump(
-    dumpable: &impl Dumpable,
+    dumpable: &impl Dumpable<'context>,
     session: &'session Session<'source, 'context>,
   ) -> DumpRes
   where
@@ -370,7 +404,7 @@ impl<
   }
 }
 
-pub trait Dumpable {
+pub trait Dumpable<'context> {
   /// Recurse through the tree.
   /// - 'prefix' is the string of vertical bars from parents.
   /// - 'is_last' determines if we use an end marker or a middle marker
@@ -380,7 +414,7 @@ pub trait Dumpable {
   /// 1. print the indent for **this** node. i.e., use [`Dumper::print_indent`] with the given `prefix` and `is_last`.
   /// 2. print the node header info like type name, address, span, etc. using [`Dumper::write_fmt`].
   /// 3. compute the prefix for children using [`Dumper::child_prefix`] and recurse into children with the new `prefix` and correct `is_last`.
-  fn dump<'source, 'context, 'session>(
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -392,8 +426,8 @@ pub trait Dumpable {
     'context: 'session;
 }
 
-impl Dumpable for SourceSpan {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for SourceSpan {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     _prefix: &str,

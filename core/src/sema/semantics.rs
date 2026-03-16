@@ -5,8 +5,8 @@ use ::rcc_utils::{
 
 use crate::{
   common::{
-    Environment, Integral, Operator, OperatorCategory, SourceSpan, Storage,
-    StrRef, Symbol, VarDeclKind,
+    Environment, Integral, Operator, OperatorCategory, RefEq, SourceSpan,
+    Storage, StrRef, Symbol, VarDeclKind,
   },
   diagnosis::{
     Diag,
@@ -856,7 +856,7 @@ impl<'context> Sema<'_, 'context, '_> {
                   e.span(),
                 );
               })
-              .unwrap()
+              .take()
           }))
         })
         .unwrap_or_else(|e| {
@@ -1496,7 +1496,8 @@ impl<'context> Sema<'_, 'context, '_> {
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
-    if Type::ref_eq(pointee_type.unqualified_type, self.context().void_type()) {
+    if RefEq::ref_eq(pointee_type.unqualified_type, self.context().void_type())
+    {
       Err(
         DerefVoidPtr(operand.to_string())
           .into_with(Severity::Error)
@@ -1534,7 +1535,7 @@ impl<'context> Sema<'_, 'context, '_> {
       .assignment_conversion(left.qualified_type())?;
     let expr_type = *left.qualified_type();
     Ok(se::Expression::new_rvalue(
-      se::Binary::new(operator, left, assigned_expr, span).into(),
+      se::Assignment::new(operator, left, assigned_expr, span).into(),
       expr_type,
     ))
   }

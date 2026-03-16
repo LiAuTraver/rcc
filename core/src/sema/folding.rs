@@ -7,7 +7,7 @@ use super::expression::{
   ValueCategory, Variable,
 };
 use crate::{
-  common::{Floating, Integral, Operator, OperatorCategory, SourceSpan},
+  common::{Floating, Integral, Operator, OperatorCategory, RefEq, SourceSpan},
   diagnosis::{DiagData::*, Diagnosis},
   types::{CastType, Compatibility, QualifiedType, Type, TypeInfo},
 };
@@ -40,7 +40,7 @@ impl<T> FoldingResult<T> {
 
   /// This function **won't** panic, and always returns the inner value regardless of success or failure.
   #[inline]
-  pub fn unwrap(self) -> T {
+  pub fn take(self) -> T {
     match self {
       Self::Failure(v) | Self::Success(v) => v,
     }
@@ -285,12 +285,12 @@ impl<'context> Folding<'context> for Binary<'context> {
     let fr = self.right.fold(diag);
     let (folded_lhs, folded_rhs) =
       if matches!(fl, Success(_)) && matches!(fr, Success(_)) {
-        (fl.unwrap(), fr.unwrap())
+        (fl.take(), fr.take())
       } else {
         return Failure(Expression::new(
           Self {
-            left: fl.unwrap().into(),
-            right: fr.unwrap().into(),
+            left: fl.take().into(),
+            right: fr.take().into(),
             ..self
           }
           .into(),
@@ -312,7 +312,7 @@ impl<'context> Folding<'context> for Binary<'context> {
       "only implemented for constant var of constant eval"
     );
     assert!(
-      Type::ref_eq(
+      RefEq::ref_eq(
         folded_lhs.unqualified_type(),
         folded_rhs.unqualified_type()
       ),
@@ -326,7 +326,7 @@ impl<'context> Folding<'context> for Binary<'context> {
     let (rhs_expr, rhs_type, rhs_value_category) = folded_rhs.destructure();
 
     assert!(
-      Type::ref_eq(lhs_type.unqualified_type, rhs_type.unqualified_type),
+      RefEq::ref_eq(lhs_type.unqualified_type, rhs_type.unqualified_type),
       "type checker ensures both sides have the same types!"
     );
 
@@ -423,8 +423,8 @@ impl<'context> Folding<'context> for Ternary<'context> {
         Expression::new(
           Self {
             condition: folded_condition.into(),
-            then_expr: self.then_expr.fold(diag).unwrap().into(),
-            else_expr: self.else_expr.fold(diag).unwrap().into(),
+            then_expr: self.then_expr.fold(diag).take().into(),
+            else_expr: self.else_expr.fold(diag).take().into(),
             ..self
           }
           .into(),

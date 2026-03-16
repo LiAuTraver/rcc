@@ -1,3 +1,4 @@
+#[macro_use]
 mod dumper;
 mod environment;
 mod floating;
@@ -7,9 +8,8 @@ mod operator;
 mod source_info;
 mod storage;
 mod token;
-
 pub use self::{
-  dumper::{Default as TreeDumper, FakeDumpRes, Dumpable, Dumper, Palette},
+  dumper::{Default as TreeDumper, Dumpable, Dumper, FakeDumpRes, Palette},
   environment::{Environment, Symbol, SymbolRef, UnitScope, VarDeclKind},
   floating::{Floating, Format as FloatFormat},
   integral::{Integral, Signedness},
@@ -26,3 +26,26 @@ pub use self::{
 };
 
 pub type StrRef<'context> = &'context str;
+
+pub trait RefEq {
+  fn ref_eq(lhs: Self, rhs: Self) -> bool
+  where
+    Self: PartialEq + Sized;
+}
+
+impl<'a> RefEq for StrRef<'a> {
+  fn ref_eq(lhs: Self, rhs: Self) -> bool
+  where
+    Self: PartialEq,
+  {
+    if cfg!(debug_assertions) && !::std::ptr::eq(lhs, rhs) && lhs == rhs {
+      eprintln!(
+        "INTERNAL INVARIANT: comparing types by pointer but they are actually \
+         the same: {:p}: {:?} and {:p}: {:?}.",
+        lhs, lhs, rhs, rhs
+      );
+      return true;
+    }
+    ::std::ptr::eq(lhs, rhs)
+  }
+}

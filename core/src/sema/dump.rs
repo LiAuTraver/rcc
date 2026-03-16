@@ -20,8 +20,8 @@ pub type ASTDumper<'source, 'context, 'session> = TreeDumper<
   /* "    ", */
 >;
 
-impl Dumpable for Expression<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Expression<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -125,7 +125,7 @@ impl Dumpable for Expression<'_> {
       ImplicitCast(cast) => {
         header!("ImplicitCast", cast);
         dumper.write(" <", &palette.skeleton);
-        dumper.write_fmt(format_args!("{}", cast.cast_type), &palette.kind);
+        dumper.write(cast.cast_type, &palette.kind);
         dumper.write(">\n", &palette.skeleton);
         cast.expr.dump(dumper, &subprefix, true, palette)
       },
@@ -183,8 +183,8 @@ impl Dumpable for Expression<'_> {
     }
   }
 }
-impl Dumpable for TranslationUnit<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for TranslationUnit<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -208,8 +208,8 @@ impl Dumpable for TranslationUnit<'_> {
     });
   }
 }
-impl Dumpable for ExternalDeclaration<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for ExternalDeclaration<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -228,8 +228,8 @@ impl Dumpable for ExternalDeclaration<'_> {
   }
 }
 
-impl Dumpable for VarDef<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for VarDef<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -254,7 +254,7 @@ impl Dumpable for VarDef<'_> {
     self.span.dump(dumper, prefix, is_last, palette);
 
     dumper.write("<", &palette.skeleton);
-    dumper.write_fmt(format_args!("{}", borrowed.declkind), &palette.kind);
+    dumper.write(borrowed.declkind, &palette.kind);
     dumper.write(">", &palette.skeleton);
 
     dumper.write_fmt(format_args!(" '{}' ", borrowed.name), &palette.literal);
@@ -275,8 +275,8 @@ impl Dumpable for VarDef<'_> {
     }
   }
 }
-impl Dumpable for Function<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Function<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -293,18 +293,15 @@ impl Dumpable for Function<'_> {
     self.span.dump(dumper, prefix, is_last, palette);
 
     dumper.write("<", &palette.skeleton);
-    dumper.write_fmt(
-      format_args!("{}", self.symbol.borrow().declkind),
-      &palette.kind,
-    );
+    dumper.write(self.symbol.borrow().declkind, &palette.kind);
     dumper.write(">", &palette.skeleton);
     dumper.write_fmt(
-      format_args!(" '{}' ", self.symbol.borrow().name),
+      quoted!(" '", self.symbol.borrow().name, "' "),
       &palette.literal,
     );
     dumper.write("[", &palette.skeleton);
-    dumper.write_fmt(
-      format_args!("'{}'", self.symbol.borrow().qualified_type),
+    dumper.write(
+      quoted!("'" => self.symbol.borrow().qualified_type),
       &palette.meta,
     );
     dumper.write_fmt(
@@ -323,8 +320,8 @@ impl Dumpable for Function<'_> {
   }
 }
 
-impl Dumpable for Initializer<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Initializer<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -350,8 +347,8 @@ impl Dumpable for Initializer<'_> {
   }
 }
 
-impl Dumpable for Statement<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Statement<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -370,8 +367,8 @@ impl Dumpable for Statement<'_> {
   }
 }
 
-impl Dumpable for statement::Empty {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for statement::Empty {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -405,8 +402,8 @@ macro_rules! headers {
   }};
 }
 
-impl Dumpable for Return<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Return<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -426,8 +423,8 @@ impl Dumpable for Return<'_> {
   }
 }
 
-impl Dumpable for Compound<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Compound<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -447,8 +444,8 @@ impl Dumpable for Compound<'_> {
   }
 }
 
-impl Dumpable for If<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for If<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -475,8 +472,8 @@ impl Dumpable for If<'_> {
   }
 }
 
-impl Dumpable for While<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for While<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -495,8 +492,8 @@ impl Dumpable for While<'_> {
   }
 }
 
-impl Dumpable for DoWhile<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for DoWhile<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -515,8 +512,8 @@ impl Dumpable for DoWhile<'_> {
   }
 }
 
-impl Dumpable for For<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for For<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -543,8 +540,8 @@ impl Dumpable for For<'_> {
   }
 }
 
-impl Dumpable for Switch<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Switch<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -572,8 +569,8 @@ impl Dumpable for Switch<'_> {
     }
   }
 }
-impl Dumpable for Case<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Case<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -593,8 +590,8 @@ impl Dumpable for Case<'_> {
     })
   }
 }
-impl Dumpable for statement::Default<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for statement::Default<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -614,8 +611,8 @@ impl Dumpable for statement::Default<'_> {
   }
 }
 
-impl Dumpable for Goto<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Goto<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -635,8 +632,8 @@ impl Dumpable for Goto<'_> {
   }
 }
 
-impl Dumpable for Label<'_> {
-  fn dump<'source, 'context, 'session>(
+impl<'context> Dumpable<'context> for Label<'_> {
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -661,9 +658,9 @@ impl Dumpable for Label<'_> {
   }
 }
 
-impl Dumpable for Break<'_> {
+impl<'context> Dumpable<'context> for Break<'_> {
   #[inline]
-  fn dump<'source, 'context, 'session>(
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,
@@ -678,9 +675,9 @@ impl Dumpable for Break<'_> {
   }
 }
 
-impl Dumpable for Continue<'_> {
+impl<'context> Dumpable<'context> for Continue<'_> {
   #[inline]
-  fn dump<'source, 'context, 'session>(
+  fn dump<'source, 'session>(
     &self,
     dumper: &mut impl Dumper<'source, 'context, 'session>,
     prefix: &str,

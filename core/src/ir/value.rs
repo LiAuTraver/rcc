@@ -15,19 +15,6 @@ impl ::std::fmt::Display for ValueID {
   }
 }
 
-pub(super) trait Lookup<KeyType, ValueType> {
-  fn lookup(&self, key: KeyType) -> &ValueType;
-}
-
-impl<'context> ValueID {
-  pub(super) fn lookup(
-    &self,
-    arena: &'context impl Lookup<ValueID, Value<'context>>,
-  ) -> &Value<'context> {
-    arena.lookup(*self)
-  }
-}
-
 #[derive(Debug)]
 pub enum Data<'context> {
   Instruction(Instruction),

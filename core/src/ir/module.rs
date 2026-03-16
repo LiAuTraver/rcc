@@ -1,9 +1,4 @@
-use ::slotmap::SlotMap;
-
-use super::{
-  Constant, Lookup,
-  value::{Value, ValueID},
-};
+use super::{Constant, value::ValueID};
 use crate::common::StrRef;
 
 #[derive(Debug, Default)]
@@ -38,11 +33,15 @@ impl<'context> Function<'context> {
     }
   }
 
-  pub fn new_empty(name: StrRef<'context>, is_variadic: bool) -> Self {
+  pub fn new_empty(
+    name: StrRef<'context>,
+    params: Vec<ValueID>,
+    is_variadic: bool,
+  ) -> Self {
     Self {
       name,
       is_variadic,
-      params: Default::default(),
+      params,
       blocks: Default::default(),
     }
   }

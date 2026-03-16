@@ -1,7 +1,7 @@
 use ::rcc_core::{
   common::SourceManager,
   diagnosis::Diagnosis,
-  ir::{Context as IRContext, IRDumper, ModuleBuilder},
+  ir::{Context as IRContext, Emitter as IREmitter, IRDumper},
   lexer::Lexer,
   parse::Parser,
   sema::{ASTDumper, Sema},
@@ -136,7 +136,7 @@ fn pipeline(session: Session, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));
-  let builder = ModuleBuilder::new(&session);
+  let builder = IREmitter::new(&session);
 
   let m = builder.build(translation_unit);
   println!("{m:#?}");

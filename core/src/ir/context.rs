@@ -1,7 +1,3 @@
-use ::bumpalo::Bump;
-use ::slotmap::SlotMap;
-use ::std::{cell::RefCell, collections::HashSet};
-
 use super::{
   Type, TypeRef, Value, ValueID,
   types::{Array, Function},
@@ -22,11 +18,11 @@ pub struct Context<'context> {
 impl<'context> Context<'context> {
   pub fn new(storage: StorageRef<'context>) -> Self {
     let this = Self {
-      void_type: storage.ast_arena.alloc(Type::Void),
-      label_type: storage.ast_arena.alloc(Type::Label),
-      float32_type: storage.ast_arena.alloc(Type::Float),
-      float64_type: storage.ast_arena.alloc(Type::Double),
-      pointer_type: storage.ast_arena.alloc(Type::Pointer),
+      void_type: storage.ast_arena.alloc(Type::Void()),
+      label_type: storage.ast_arena.alloc(Type::Label()),
+      float32_type: storage.ast_arena.alloc(Type::Float()),
+      float64_type: storage.ast_arena.alloc(Type::Double()),
+      pointer_type: storage.ast_arena.alloc(Type::Pointer()),
       common_integer_types: [
         storage.ast_arena.alloc(Type::Integer(1)),
         storage.ast_arena.alloc(Type::Integer(8)),
@@ -152,7 +148,7 @@ impl<'context> Context<'context> {
         placeholder @ (LongDouble | ComplexFloat | ComplexDouble
         | ComplexLongDouble) => todo!("{placeholder:#?} not implemented"),
       },
-      types::Type::Pointer(pointer) => self.pointer_type,
+      types::Type::Pointer(_) => self.pointer_type,
       types::Type::Array(array) => self.make_array(
         self.ir_type(&array.element_type),
         match array.size {
