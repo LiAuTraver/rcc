@@ -10,6 +10,8 @@ use crate::types::QualifiedType;
 
 pub type SymbolRef<'c> = shared_ptr<Symbol<'c>>;
 pub type WeakSymbolRef<'c> = weak_ptr<Symbol<'c>>;
+pub type SymbolPtr<'c> = *const Symbol<'c>;
+pub type SymbolPtrMut<'c> = *mut Symbol<'c>;
 
 /// a lexical scope.
 type ScopeAssoc<'c, T> = HashMap<StrRef<'c>, shared_ptr<T>>;
@@ -23,7 +25,7 @@ pub struct Scope<'c, T> {
 pub struct UnitScope<'c> {
   scopes: Vec<HashSet<StrRef<'c>>>,
 }
-#[derive(Debug, Eq, PartialEq, Clone, Copy, ::strum_macros::Display)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, ::strum_macros::Display)]
 pub enum VarDeclKind {
   /// declaration:
   ///   - file-scope: without initializer, with storage-class specifier(extern/static)
@@ -56,7 +58,7 @@ impl VarDeclKind {
     }
   }
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Symbol<'c> {
   pub qualified_type: QualifiedType<'c>,
   /// for global variable, if the [`VarDeclKind`] is [`VarDeclKind::Definition`]
@@ -91,8 +93,8 @@ impl<'c> Environment<'c> {
   }
 
   pub fn exit(&mut self) {
-    // do we still needs to clear cache although weak refs are used?
-    // self.cache.borrow_mut().clear();
+    // FIXME: do we still needs to clear cache although weak refs are used?
+    self.cache.borrow_mut().clear();
     self.symbols.pop_scope();
   }
 
@@ -111,10 +113,7 @@ impl<'c> Environment<'c> {
   }
 
   // we dont provide cache layer for shallow find, since it'll contain non-local symbols
-  pub fn shallow_find(
-    &self,
-    name: StrRef<'c>,
-  ) -> Option<SymbolRef<'c>> {
+  pub fn shallow_find(&self, name: StrRef<'c>) -> Option<SymbolRef<'c>> {
     let sym = self.symbols.shallow_get(name);
     if let Some(s) = &sym {
       self.cache.borrow_mut().insert(name, Rc::downgrade(s));

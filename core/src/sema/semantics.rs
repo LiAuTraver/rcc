@@ -335,12 +335,11 @@ impl<'c> Sema<'c> {
         } = declarator;
         let qualified_type =
           self.apply_modifiers_for_varty(base_type, modifiers);
-        let symbol = Symbol::new_ref(Symbol::new(
+        let symbol = Symbol::decl(
           qualified_type,
           Storage::Automatic,
           name.unwrap_or_else(|| self.ast().unnamed_str()),
-          VarDeclKind::Declaration,
-        ));
+        );
         sd::Parameter::new(symbol, span)
       })
       .collect()

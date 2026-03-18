@@ -10,7 +10,10 @@ mod storage;
 mod token;
 pub use self::{
   dumper::{Default as TreeDumper, Dumpable, Dumper, FakeDumpRes, Palette},
-  environment::{Environment, Symbol, SymbolRef, UnitScope, VarDeclKind},
+  environment::{
+    Environment, Symbol, SymbolPtr, SymbolPtrMut, SymbolRef, UnitScope,
+    VarDeclKind,
+  },
   floating::{Floating, Format as FloatFormat},
   integral::{Integral, Signedness},
   keyword::Keyword,

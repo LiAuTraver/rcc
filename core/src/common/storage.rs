@@ -4,7 +4,7 @@ use super::{Keyword, Literal};
 use crate::diagnosis::{DiagData, DiagMeta, Severity};
 
 /// storage-class-specifier
-#[derive(Debug, ::strum_macros::Display, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, ::strum_macros::Display, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Storage {
   /// variables that declared in block scope without any storage-class specifier
   /// are considered to have automatic storage duration.

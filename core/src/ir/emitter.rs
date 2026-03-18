@@ -3,6 +3,7 @@
 #![allow(clippy::needless_pass_by_ref_mut)]
 
 use ::rcc_utils::contract_violation;
+use ::slotmap::Key;
 use ::std::collections::HashMap;
 
 use super::{
@@ -13,7 +14,10 @@ use super::{
   value::{Value, ValueID},
 };
 use crate::{
-  common::{Integral, Operator, OperatorCategory, RefEq, SourceSpan, StrRef},
+  common::{
+    Integral, Operator, OperatorCategory, RefEq, SourceSpan, StrRef, Symbol,
+    SymbolPtr,
+  },
   ir,
   sema::{declaration as sd, expression as se, statement as ss},
   session::{Session, SessionRef},
@@ -25,9 +29,9 @@ pub struct Emitter<'c> {
   pub(super) current_block: Option<BasicBlock>,
   /// Blocks finalized in the current function
   pub(super) current_blocks: Vec<ValueID>,
-  pub(super) locals: HashMap<StrRef<'c>, ValueID>,
+  pub(super) locals: HashMap<SymbolPtr<'c>, ValueID>,
   /// function name → ValueID for call resolution
-  pub(super) functions: HashMap<StrRef<'c>, ValueID>,
+  pub(super) globals: HashMap<SymbolPtr<'c>, ValueID>,
   pub(super) module: Module,
 }
 impl<'a> ::std::ops::Deref for Emitter<'a> {
@@ -44,19 +48,14 @@ mod macros {
       $self.session.ir().ir_type(&$qualified_type)
     };
   }
-  macro_rules! ctx {
-    ($self:ident) => {
-      $self.session().ir()
-    };
-  }
   macro_rules! lookup {
     ($self:ident, $value_id:expr) => {
-      ctx!($self).get($value_id)
+      $self.session().ir().get($value_id)
     };
   }
   macro_rules! lookup_mut {
     ($self:ident, $value_id:expr) => {
-      ctx!($self).get_mut($value_id)
+      $self.session().ir().get_mut($value_id)
     };
   }
 }
@@ -67,7 +66,7 @@ impl<'c> Emitter<'c> {
       current_block: Default::default(),
       current_blocks: Default::default(),
       locals: Default::default(),
-      functions: Default::default(),
+      globals: Default::default(),
       module: Default::default(),
     }
   }
@@ -85,9 +84,13 @@ impl<'c> Emitter<'c> {
 
   fn seal_current_block(&mut self) {
     if let Some(block) = self.current_block.take() {
-      let block_id = ctx!(self).insert(Value::new(
+      assert!(
+        !block.terminator.is_null(),
+        "BasicBlock must ends with a proper terminator."
+      );
+      let block_id = self.ir().insert(Value::new(
         self.ast().void_type().into(),
-        ctx!(self).label_type(),
+        self.ir().label_type(),
         block.into(),
       ));
       self.current_blocks.push(block_id);
@@ -108,32 +111,35 @@ impl<'c> Emitter<'c> {
 
     declarations
       .into_iter()
-      .for_each(|declaration| match declaration {
-        sd::ExternalDeclaration::Function(function) => {
-          if function.is_definition() {
-            self.global_funcdef(function);
-          } else {
-            self.global_funcdecl(function);
-          }
-        },
-        sd::ExternalDeclaration::Variable(variable) => {
-          let qualified_type = variable.symbol.borrow().qualified_type;
-          let variable = self.global_vardef(variable);
-          let _value_id = self.emit(variable, qualified_type);
-        },
-      });
+      .for_each(|declaration| self.decl(declaration));
     self.module
   }
 }
 
 impl<'c> Emitter<'c> {
-  fn global_funcdecl(&mut self, function: sd::Function<'c>) -> ValueID {
-    if let Some(&value_id) = self.functions.get(function.symbol.borrow().name) {
+  fn decl(&mut self, declaration: sd::ExternalDeclaration<'c>) {
+    match declaration {
+      sd::ExternalDeclaration::Function(function) => {
+        if function.is_definition() {
+          self.global_funcdef(function);
+        } else {
+          self.global_funcdecl(function);
+        }
+      },
+      sd::ExternalDeclaration::Variable(variable) => {
+        self.global_vardef(variable);
+      },
+    }
+  }
+
+  fn global_funcdecl(&mut self, function: sd::Function<'c>) {
+    if let Some(&value_id) =
+      self.globals.get(&(function.symbol.as_ptr() as SymbolPtr))
+    {
       debug_assert!(
         lookup!(self, value_id).data.is_function(),
         "pre-registered value should be a function"
       );
-      value_id
     } else {
       let sym = function.symbol.borrow();
       let name = sym.name;
@@ -146,16 +152,18 @@ impl<'c> Emitter<'c> {
         qualified_type,
       );
 
-      self.functions.insert(name, value_id);
-      value_id
+      self
+        .globals
+        .insert(function.symbol.as_ptr() as SymbolPtr, value_id);
     }
   }
 
   fn global_funcdef(&mut self, function: sd::Function<'c>) {
     assert!(function.is_definition());
 
-    let function_id = if let Some(&value_id) =
-      self.functions.get(function.symbol.borrow().name)
+    let function_id = if let Some(&value_id) = self
+      .globals
+      .get(&(function.symbol.as_ptr() as *const Symbol<'c>))
     {
       // should be function and declaration-only
       debug_assert!(
@@ -187,7 +195,9 @@ impl<'c> Emitter<'c> {
         qualified_type,
       );
 
-      self.functions.insert(name, function_id);
+      self
+        .globals
+        .insert(function.symbol.as_ptr() as SymbolPtr, function_id);
       debug_assert!(
         lookup!(self, function_id)
           .data
@@ -229,7 +239,7 @@ impl<'c> Emitter<'c> {
           let qualified_type = parameter.symbol.borrow().qualified_type;
           let arg_id =
             self.emit(Argument::new(function_id, index), qualified_type);
-          self.locals.insert(parameter.symbol.borrow().name, arg_id);
+          self.locals.insert(parameter.symbol.as_ptr(), arg_id);
           let localed_arg_id = self.emit(inst::Alloca::new(), qualified_type);
           _ = self.emit(
             inst::Memory::Store(inst::Store::new(localed_arg_id, arg_id)),
@@ -239,8 +249,7 @@ impl<'c> Emitter<'c> {
         })
         .collect::<Vec<_>>()
     };
-
-    self.raw_compound(body.expect("Precondition: function.is_definition()"));
+    self.compound(body.expect("Precondition: function.is_definition()"));
     self.seal_current_block();
 
     let mut refmut = lookup_mut!(self, function_id);
@@ -251,11 +260,13 @@ impl<'c> Emitter<'c> {
     self.locals.clear();
   }
 
-  fn global_vardef(&self, variable: sd::VarDef<'c>) -> module::Variable<'c> {
+  fn global_vardef(&mut self, variable: sd::VarDef<'c>) {
     let sym = variable.symbol.borrow();
-    module::Variable::new(
+    let vardef = module::Variable::new(
       sym.name, None, // TODO: handle initializers
-    )
+    );
+    let value_id = self.emit(vardef, sym.qualified_type);
+    self.globals.insert(variable.symbol.as_ptr(), value_id);
   }
 
   fn local_funcdecl(
@@ -278,7 +289,7 @@ impl<'c> Emitter<'c> {
     let var_type = ty!(self, sym.qualified_type);
     let alloca = (Alloca::new());
     let value_id = self.emit(alloca, sym.qualified_type);
-    self.locals.insert(sym.name, value_id);
+    self.locals.insert(var_def.symbol.as_ptr(), value_id);
   }
 }
 
@@ -323,12 +334,6 @@ impl<'c> Emitter<'c> {
   }
 
   fn compound(&mut self, body: ss::Compound<'c>) {
-    self.push_block();
-    self.raw_compound(body);
-    // self.seal_current_block();???
-  }
-
-  fn raw_compound(&mut self, body: ss::Compound<'c>) {
     let ss::Compound { statements, .. } = body;
     statements
       .into_iter()
@@ -492,9 +497,12 @@ impl<'c> Emitter<'c> {
     _qualified_type: QualifiedType<'c>,
   ) -> ValueID {
     let name = variable.name.borrow().name;
-    if let Some(&vid) = self.locals.get(name) {
+    if let Some(&vid) = self.locals.get(&(variable.name.as_ptr() as SymbolPtr))
+    {
       vid
-    } else if let Some(&vid) = self.functions.get(name) {
+    } else if let Some(&vid) =
+      self.globals.get(&(variable.name.as_ptr() as SymbolPtr))
+    {
       vid
     } else {
       panic!("undefined variable: {name}")
@@ -665,25 +673,27 @@ impl<'c> Emitter<'c> {
   }
 }
 impl<'c> Emitter<'c> {
+  /// TODO: things would behave differently if array or struct involved -- GEP.
   fn addressof(
-    &self,
+    &mut self,
     operator: Operator,
     operand: ValueID,
     qualified_type: QualifiedType<'c>,
     span: SourceSpan,
   ) -> ValueID {
     assert_eq!(operator, Operator::Ampersand);
-    todo!()
+    operand
   }
 
   fn indirect(
-    &self,
+    &mut self,
     operator: Operator,
     operand: ValueID,
     qualified_type: QualifiedType<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    todo!()
+    assert_eq!(operator, Operator::Star);
+    self.emit(inst::Memory::from(inst::Load::new(operand)), qualified_type)
   }
 
   fn logical_not(
@@ -697,28 +707,38 @@ impl<'c> Emitter<'c> {
     let typ = lookup!(self, operand).ir_type;
 
     match typ {
-      ir::Type::Pointer() => todo!(),
+      ir::Type::Pointer() => {
+        let nullptr_constant = self.emit(
+          Constant::Nullptr(().into()),
+          self.ast().nullptr_type().into(),
+        );
+        let cmp = self.emit(
+          inst::ICmp::new(inst::ICmpPredicate::Ne, operand, nullptr_constant),
+          self.ast().bool_type().into(),
+        );
+        let i1_true = self.emit(
+          Constant::Integral(Integral::from_unsigned(1, 1)),
+          self.ast().bool_type().into(),
+        );
+        let xor = self.emit(
+          inst::Binary::new(inst::BinaryOp::Xor, cmp, i1_true),
+          self.ast().bool_type().into(),
+        );
+        self.emit(inst::Cast::Zext(inst::Zext::new(xor)), qualified_type)
+      },
       ir::Type::Float() => todo!(),
       ir::Type::Double() => todo!(),
       ir::Type::Integer(width) => {
-        let i1_false: ValueID = self.emit(
-          Constant::Integral(Integral::new(
-            0,
-            1,
-            crate::common::Signedness::Unsigned,
-          )),
+        let i1_false = self.emit(
+          Constant::Integral(Integral::from_unsigned(0, 1)),
           self.ast().bool_type().into(),
         );
         let cmp = self.emit(
           inst::ICmp::new(inst::ICmpPredicate::Ne, operand, i1_false),
-          qualified_type,
+          self.ast().bool_type().into(),
         );
         let i1_true = self.emit(
-          Constant::Integral(Integral::new(
-            1,
-            1,
-            crate::common::Signedness::Unsigned,
-          )),
+          Constant::Integral(Integral::from_unsigned(1, 1)),
           self.ast().bool_type().into(),
         );
         let xor = self.emit(

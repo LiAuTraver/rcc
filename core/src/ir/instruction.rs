@@ -122,13 +122,13 @@ pub enum ICmpPredicate {
 /// [`Store::addr`] must have pointer type
 #[derive(Debug)]
 pub struct Store {
-  pub addr: ValueID,
-  pub value: ValueID,
+  pub to: ValueID,
+  pub from: ValueID,
 }
 
 impl Store {
-  pub fn new(addr: ValueID, value: ValueID) -> Self {
-    Self { addr, value }
+  pub fn new(to: ValueID, from: ValueID) -> Self {
+    Self { to, from }
   }
 }
 
@@ -147,7 +147,7 @@ impl Load {
 /// result = alloca typeof(type)
 /// Used for local variables that must live in memory (e.g., if their address is taken).
 #[derive(Debug)]
-pub struct Alloca {}
+pub struct Alloca;
 
 impl Alloca {
   pub fn new() -> Self {

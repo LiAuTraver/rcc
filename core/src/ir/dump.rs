@@ -20,14 +20,28 @@ pub type IRDumper<'c> = TreeDumper<
   /* ""    , */
 >;
 
-macro_rules! id {
-  ($id:expr, $dumper:expr, $palette:expr) => {
-    if let Some(value) = $dumper.session().ir().get_by_constant_id(&$id) {
-      $dumper.write_fmt(format_args!("{}", value), &$palette.literal);
+fn pretty_dump_contant_or_id<'a>(
+  dumper: &mut impl Dumper<'a>,
+  value_id: ValueID,
+  palette: &Palette,
+) {
+  if let Some(value) = dumper.session().ir().get_by_constant_id(&value_id) {
+    if value.is_nullptr() {
+      dumper.write("null", &palette.literal);
+    } else if let Some(1u8) =
+      dumper.session().ir().get(value_id).ir_type.as_integer()
+    {
+      dumper.write(value.is_one(), &palette.literal);
     } else {
-      $dumper.write_fmt(format_args!("%{}", $id.handle()), &$palette.skeleton);
+      dumper.write(value, &palette.literal);
     }
-  };
+  } else {
+    dumper.write(
+      suff!(" " => dumper.session().ir().get(value_id).ir_type),
+      &palette.meta,
+    );
+    dumper.write(pre!("%"=> value_id.handle()), &palette.skeleton);
+  }
 }
 
 impl<'c> Dumpable<'c> for Module {
@@ -40,7 +54,7 @@ impl<'c> Dumpable<'c> for Module {
   ) -> FakeDumpRes {
     self.globals.iter().for_each(|value_id| {
       Dumpable::dump(
-        &*ctx!(dumper).get(*value_id),
+        &*lookup!(dumper, *value_id),
         dumper,
         prefix,
         is_last,
@@ -127,7 +141,7 @@ impl<'c> Dump<'c, Constant<'_>> for Value<'c> {
     palette: &Palette,
     variant: &Constant<'_>,
   ) -> FakeDumpRes {
-    dumper.write_fmt(suff!(" " => self.ir_type), &palette.meta);
+    dumper.write(suff!(" " => self.ir_type), &palette.meta);
     dumper.write(variant, &palette.literal);
   }
 }
@@ -140,9 +154,9 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
     palette: &Palette,
     variant: &module::Function<'_>,
   ) -> FakeDumpRes {
-    dumper.write_fmt(
-      format_args!(
-        "{} ",
+    dumper.write(
+      suff!(
+        " " =>
         if variant.is_definition() {
           debug_assert!(
             variant.params.len()
@@ -158,15 +172,15 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
           "declare"
         }
       ),
-      &palette.meta,
+      &palette.literal,
     );
 
-    dumper.write_fmt(
+    dumper.write(
       suff!(" " => self.ir_type.as_function_unchecked().return_type),
       &palette.meta,
     );
 
-    dumper.write_fmt(pre!("@" => variant.name), &palette.dim);
+    dumper.write(pre!("@" => variant.name), &palette.skeleton);
     dumper.write("(", &palette.skeleton);
     if variant.is_definition() {
       variant
@@ -174,7 +188,7 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
         .iter()
         .enumerate()
         .for_each(|(index, arg_id)| {
-          let arg = &*ctx!(dumper).get(*arg_id);
+          let arg = &*lookup!(dumper, *arg_id);
           Dump::dump(
             arg,
             dumper,
@@ -192,17 +206,13 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
         .iter()
         .enumerate()
         .for_each(|(index, param_ty)| {
-          dumper.write_fmt(suff!(" " => param_ty), &palette.meta);
-          dumper.write_fmt(
-            format_args!(
-              "{}",
-              if variant.params.is_empty() || index + 1 == variant.params.len()
-              {
-                ""
-              } else {
-                ", "
-              }
-            ),
+          dumper.write(suff!(" " => param_ty), &palette.meta);
+          dumper.write(
+            if variant.params.is_empty() || index + 1 == variant.params.len() {
+              ""
+            } else {
+              ", "
+            },
             &palette.dim,
           );
         });
@@ -211,9 +221,8 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
     if variant.is_definition() {
       dumper.writeln(" {", &palette.skeleton);
       variant.blocks.iter().for_each(|block_id| {
-        dumper
-          .write_fmt(format_args!("{}:\n", block_id.handle()), &palette.dim);
-        let block = &*ctx!(dumper).get(*block_id);
+        dumper.write(suff!(":\n" => block_id.handle()), &palette.skeleton);
+        let block = &*lookup!(dumper, *block_id);
         Dump::dump(
           block,
           dumper,
@@ -251,23 +260,20 @@ impl<'c> Dump<'c, module::BasicBlock> for Value<'c> {
   ) -> FakeDumpRes {
     variant.instructions.iter().for_each(|inst_id| {
       dumper.write(prefix, &palette.dim);
-      let value = ctx!(dumper).get(*inst_id);
+      let value = lookup!(dumper, *inst_id);
       match &value.data {
         ValueData::Instruction(inst::Instruction::Memory(
           inst::Memory::Store(s),
         )) => Dump::dump(&*value, dumper, "", is_last, palette, s),
         _ => {
-          dumper.write_fmt(
-            format_args!("%{}", inst_id.handle()),
-            &palette.skeleton,
-          );
+          dumper.write_fmt(pre!("%"=> inst_id.handle()), &palette.skeleton);
           dumper.write(" = ", &palette.skeleton);
           Dumpable::dump(&*value, dumper, "", is_last, palette);
         },
       }
       dumper.newline();
     });
-    let terminator = &*ctx!(dumper).get(variant.terminator);
+    let terminator = &*lookup!(dumper, variant.terminator);
     dumper.write(prefix, &palette.dim);
     Dump::dump(
       terminator,
@@ -291,8 +297,8 @@ impl<'c> Dump<'c, module::Argument> for Value<'c> {
     palette: &Palette,
     variant: &module::Argument,
   ) -> FakeDumpRes {
-    dumper.write_fmt(suff!(" " => self.ir_type), &palette.meta);
-    dumper.write_fmt(pre!("%" => index), &palette.skeleton);
+    dumper.write(suff!(" " => self.ir_type), &palette.meta);
+    dumper.write(pre!("%" => index), &palette.skeleton);
     dumper.write((if is_last { "" } else { ", " }), &palette.dim);
   }
 }
@@ -326,10 +332,10 @@ impl<'c> Dump<'c, inst::Binary> for Value<'c> {
     variant: &inst::Binary,
   ) -> FakeDumpRes {
     dumper.write(suff!(" " => variant.operator), &palette.literal);
-    dumper.write(suff!(" " => self.ir_type), &palette.meta);
-    id!(variant.lhs, dumper, palette);
+
+    self::pretty_dump_contant_or_id(dumper, variant.lhs, palette);
     dumper.write(", ", &palette.skeleton);
-    id!(variant.rhs, dumper, palette);
+    self::pretty_dump_contant_or_id(dumper, variant.rhs, palette);
   }
 }
 impl<'c> Dump<'c, inst::Memory> for Value<'c> {
@@ -376,30 +382,28 @@ impl<'c> Dump<'c, inst::Call> for Value<'c> {
     variant: &inst::Call,
   ) -> FakeDumpRes {
     dumper.write("call ", &palette.literal);
-    match &ctx!(dumper).get(variant.callee).data {
+    match &lookup!(dumper, variant.callee).data {
       ValueData::Instruction(instruction) => todo!(),
-      ValueData::Constant(raw_constant) => todo!(),
+      ValueData::Constant(constant) => todo!(),
       ValueData::Variable(variable) => todo!(),
-      ValueData::Argument(argument) => todo!(),
+      ValueData::Argument(argument) =>
+        unreachable!("this should be impossible, or not implemented."),
       ValueData::Function(function) => {
-        dumper.write_fmt(suff!(" " => self.ir_type), &palette.meta);
-        dumper.write_fmt(quoted!(" @", function.name, "("), &palette.dim);
+        dumper.write(suff!(" " => self.ir_type), &palette.meta);
+        dumper.write(quoted!(" @", function.name, "("), &palette.skeleton);
         variant.args.iter().enumerate().for_each(|(index, arg_id)| {
-          let arg = &*ctx!(dumper).get(*arg_id);
-          dumper.write_fmt(suff!(" " => arg.ir_type), &palette.meta);
-          dumper.write_fmt(
-            format_args!(
-              "{}",
-              arg.data.as_constant().map_or_else(
-                || format!("%{}", arg_id.handle()),
-                |constant| format!("{}", constant)
-              ),
+          let arg = &*lookup!(dumper, *arg_id);
+          dumper.write(suff!(" " => arg.ir_type), &palette.meta);
+          dumper.write(
+            arg.data.as_constant().map_or_else(
+              || format!("%{}", arg_id.handle()),
+              |constant| format!("{}", constant),
             ),
             &palette.skeleton,
           );
           dumper.write(", ", &palette.skeleton);
         });
-        dumper.write(")", &palette.dim);
+        dumper.write(")", &palette.skeleton);
       },
       ValueData::BasicBlock(basic_block) => unreachable!(),
     }
@@ -416,10 +420,10 @@ impl<'c> Dump<'c, inst::ICmp> for Value<'c> {
   ) -> FakeDumpRes {
     dumper.write("icmp ", &palette.literal);
     dumper.write(suff!(" " => variant.predicate), &palette.literal);
-    dumper.write(suff!(" " => self.ir_type), &palette.meta);
-    id!(variant.lhs, dumper, palette);
+
+    self::pretty_dump_contant_or_id(dumper, variant.lhs, palette);
     dumper.write(", ", &palette.skeleton);
-    id!(variant.rhs, dumper, palette);
+    self::pretty_dump_contant_or_id(dumper, variant.rhs, palette);
   }
 }
 
@@ -436,9 +440,8 @@ impl<'c> Dump<'c, inst::Return> for Value<'c> {
   ) -> FakeDumpRes {
     debug_assert!(_is_last);
     dumper.write("ret ", &palette.literal);
-    dumper.write_fmt(suff!(" " => self.ir_type), &palette.meta);
     if let Some(value_id) = variant.result {
-      id!(value_id, dumper, palette);
+      self::pretty_dump_contant_or_id(dumper, value_id, palette);
     }
   }
 }
@@ -472,10 +475,10 @@ impl<'c> Dump<'c, inst::Load> for Value<'c> {
     dumper.write((self.ir_type), &palette.meta);
     dumper.write(", ", &palette.skeleton);
 
-    debug_assert!(ctx!(dumper).get(variant.addr).ir_type.is_pointer());
+    debug_assert!(lookup!(dumper, variant.addr).ir_type.is_pointer());
 
     dumper.write("ptr ", &palette.meta);
-    dumper.write_fmt(pre!("%" => variant.addr.handle()), &palette.skeleton);
+    dumper.write(pre!("%" => variant.addr.handle()), &palette.skeleton);
   }
 }
 impl<'c> Dump<'c, inst::Store> for Value<'c> {
@@ -489,16 +492,15 @@ impl<'c> Dump<'c, inst::Store> for Value<'c> {
   ) -> FakeDumpRes {
     dumper.write(prefix, &palette.dim);
     dumper.write("store ", &palette.literal);
-    dumper.write(suff!(" " => self.ir_type), &palette.meta);
 
-    id!(variant.value, dumper, palette);
+    self::pretty_dump_contant_or_id(dumper, variant.from, palette);
 
     dumper.write(", ", &palette.skeleton);
 
-    debug_assert!(ctx!(dumper).get(variant.addr).ir_type.is_pointer());
+    debug_assert!(lookup!(dumper, variant.to).ir_type.is_pointer());
 
     dumper.write("ptr ", &palette.meta);
-    dumper.write_fmt(pre!("%" => variant.addr.handle()), &palette.skeleton);
+    dumper.write(pre!("%" => variant.to.handle()), &palette.skeleton);
   }
 }
 
@@ -513,11 +515,7 @@ impl<'c> Dump<'c, inst::Zext> for Value<'c> {
   ) -> FakeDumpRes {
     dumper.write("zext ", &palette.literal);
 
-    dumper.write(
-      suff!(" " => ctx!(dumper).get(variant.operand).ir_type),
-      &palette.meta,
-    );
-    dumper.write(variant.operand.handle(), &palette.skeleton);
+    self::pretty_dump_contant_or_id(dumper, variant.operand, palette);
 
     dumper.write(" to ", &palette.skeleton);
     dumper.write(self.ir_type, &palette.meta);

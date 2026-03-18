@@ -4,7 +4,10 @@ use super::{
   Argument, Emitter, Value, ValueID, instruction as inst,
   instruction::Instruction, module,
 };
-use crate::types::{Constant, QualifiedType};
+use crate::{
+  common::RefEq,
+  types::{Constant, QualifiedType},
+};
 
 /// Overload helper. I love overloading.
 pub trait Emitable<'a, ValueType> {
@@ -59,6 +62,32 @@ impl<'c> Emitable<'c, inst::Alloca> for Emitter<'c> {
     }
   }
 }
+
+impl<'c> Emitable<'c, inst::ICmp> for Emitter<'c> {
+  fn emit(
+    &mut self,
+    icmp: inst::ICmp,
+    qualified_type: QualifiedType<'c>,
+  ) -> ValueID {
+    debug_assert!(
+      RefEq::ref_eq(*qualified_type, self.ast().bool_type()),
+      "ICmp inst must have i1 as return type."
+    );
+    if let Some(block) = &mut self.current_block {
+      let value_id = self.session.ir().insert(Value::new(
+        qualified_type,
+        self.session.ir().pointer_type(),
+        Instruction::from(icmp).into(),
+      ));
+
+      block.instructions.push(value_id);
+      value_id
+    } else {
+      panic!("no block to emit terminator into")
+    }
+  }
+}
+
 impl<'c, InstType: Into<Instruction>> Emitable<'c, InstType> for Emitter<'c> {
   default fn emit(
     &mut self,

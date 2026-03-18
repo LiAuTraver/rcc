@@ -190,6 +190,11 @@ impl<'c> Constant<'c> {
     }
   }
 
+  #[inline(always)]
+  pub fn is_one(&self) -> bool {
+    !self.is_zero()
+  }
+
   pub fn to_boolean(self) -> Self {
     match self {
       Self::Integral(integral) =>
