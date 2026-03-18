@@ -117,6 +117,36 @@ pub enum ICmpPredicate {
   Ugt,
   Uge,
 }
+#[derive(Debug)]
+pub struct FCmp {
+  pub predicate: FCmpPredicate,
+  pub lhs: ValueID,
+  pub rhs: ValueID,
+}
+
+impl FCmp {
+  pub fn new(predicate: FCmpPredicate, lhs: ValueID, rhs: ValueID) -> Self {
+    Self {
+      predicate,
+      lhs,
+      rhs,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy, ::strum_macros::Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum FCmpPredicate {
+  Oeq,
+  /// means `Ordered Not Equal`. Not numeber `1`.
+  One,
+  Olt,
+  Ole,
+  Ueq,
+  Une,
+  Ult,
+  Ule,
+}
 /// Store value to address: *addr = value
 ///
 /// [`Store::addr`] must have pointer type
@@ -237,7 +267,7 @@ pub enum Instruction {
   Cast(Cast),
   Call(Call),
   ICmp(ICmp),
-  // etc...
+  FCmp(FCmp), // etc...
 }
 use ::rcc_utils::{interconvert, make_trio_for};
 
@@ -257,6 +287,7 @@ interconvert!(Memory, Instruction);
 interconvert!(Cast, Instruction);
 interconvert!(Call, Instruction);
 interconvert!(ICmp, Instruction);
+interconvert!(FCmp, Instruction);
 
 make_trio_for!(Call, Instruction);
 make_trio_for!(Phi, Instruction);

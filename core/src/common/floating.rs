@@ -31,21 +31,25 @@ ensure_is_pod!(Floating);
 impl ::std::fmt::Display for Floating {
   fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
     match self.format {
-      IEEE32 => write!(
-        f,
-        "{}",
-        f32::from_bits(self.bits as underlying_type_of!(f32))
-      ),
-      IEEE64 => write!(
-        f,
-        "{}",
-        f64::from_bits(self.bits as underlying_type_of!(f64))
-      ),
+      IEEE32 => f32::from_bits(self.bits as underlying_type_of!(f32)).fmt(f),
+      IEEE64 => f64::from_bits(self.bits as underlying_type_of!(f64)).fmt(f),
+    }
+  }
+}
+
+impl ::std::fmt::LowerExp for Floating {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self.format {
+      IEEE32 => f32::from_bits(self.bits as underlying_type_of!(f32)).fmt(f),
+      IEEE64 => f64::from_bits(self.bits as underlying_type_of!(f64)).fmt(f),
     }
   }
 }
 impl Floating {
-  pub fn new<T: ::rcc_utils::ToU128>(bits: T, format: Format) -> Self {
+  pub const fn new<T: [const] ::rcc_utils::ToU128>(
+    bits: T,
+    format: Format,
+  ) -> Self {
     Self {
       bits: bits.to_u128(),
       format,
@@ -54,6 +58,13 @@ impl Floating {
 
   pub const fn format(&self) -> Format {
     self.format
+  }
+
+  pub const fn zero(format: Format) -> Self {
+    match format {
+      IEEE32 => Floating::from(0.0f32),
+      IEEE64 => Floating::from(0.0f64),
+    }
   }
 }
 
@@ -115,13 +126,13 @@ impl Floating {
   }
 }
 
-impl From<f32> for Floating {
+impl const From<f32> for Floating {
   fn from(val: f32) -> Self {
     Floating::new(val.to_bits() as u128, IEEE32)
   }
 }
 
-impl From<f64> for Floating {
+impl const From<f64> for Floating {
   fn from(val: f64) -> Self {
     Floating::new(val.to_bits() as u128, IEEE64)
   }

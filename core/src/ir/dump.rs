@@ -26,14 +26,17 @@ fn pretty_dump_contant_or_id<'a>(
   palette: &Palette,
 ) {
   if let Some(value) = dumper.session().ir().get_by_constant_id(&value_id) {
-    if value.is_nullptr() {
-      dumper.write("null", &palette.literal);
-    } else if let Some(1u8) =
-      dumper.session().ir().get(value_id).ir_type.as_integer()
-    {
-      dumper.write(value.is_one(), &palette.literal);
-    } else {
-      dumper.write(value, &palette.literal);
+    match dumper.session().ir().get(value_id).ir_type {
+      ir::Type::Float() | ir::Type::Double() => dumper.write_fmt(
+        format_args!("{:.e}", value.as_floating_unchecked()),
+        &palette.literal,
+      ),
+      ir::Type::Pointer() => {
+        debug_assert!(value.is_nullptr());
+        dumper.write("null", &palette.literal);
+      },
+      ir::Type::Integer(1u8) => dumper.write(value.is_one(), &palette.literal),
+      _ => dumper.write(value, &palette.literal),
     }
   } else {
     dumper.write(
@@ -127,7 +130,7 @@ impl<'c> Dump<'c, inst::Instruction> for Value<'c> {
     ::rcc_utils::static_dispatch!(
         Instruction : variant,
         |variant| Dump::dump(self, dumper, prefix, is_last, palette, variant) =>
-        Phi Terminator Unary Binary Memory Cast Call ICmp
+        Phi Terminator Unary Binary Memory Cast Call ICmp FCmp
     )
   }
 }
@@ -419,6 +422,24 @@ impl<'c> Dump<'c, inst::ICmp> for Value<'c> {
     variant: &inst::ICmp,
   ) -> FakeDumpRes {
     dumper.write("icmp ", &palette.literal);
+    dumper.write(suff!(" " => variant.predicate), &palette.literal);
+
+    self::pretty_dump_contant_or_id(dumper, variant.lhs, palette);
+    dumper.write(", ", &palette.skeleton);
+    self::pretty_dump_contant_or_id(dumper, variant.rhs, palette);
+  }
+}
+
+impl<'c> Dump<'c, inst::FCmp> for Value<'c> {
+  fn dump(
+    &self,
+    dumper: &mut impl Dumper<'c>,
+    prefix: &str,
+    is_last: bool,
+    palette: &Palette,
+    variant: &inst::FCmp,
+  ) -> FakeDumpRes {
+    dumper.write("fcmp ", &palette.literal);
     dumper.write(suff!(" " => variant.predicate), &palette.literal);
 
     self::pretty_dump_contant_or_id(dumper, variant.lhs, palette);

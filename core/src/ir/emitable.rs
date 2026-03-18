@@ -1,8 +1,9 @@
 use ::slotmap::Key;
 
 use super::{
-  Argument, Emitter, Value, ValueID, instruction as inst,
-  instruction::Instruction, module,
+  Argument, Emitter, Value, ValueData, ValueID,
+  instruction::{self as inst, Instruction},
+  module,
 };
 use crate::{
   common::RefEq,
@@ -71,27 +72,30 @@ impl<'c> Emitable<'c, inst::ICmp> for Emitter<'c> {
   ) -> ValueID {
     debug_assert!(
       RefEq::ref_eq(*qualified_type, self.ast().bool_type()),
-      "ICmp inst must have i1 as return type."
+      "ICmp inst must have i1 as return type. Vectors are unimplemented."
     );
-    if let Some(block) = &mut self.current_block {
-      let value_id = self.session.ir().insert(Value::new(
-        qualified_type,
-        self.session.ir().pointer_type(),
-        Instruction::from(icmp).into(),
-      ));
-
-      block.instructions.push(value_id);
-      value_id
-    } else {
-      panic!("no block to emit terminator into")
-    }
+    self.emit_common_instruction(icmp, qualified_type)
   }
 }
 
-impl<'c, InstType: Into<Instruction>> Emitable<'c, InstType> for Emitter<'c> {
-  default fn emit(
+impl<'c> Emitable<'c, inst::FCmp> for Emitter<'c> {
+  fn emit(
     &mut self,
-    value: InstType,
+    fcmp: inst::FCmp,
+    qualified_type: QualifiedType<'c>,
+  ) -> ValueID {
+    debug_assert!(
+      RefEq::ref_eq(*qualified_type, self.ast().bool_type()),
+      "FCmp inst must have i1 as return type."
+    );
+    self.emit_common_instruction(fcmp, qualified_type)
+  }
+}
+
+impl<'c> Emitter<'c> {
+  fn emit_common_instruction<T: Into<Instruction>>(
+    &mut self,
+    value: T,
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
     if let Some(block) = &mut self.current_block {
@@ -106,6 +110,30 @@ impl<'c, InstType: Into<Instruction>> Emitable<'c, InstType> for Emitter<'c> {
       panic!("no block to emit into")
     }
   }
+
+  fn emit_globals<T: Into<ValueData<'c>>>(
+    &mut self,
+    value: T,
+    qualified_type: QualifiedType<'c>,
+  ) -> ValueID {
+    let value_id = self.session.ir().insert(Value::new(
+      qualified_type,
+      ty!(self, qualified_type),
+      value.into(),
+    ));
+    self.module.globals.push(value_id);
+    value_id
+  }
+}
+
+impl<'c, InstType: Into<Instruction>> Emitable<'c, InstType> for Emitter<'c> {
+  default fn emit(
+    &mut self,
+    value: InstType,
+    qualified_type: QualifiedType<'c>,
+  ) -> ValueID {
+    self.emit_common_instruction(value, qualified_type)
+  }
 }
 
 impl<'c> Emitable<'c, module::Function<'c>> for Emitter<'c> {
@@ -114,13 +142,7 @@ impl<'c> Emitable<'c, module::Function<'c>> for Emitter<'c> {
     value: module::Function<'c>,
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
-    let value_id = self.session.ir().insert(Value::new(
-      qualified_type,
-      ty!(self, qualified_type),
-      value.into(),
-    ));
-    self.module.globals.push(value_id);
-    value_id
+    self.emit_globals(value, qualified_type)
   }
 }
 impl<'c> Emitable<'c, module::Variable<'c>> for Emitter<'c> {
@@ -129,13 +151,7 @@ impl<'c> Emitable<'c, module::Variable<'c>> for Emitter<'c> {
     value: module::Variable<'c>,
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
-    let value_id = self.session.ir().insert(Value::new(
-      qualified_type,
-      ty!(self, qualified_type),
-      value.into(),
-    ));
-    self.module.globals.push(value_id);
-    value_id
+    self.emit_globals(value, qualified_type)
   }
 }
 impl<'c> Emitable<'c, Constant<'c>> for Emitter<'c> {
@@ -144,9 +160,7 @@ impl<'c> Emitable<'c, Constant<'c>> for Emitter<'c> {
     value: Constant<'c>,
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
-    let value_id = self.session.ir().intern_constant(value, qualified_type);
-    // self.module.constants.push(value_id);
-    value_id
+    self.session.ir().intern_constant(value, qualified_type)
   }
 }
 impl<'c> Emitable<'c, Argument> for Emitter<'c> {

@@ -15,8 +15,8 @@ use super::{
 };
 use crate::{
   common::{
-    Integral, Operator, OperatorCategory, RefEq, SourceSpan, StrRef, Symbol,
-    SymbolPtr,
+    FloatFormat, Floating, Integral, Operator, OperatorCategory, RefEq,
+    SourceSpan, StrRef, Symbol, SymbolPtr,
   },
   ir,
   sema::{declaration as sd, expression as se, statement as ss},
@@ -704,48 +704,76 @@ impl<'c> Emitter<'c> {
     span: SourceSpan,
   ) -> ValueID {
     assert_eq!(operator, Operator::Not);
-    let typ = lookup!(self, operand).ir_type;
 
-    match typ {
+    /// FIXME: avoid this trick but also reuse the code below. borrowck wont let self being borrowed
+    /// SAFETY: safe today, maybe not tomorrow.
+    let this = ::std::ptr::from_mut(self);
+
+    let common = move |cmp| {
+      let this = unsafe { &mut *this };
+      let i1_true = this.emit(
+        Constant::Integral(Integral::from_unsigned(1, 1)),
+        this.ast().bool_type().into(),
+      );
+      let xor = this.emit(
+        inst::Binary::new(inst::BinaryOp::Xor, cmp, i1_true),
+        this.ast().bool_type().into(),
+      );
+      this.emit(inst::Cast::Zext(inst::Zext::new(xor)), qualified_type)
+    };
+    let integral = move |i1_false_or_nullptr| {
+      let this = unsafe { &mut *this };
+      let cmp = this.emit(
+        inst::ICmp::new(inst::ICmpPredicate::Ne, operand, i1_false_or_nullptr),
+        this.ast().bool_type().into(),
+      );
+      common(cmp)
+    };
+
+    let floating = move |float_or_double_zero| unsafe {
+      let this = unsafe { &mut *this };
+      let cmp = this.emit(
+        inst::FCmp::new(
+          inst::FCmpPredicate::Une,
+          operand,
+          float_or_double_zero,
+        ),
+        this.ast().bool_type().into(),
+      );
+      common(cmp)
+    };
+
+    let cannot_inline_me_otherwise_refcell_panic =
+      lookup!(self, operand).ir_type;
+
+    match cannot_inline_me_otherwise_refcell_panic {
       ir::Type::Pointer() => {
-        let nullptr_constant = self.emit(
+        let nullptr = self.emit(
           Constant::Nullptr(().into()),
           self.ast().nullptr_type().into(),
         );
-        let cmp = self.emit(
-          inst::ICmp::new(inst::ICmpPredicate::Ne, operand, nullptr_constant),
-          self.ast().bool_type().into(),
-        );
-        let i1_true = self.emit(
-          Constant::Integral(Integral::from_unsigned(1, 1)),
-          self.ast().bool_type().into(),
-        );
-        let xor = self.emit(
-          inst::Binary::new(inst::BinaryOp::Xor, cmp, i1_true),
-          self.ast().bool_type().into(),
-        );
-        self.emit(inst::Cast::Zext(inst::Zext::new(xor)), qualified_type)
+        integral(nullptr)
       },
-      ir::Type::Float() => todo!(),
-      ir::Type::Double() => todo!(),
       ir::Type::Integer(width) => {
         let i1_false = self.emit(
           Constant::Integral(Integral::from_unsigned(0, 1)),
           self.ast().bool_type().into(),
         );
-        let cmp = self.emit(
-          inst::ICmp::new(inst::ICmpPredicate::Ne, operand, i1_false),
-          self.ast().bool_type().into(),
+        integral(i1_false)
+      },
+      ir::Type::Float() => {
+        let float_zero = self.emit(
+          Constant::Floating(Floating::zero(FloatFormat::IEEE32)),
+          qualified_type,
         );
-        let i1_true = self.emit(
-          Constant::Integral(Integral::from_unsigned(1, 1)),
-          self.ast().bool_type().into(),
+        floating(float_zero)
+      },
+      ir::Type::Double() => {
+        let double_zero = self.emit(
+          Constant::Floating(Floating::zero(FloatFormat::IEEE64)),
+          qualified_type,
         );
-        let xor = self.emit(
-          inst::Binary::new(inst::BinaryOp::Xor, cmp, i1_true),
-          self.ast().bool_type().into(),
-        );
-        self.emit(inst::Cast::Zext(inst::Zext::new(xor)), qualified_type)
+        floating(double_zero)
       },
       _ => unreachable!(),
     }
