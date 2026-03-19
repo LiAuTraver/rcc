@@ -190,13 +190,9 @@ pub enum Data<'c> {
     "Incompatible types in declaration of '{0}': '{1}' is not compatible with \
      '{2}'"
   )]
-  IncompatibleType(
-    StrRef<'c>,
-    QualifiedType<'c>,
-    QualifiedType<'c>,
-  ),
+  IncompatibleType(StrRef<'c>, QualifiedType<'c>, QualifiedType<'c>),
   #[error("Incompatible pointer types '{0}' and '{1}'")]
-  IncompatiblePointerTypes(Elem, Elem),
+  IncompatiblePointerTypes(QualifiedType<'c>, QualifiedType<'c>),
   #[error("Cannot merge storage classes '{0}' and '{1}'")]
   StorageSpecsUnmergeable(Storage, Storage),
   #[error("{0}")]
@@ -244,9 +240,11 @@ pub enum Data<'c> {
   #[error(
     "Arithmetic overflow in operation '{}' between '{}' and '{}'", &.0.2, &.0.0, &.0.1
   )]
-  ArithmeticBinOpOverflow(
-    Box<(Constant<'c>, Constant<'c>, Operator)>,
-  ),
+  ArithmeticBinOpOverflow(Box<(Constant<'c>, Constant<'c>, Operator)>),
+  #[error("Comparison of distinct pointer types '{0}' and '{1}'")]
+  CompareDistinctPointerTypes(QualifiedType<'c>, QualifiedType<'c>),
+  #[error("Comparison of pointer and integer types '{0}' and '{1}'")]
+  CompareBetweenPointerAndInteger(QualifiedType<'c>, QualifiedType<'c>),
   #[error(
     "'{}' is used in a logical operation, {}", &.0, if let Some(suggest) = &.1 {
       format!(
@@ -304,11 +302,7 @@ fn format_expected(expected: &Option<String>) -> String {
 
 impl<'c> Diag<'c> {
   #[inline]
-  pub fn new(
-    span: SourceSpan,
-    severity: Severity,
-    data: Data<'c>,
-  ) -> Self {
+  pub fn new(span: SourceSpan, severity: Severity, data: Data<'c>) -> Self {
     Self {
       metadata: Meta::new(severity, data),
       span,

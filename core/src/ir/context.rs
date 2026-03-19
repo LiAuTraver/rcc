@@ -2,7 +2,7 @@ use super::{
   Type, TypeRef, Value, ValueID,
   types::{Array, Function},
 };
-use crate::types::Constant;
+use crate::{common::FloatFormat, types::Constant};
 #[derive(Debug)]
 pub struct Context<'c> {
   void_type: TypeRef<'c>,
@@ -20,8 +20,12 @@ impl<'c> Context<'c> {
     let this = Self {
       void_type: storage.ast_arena.alloc(Type::Void()),
       label_type: storage.ast_arena.alloc(Type::Label()),
-      float32_type: storage.ast_arena.alloc(Type::Float()),
-      float64_type: storage.ast_arena.alloc(Type::Double()),
+      float32_type: storage
+        .ast_arena
+        .alloc(Type::Floating(FloatFormat::IEEE32)),
+      float64_type: storage
+        .ast_arena
+        .alloc(Type::Floating(FloatFormat::IEEE64)),
       pointer_type: storage.ast_arena.alloc(Type::Pointer()),
       common_integer_types: [
         storage.ast_arena.alloc(1.into()),

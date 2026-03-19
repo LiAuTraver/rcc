@@ -62,7 +62,7 @@ impl<'c> Dumpable<'c> for Expression<'_> {
           &palette.meta,
         );
         // didnt print RValue.
-        dumper.write_fmt(format_args!("{}\n", constant.value), &palette.literal)
+        dumper.write_fmt(format_args!("{}\n", constant.inner), &palette.literal)
       },
 
       Variable(variable) => {

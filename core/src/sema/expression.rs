@@ -5,6 +5,8 @@ use crate::{
 };
 
 type_alias_expr! {Expression<'c>, QualifiedType<'c>, Variable<'c> ImplicitCast<'c>}
+pub(super) type UnaryKind = crate::blueprints::UnaryKind;
+
 #[derive(Debug, Clone, Copy, ::strum_macros::Display, PartialEq)]
 pub enum ValueCategory {
   LValue,
@@ -194,9 +196,7 @@ impl<'c> Expression<'c> {
     }
   }
 
-  fn is_named_integer_constant_unchecked(
-    variable: &Variable<'c>,
-  ) -> bool {
+  fn is_named_integer_constant_unchecked(variable: &Variable<'c>) -> bool {
     let sym = variable.name.borrow();
 
     (sym.qualified_type.unqualified_type.is_integer()

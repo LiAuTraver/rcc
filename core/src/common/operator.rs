@@ -193,6 +193,22 @@ impl Operator {
     ) || self.assignment()
   }
 
+  pub const fn associated_operator(&self) -> Option<Self> {
+    match self {
+      PlusAssign => Some(Plus),
+      MinusAssign => Some(Minus),
+      StarAssign => Some(Star),
+      SlashAssign => Some(Slash),
+      PercentAssign => Some(Percent),
+      AmpersandAssign => Some(Ampersand),
+      PipeAssign => Some(Pipe),
+      CaretAssign => Some(Caret),
+      LeftShiftAssign => Some(LeftShift),
+      RightShiftAssign => Some(RightShift),
+      _ => None,
+    }
+  }
+
   pub const fn postfix(&self) -> bool {
     matches!(
       self,

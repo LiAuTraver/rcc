@@ -10,13 +10,21 @@ pub use self::{
   rawexpr::{
     RawArraySubscript, RawBinary, RawCStyleCast, RawCall, RawCompoundLiteral,
     RawConstant, RawMemberAccess, RawParen, RawSizeOf, RawSizeOfKind,
-    RawTernary, RawUnary, RawUnaryKind,
+    RawTernary, RawUnary,
   },
   rawstmt::{
     RawBreak, RawCase, RawCompound, RawContinue, RawDefault, RawDoWhile,
     RawFor, RawGoto, RawIf, RawLabel, RawReturn, RawSwitch, RawWhile,
   },
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ::strum_macros::Display)]
+pub enum UnaryKind {
+  #[strum(to_string = "prefix")]
+  Prefix,
+  #[strum(serialize = "postfix")]
+  Postfix,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Placeholder;

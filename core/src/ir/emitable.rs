@@ -12,8 +12,8 @@ use crate::{
 
 /// Overload helper. I love overloading.
 pub trait Emitable<'a, ValueType> {
-  #[must_use = "Usually the return value_id shall not be ignored; one \
-                exception is for store instruction, which returns void. use \
+  #[must_use = "Usually the return value_id shall not be ignored; one such \
+                exception is for `store` instruction, which returns void. use \
                 `_` to explicitly` ignore the return value_id if you don't \
                 need it."]
   fn emit(
@@ -71,7 +71,7 @@ impl<'c> Emitable<'c, inst::ICmp> for Emitter<'c> {
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
     debug_assert!(
-      RefEq::ref_eq(*qualified_type, self.ast().bool_type()),
+      RefEq::ref_eq(*qualified_type, self.ast().i1_bool_type()),
       "ICmp inst must have i1 as return type. Vectors are unimplemented."
     );
     self.emit_common_instruction(icmp, qualified_type)
@@ -85,7 +85,7 @@ impl<'c> Emitable<'c, inst::FCmp> for Emitter<'c> {
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
     debug_assert!(
-      RefEq::ref_eq(*qualified_type, self.ast().bool_type()),
+      RefEq::ref_eq(*qualified_type, self.ast().i1_bool_type()),
       "FCmp inst must have i1 as return type."
     );
     self.emit_common_instruction(fcmp, qualified_type)

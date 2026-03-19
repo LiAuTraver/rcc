@@ -23,7 +23,35 @@ pub type TypeRefMut<'c> = &'c mut Type<'c>;
 
 ensure_is_pod!(Type);
 ensure_is_pod!(TypeRef);
+impl<'c> Type<'c> {
+  fn is_unsigned(&self) -> bool {
+    match self {
+      Type::Primitive(p) => p.is_unsigned(),
+      Type::Pointer(_) => true,
+      Type::Enum(e) => e.underlying_type.is_unsigned(),
+      _ => false,
+    }
+  }
 
+  fn is_signed(&self) -> bool {
+    match self {
+      Type::Primitive(p) => p.is_signed(),
+      Type::Enum(e) => e.underlying_type.is_signed(),
+      _ => false,
+    }
+  }
+
+  pub fn signedness(&self) -> Option<Signedness> {
+    use Signedness::*;
+    if self.is_signed() {
+      Some(Signed)
+    } else if self.is_unsigned() {
+      Some(Unsigned)
+    } else {
+      None
+    }
+  }
+}
 impl<'c> Type<'c> {
   pub fn is_modifiable(&self) -> bool {
     if self.size() == 0 {
@@ -90,37 +118,35 @@ impl RefEq for TypeRef<'_> {
   }
 }
 impl Integral {
-  pub fn unqualified_type<'c>(
-    &self,
-    context: &'c Context,
-  ) -> TypeRef<'c> {
-    if self.signedness() == Signedness::Signed {
-      match self.width() {
-        Self::WIDTH_CHAR => Context::char_type(context),
-        Self::WIDTH_SHORT => Context::short_type(context),
-        Self::WIDTH_INT => Context::int_type(context),
-        // Self::WIDTH_LONG => Type::Primitive(Primitive::Long),
-        Self::WIDTH_LONG_LONG => Context::long_long_type(context),
-        _ => Context::int_type(context), // default
-      }
-    } else {
-      match self.width() {
-        Self::WIDTH_CHAR => Context::uchar_type(context),
-        Self::WIDTH_SHORT => Context::ushort_type(context),
-        Self::WIDTH_INT => Context::uint_type(context),
-        // Self::WIDTH_LONG => Type::Primitive(Primitive::ULong),
-        Self::WIDTH_LONG_LONG => Context::ulong_long_type(context),
-        _ => Context::uint_type(context), // default
-      }
+  pub fn unqualified_type<'c>(&self, context: &'c Context) -> TypeRef<'c> {
+    use Signedness::*;
+    match self.signedness() {
+      Signed => {
+        match self.width() {
+          Self::WIDTH_CHAR => Context::char_type(context),
+          Self::WIDTH_SHORT => Context::short_type(context),
+          Self::WIDTH_INT => Context::int_type(context),
+          // Self::WIDTH_LONG => Type::Primitive(Primitive::Long),
+          Self::WIDTH_LONG_LONG => Context::long_long_type(context),
+          _ => Context::int_type(context), // default
+        }
+      },
+      Unsigned => {
+        match self.width() {
+          Self::WIDTH_CHAR => Context::uchar_type(context),
+          Self::WIDTH_SHORT => Context::ushort_type(context),
+          Self::WIDTH_INT => Context::uint_type(context),
+          // Self::WIDTH_LONG => Type::Primitive(Primitive::ULong),
+          Self::WIDTH_LONG_LONG => Context::ulong_long_type(context),
+          _ => Context::uint_type(context), // default
+        }
+      },
     }
   }
 }
 
 impl Floating {
-  pub fn unqualified_type<'c>(
-    &self,
-    context: &'c Context,
-  ) -> TypeRef<'c> {
+  pub fn unqualified_type<'c>(&self, context: &'c Context) -> TypeRef<'c> {
     use FloatFormat::*;
     match self.format() {
       IEEE32 => Context::float_type(context),
@@ -130,10 +156,7 @@ impl Floating {
 }
 
 impl<'c> Constant<'c> {
-  pub fn unqualified_type(
-    &self,
-    context: &'c Context,
-  ) -> TypeRef<'c> {
+  pub fn unqualified_type(&self, context: &'c Context) -> TypeRef<'c> {
     match self {
       Self::Integral(integral) => integral.unqualified_type(context),
       Self::Floating(floating) => floating.unqualified_type(context),

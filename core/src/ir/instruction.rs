@@ -1,4 +1,5 @@
 use super::value::ValueID;
+use crate::common::{Operator, Signedness};
 
 /// result = phi [val1, label1], [val2, label2]
 ///
@@ -11,16 +12,36 @@ pub struct Phi {
 /// Creater must ensure [`Jump::label`] must be am ID points to a [`super::BasicBlock`].
 #[derive(Debug)]
 pub struct Jump {
-  pub label: ValueID,
+  pub to: ValueID,
+}
+
+impl Jump {
+  pub fn new(to: ValueID) -> Self {
+    Self { to }
+  }
 }
 /// Creater must ensure [`Branch::true_label`] and [`Branch::false_label`] must be am ID points to a [`super::BasicBlock`].
 ///
 /// The owner of this instruction must ensure the type of [`Branch::cond`] is i1 (boolean).
 #[derive(Debug)]
 pub struct Branch {
-  pub cond: ValueID,
-  pub true_label: ValueID,
-  pub false_label: ValueID,
+  pub condition: ValueID,
+  pub then_branch: ValueID,
+  pub else_branch: ValueID,
+}
+
+impl Branch {
+  pub fn new(
+    condition: ValueID,
+    then_branch: ValueID,
+    else_branch: ValueID,
+  ) -> Self {
+    Self {
+      condition,
+      then_branch,
+      else_branch,
+    }
+  }
 }
 /// Must match the return type of the function. For void function, [`Return::result`] should be [`None`].
 #[derive(Debug)]
@@ -62,13 +83,17 @@ pub enum UnaryOp {
 #[derive(Debug)]
 pub struct Binary {
   pub operator: BinaryOp,
-  pub lhs: ValueID,
-  pub rhs: ValueID,
+  pub left: ValueID,
+  pub right: ValueID,
 }
 
 impl Binary {
-  pub fn new(operator: BinaryOp, lhs: ValueID, rhs: ValueID) -> Self {
-    Self { operator, lhs, rhs }
+  pub fn new(operator: BinaryOp, left: ValueID, right: ValueID) -> Self {
+    Self {
+      operator,
+      left,
+      right,
+    }
   }
 }
 // arithematic ops only consider integer for now
@@ -80,11 +105,16 @@ pub enum BinaryOp {
   Mul,
   Div,
   Mod,
-  BitwiseAnd,
-  BitwiseOr,
+  /// Bitwise And.
+  And,
+  /// Bitwise Or.
+  Or,
   Xor,
-  LeftShift,
-  RightShift,
+  Shl,
+  /// Logical Shift Right for unsigned integers.
+  LShr,
+  /// for signed integers.
+  AShr,
 }
 
 #[derive(Debug)]
@@ -117,6 +147,30 @@ pub enum ICmpPredicate {
   Ugt,
   Uge,
 }
+impl ICmpPredicate {
+  pub const fn from_op_and_sign(
+    operator: Operator,
+    signedness: Signedness,
+  ) -> Self {
+    use ICmpPredicate::*;
+    use Operator::*;
+    use Signedness::*;
+    match (operator, signedness) {
+      (Less, Signed) => Slt,
+      (Less, Unsigned) => Ult,
+      (LessEqual, Signed) => Sle,
+      (LessEqual, Unsigned) => Ule,
+      (Greater, Signed) => Sgt,
+      (Greater, Unsigned) => Ugt,
+      (GreaterEqual, Signed) => Sge,
+      (GreaterEqual, Unsigned) => Uge,
+      (EqualEqual, _) => Eq,
+      (NotEqual, _) => Ne,
+      _ => unreachable!(),
+    }
+  }
+}
+
 #[derive(Debug)]
 pub struct FCmp {
   pub predicate: FCmpPredicate,
@@ -137,40 +191,45 @@ impl FCmp {
 #[derive(Debug, Clone, Copy, ::strum_macros::Display)]
 #[strum(serialize_all = "lowercase")]
 pub enum FCmpPredicate {
+  /// Always `false` if `NaN` is involved.
   Oeq,
-  /// means `Ordered Not Equal`. Not numeber `1`.
   One,
   Olt,
   Ole,
+  Ogt,
+  Oge,
+  /// Always `true` if `NaN` is involved.
   Ueq,
   Une,
   Ult,
   Ule,
+  Ugt,
+  Uge,
 }
 /// Store value to address: *addr = value
 ///
 /// [`Store::addr`] must have pointer type
 #[derive(Debug)]
 pub struct Store {
-  pub to: ValueID,
+  pub into: ValueID,
   pub from: ValueID,
 }
 
 impl Store {
-  pub fn new(to: ValueID, from: ValueID) -> Self {
-    Self { to, from }
+  pub fn new(into: ValueID, from: ValueID) -> Self {
+    Self { into, from }
   }
 }
 
 /// Load value from address: result = *addr
 #[derive(Debug)]
 pub struct Load {
-  pub addr: ValueID,
+  pub from: ValueID,
 }
 
 impl Load {
-  pub fn new(addr: ValueID) -> Self {
-    Self { addr }
+  pub fn new(from: ValueID) -> Self {
+    Self { from }
   }
 }
 /// Stack allocation.

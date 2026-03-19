@@ -153,10 +153,7 @@ impl<'c> Context<'c> {
   }
 
   #[must_use]
-  pub fn make_pointer(
-    &self,
-    pointee: QualifiedType<'c>,
-  ) -> TypeRef<'c> {
+  pub fn make_pointer(&self, pointee: QualifiedType<'c>) -> TypeRef<'c> {
     self.intern(Pointer::new(pointee))
   }
 
@@ -211,7 +208,7 @@ impl<'c> Context<'c> {
 
   /// Mostly this is not the correct choice for a converted bool: use [`Self::converted_bool`] instead.
   #[must_use]
-  pub fn bool_type(&self) -> TypeRef<'c> {
+  pub fn i1_bool_type(&self) -> TypeRef<'c> {
     self.bool_type
   }
 

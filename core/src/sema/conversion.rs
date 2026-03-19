@@ -89,9 +89,7 @@ impl<'c> Expression<'c> {
   }
 
   #[must_use]
-  pub fn contextually_convertible_to_bool(
-    self,
-  ) -> Result<Self, Diag<'c>> {
+  pub fn contextually_convertible_to_bool(self) -> Result<Self, Diag<'c>> {
     match self.unqualified_type() {
       Type::Pointer(_) => Ok(self),
       Type::Primitive(p) if p.is_arithmetic() => Ok(self),
@@ -356,12 +354,9 @@ impl<'c> Expression<'c> {
           Ok(self) // Noop? not sure
         } else {
           Err(
-            IncompatiblePointerTypes(
-              lhs.pointee.to_string(),
-              rhs.pointee.to_string(),
-            )
-            .into_with(Severity::Error)
-            .into_with(span),
+            IncompatiblePointerTypes(*target_type, *self.qualified_type())
+              .into_with(Severity::Error)
+              .into_with(span),
           )
         }
       },
@@ -413,18 +408,18 @@ impl<'c> Expression<'c> {
 
     match self.unqualified_type() {
       Type::Primitive(Primitive::Bool) =>
-        Ok(Self::cast_if_needed(self, &context.bool_type().into())),
+        Ok(Self::cast_if_needed(self, &context.i1_bool_type().into())),
       Type::Primitive(p) if p.is_integer() =>
-        Ok(Self::cast_if_needed(self, &context.bool_type().into())),
+        Ok(Self::cast_if_needed(self, &context.i1_bool_type().into())),
       Type::Primitive(p) if p.is_floating_point() => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::FloatingToIntegral, span)
           .into(),
-        context.bool_type().into(),
+        context.i1_bool_type().into(),
       )),
       Type::Primitive(Primitive::Nullptr) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::NullptrToIntegral, span)
           .into(),
-        context.bool_type().into(),
+        context.i1_bool_type().into(),
       )),
       Type::Primitive(Primitive::Void) => Err(
         InvalidConversion(
@@ -445,7 +440,7 @@ impl<'c> Expression<'c> {
       Type::Pointer(_) => Ok(Self::new_rvalue(
         ImplicitCast::new(self.into(), CastType::PointerToIntegral, span)
           .into(),
-        context.bool_type().into(),
+        context.i1_bool_type().into(),
       )),
 
       Type::Array(array) => panic!(

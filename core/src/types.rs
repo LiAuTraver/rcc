@@ -9,6 +9,7 @@ mod primitives;
 mod promotion;
 mod qualified_types;
 mod type_info;
+#[allow(clippy::module_inception)]
 mod types;
 
 pub use self::{

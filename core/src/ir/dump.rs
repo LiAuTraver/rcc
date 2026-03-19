@@ -6,7 +6,7 @@ use super::{
   Context, Module, Value, ValueData, ValueID, instruction as inst, module,
 };
 use crate::{
-  common::{Dumpable, Dumper, FakeDumpRes, Palette, TreeDumper},
+  common::{Dumpable, Dumper, FakeDumpRes, Integral, Palette, TreeDumper},
   ir,
   types::Constant,
 };
@@ -20,6 +20,25 @@ pub type IRDumper<'c> = TreeDumper<
   /* ""    , */
 >;
 
+use ::std::cell::RefCell;
+
+thread_local! {
+  /// just a workaround and ill redo it later.
+  static COUNTER: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
+}
+
+// if find the handle, return the index, otherwise push it and return the new index.
+fn counter(handle: u64) -> usize {
+  COUNTER.with(|c| {
+    let mut vec = c.borrow_mut();
+    if let Some(index) = vec.iter().position(|&h| h == handle) {
+      index
+    } else {
+      vec.push(handle);
+      vec.len() - 1
+    }
+  })
+}
 fn pretty_dump_contant_or_id<'a>(
   dumper: &mut impl Dumper<'a>,
   value_id: ValueID,
@@ -27,7 +46,7 @@ fn pretty_dump_contant_or_id<'a>(
 ) {
   if let Some(value) = dumper.session().ir().get_by_constant_id(&value_id) {
     match dumper.session().ir().get(value_id).ir_type {
-      ir::Type::Float() | ir::Type::Double() => dumper.write_fmt(
+      ir::Type::Floating(_) => dumper.write_fmt(
         format_args!("{:.e}", value.as_floating_unchecked()),
         &palette.literal,
       ),
@@ -36,6 +55,12 @@ fn pretty_dump_contant_or_id<'a>(
         dumper.write("null", &palette.literal);
       },
       ir::Type::Integer(1u8) => dumper.write(value.is_one(), &palette.literal),
+      // if the value is max, dump it as -1 for better readability.
+      ir::Type::Integer(width) => match value.as_integral_unchecked() {
+        bitmask if *bitmask == Integral::bitmask(*width) =>
+          dumper.write("-1", &palette.literal),
+        integer => dumper.write(integer, &palette.literal),
+      },
       _ => dumper.write(value, &palette.literal),
     }
   } else {
@@ -43,7 +68,7 @@ fn pretty_dump_contant_or_id<'a>(
       suff!(" " => dumper.session().ir().get(value_id).ir_type),
       &palette.meta,
     );
-    dumper.write(pre!("%"=> value_id.handle()), &palette.skeleton);
+    dumper.write(pre!("%"=> counter(value_id.handle())), &palette.skeleton);
   }
 }
 
@@ -195,7 +220,7 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
           Dump::dump(
             arg,
             dumper,
-            /* index */ &format!("{}", arg_id.handle()),
+            /* index */ &format!("{}", counter(arg_id.handle())),
             index == variant.params.len() - 1,
             palette,
             arg.data.as_argument_unchecked(),
@@ -224,7 +249,10 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
     if variant.is_definition() {
       dumper.writeln(" {", &palette.skeleton);
       variant.blocks.iter().for_each(|block_id| {
-        dumper.write(suff!(":\n" => block_id.handle()), &palette.skeleton);
+        dumper.write(
+          suff!(":\n" => counter(block_id.handle())),
+          &palette.skeleton,
+        );
         let block = &*lookup!(dumper, *block_id);
         Dump::dump(
           block,
@@ -238,6 +266,8 @@ impl<'c> Dump<'c, module::Function<'_>> for Value<'c> {
       dumper.write("\n}", &palette.skeleton);
     }
     dumper.newline();
+
+    COUNTER.with(|c| c.borrow_mut().clear());
   }
 }
 impl<'c> Dump<'c, module::Variable<'_>> for Value<'c> {
@@ -269,7 +299,10 @@ impl<'c> Dump<'c, module::BasicBlock> for Value<'c> {
           inst::Memory::Store(s),
         )) => Dump::dump(&*value, dumper, "", is_last, palette, s),
         _ => {
-          dumper.write_fmt(pre!("%"=> inst_id.handle()), &palette.skeleton);
+          dumper.write_fmt(
+            pre!("%"=> counter(inst_id.handle())),
+            &palette.skeleton,
+          );
           dumper.write(" = ", &palette.skeleton);
           Dumpable::dump(&*value, dumper, "", is_last, palette);
         },
@@ -336,9 +369,9 @@ impl<'c> Dump<'c, inst::Binary> for Value<'c> {
   ) -> FakeDumpRes {
     dumper.write(suff!(" " => variant.operator), &palette.literal);
 
-    self::pretty_dump_contant_or_id(dumper, variant.lhs, palette);
+    self::pretty_dump_contant_or_id(dumper, variant.left, palette);
     dumper.write(", ", &palette.skeleton);
-    self::pretty_dump_contant_or_id(dumper, variant.rhs, palette);
+    self::pretty_dump_contant_or_id(dumper, variant.right, palette);
   }
 }
 impl<'c> Dump<'c, inst::Memory> for Value<'c> {
@@ -399,7 +432,7 @@ impl<'c> Dump<'c, inst::Call> for Value<'c> {
           dumper.write(suff!(" " => arg.ir_type), &palette.meta);
           dumper.write(
             arg.data.as_constant().map_or_else(
-              || format!("%{}", arg_id.handle()),
+              || format!("%{}", counter(arg_id.handle())),
               |constant| format!("{}", constant),
             ),
             &palette.skeleton,
@@ -496,10 +529,13 @@ impl<'c> Dump<'c, inst::Load> for Value<'c> {
     dumper.write((self.ir_type), &palette.meta);
     dumper.write(", ", &palette.skeleton);
 
-    debug_assert!(lookup!(dumper, variant.addr).ir_type.is_pointer());
+    debug_assert!(lookup!(dumper, variant.from).ir_type.is_pointer());
 
     dumper.write("ptr ", &palette.meta);
-    dumper.write(pre!("%" => variant.addr.handle()), &palette.skeleton);
+    dumper.write(
+      pre!("%" => counter(variant.from.handle())),
+      &palette.skeleton,
+    );
   }
 }
 impl<'c> Dump<'c, inst::Store> for Value<'c> {
@@ -518,10 +554,13 @@ impl<'c> Dump<'c, inst::Store> for Value<'c> {
 
     dumper.write(", ", &palette.skeleton);
 
-    debug_assert!(lookup!(dumper, variant.to).ir_type.is_pointer());
+    debug_assert!(lookup!(dumper, variant.into).ir_type.is_pointer());
 
     dumper.write("ptr ", &palette.meta);
-    dumper.write(pre!("%" => variant.to.handle()), &palette.skeleton);
+    dumper.write(
+      pre!("%" => counter(variant.into.handle())),
+      &palette.skeleton,
+    );
   }
 }
 

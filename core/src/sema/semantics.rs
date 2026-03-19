@@ -182,7 +182,7 @@ impl<'c> Sema<'c> {
                   super::folding::FoldingResult::Success(v) =>
                     if v.is_integer_constant() {
                       ArraySize::Constant(
-                        match v.raw_expr().as_constant_unchecked().value {
+                        match v.raw_expr().as_constant_unchecked().inner {
                           se::ConstantLiteral::Integral(integral) =>
                             integral.to_builtin(),
                           se::ConstantLiteral::Nullptr(_) => 0,
@@ -880,15 +880,25 @@ impl<'c> Sema<'c> {
         let symbol = Symbol::def(qualified_type, Storage::Extern, name);
         sd::VarDef::new(symbol, Some(initializer), span)
       },
-      (Some(storage), None) => {
-        let storage = if storage.is_register() {
-          self.add_error(GlobalRegVar(name.to_string()), span);
-          Storage::Extern
-        } else {
-          storage
-        };
-        sd::VarDef::new(Symbol::decl(qualified_type, storage, name), None, span)
+      (Some(Storage::Register), initializer) => {
+        self.add_error(GlobalRegVar(name.to_string()), span);
+        sd::VarDef::new(
+          Symbol::new_ref(Symbol::new(
+            qualified_type,
+            Storage::Extern,
+            name,
+            if initializer.is_some() {
+              VarDeclKind::Definition
+            } else {
+              VarDeclKind::Declaration
+            },
+          )),
+          initializer,
+          span,
+        )
       },
+      (Some(storage), None) =>
+        sd::VarDef::new(Symbol::decl(qualified_type, storage, name), None, span),
       (Some(storage), Some(initializer)) => {
         let storage = match storage {
           Storage::Extern => {
@@ -897,11 +907,6 @@ impl<'c> Sema<'c> {
               span,
             );
             storage
-          },
-
-          Storage::Register => {
-            self.add_error(GlobalRegVar(name.to_string()), span);
-            Storage::Extern
           },
           _ => storage,
         };
@@ -1098,7 +1103,7 @@ impl<'c> Sema<'c> {
     constant: pe::Constant<'c>,
   ) -> Result<se::Expression<'c>, Diag<'c>> {
     let pe::Constant {
-      value: constant,
+      inner: constant,
       span,
     } = constant;
     let unqualified_type = constant.unqualified_type(self.context());
@@ -1239,8 +1244,8 @@ impl<'c> Sema<'c> {
         } else {
           Err(
             IncompatiblePointerTypes(
-              left_pointee.to_string(),
-              right_pointee.to_string(),
+              *then_expr.qualified_type(),
+              *else_expr.qualified_type(),
             )
             .into_with(Severity::Error)
             .into_with(span),
@@ -1517,6 +1522,12 @@ impl<'c> Sema<'c> {
       self.add_error(ExprNotAssignable(left.to_string()), span);
       return Ok(left);
     }
+    if operator != Operator::Assign {
+      panic!(
+        "todo: split differet binaary precondition logic so that this would \
+         work."
+      )
+    }
     let assigned_expr = right
       .lvalue_conversion()
       .decay(self.context())
@@ -1532,7 +1543,7 @@ impl<'c> Sema<'c> {
   ///
   /// 1. lvalue conversion
   /// 2. decay
-  /// 3. conditional conversion
+  /// 3. check if contextually convertible to bool(int)
   fn logical(
     &self,
     operator: Operator,
@@ -1563,24 +1574,60 @@ impl<'c> Sema<'c> {
   ) -> Result<se::Expression<'c>, Diag<'c>> {
     let left = left.lvalue_conversion().decay(self.context());
     let right = right.lvalue_conversion().decay(self.context());
+    match (left.unqualified_type(), right.unqualified_type()) {
+      (l, r) if l.is_arithmetic() && r.is_arithmetic() => {
+        let (lhs, rhs, _common_type) =
+          se::Expression::usual_arithmetic_conversion(
+            left,
+            right,
+            self.context(),
+          )?;
 
-    // Path A
-    if left.unqualified_type().is_arithmetic()
-      && right.unqualified_type().is_arithmetic()
-    {
-      let (lhs, rhs, _common_type) =
-        se::Expression::usual_arithmetic_conversion(
-          left,
-          right,
-          self.context(),
-        )?;
-
-      return Ok(se::Expression::new_rvalue(
-        se::Binary::new(operator, lhs, rhs, span).into(),
-        self.context().converted_bool().into(), // ditto
-      ));
+        Ok(se::Expression::new_rvalue(
+          se::Binary::new(operator, lhs, rhs, span).into(),
+          self.context().converted_bool().into(),
+        ))
+      },
+      (l, r) if l.is_pointer() || r.is_pointer() =>
+        self.pointer_relational(operator, left, right, span),
+      _ => todo!(),
     }
-    todo!()
+  }
+
+  fn pointer_relational(
+    &self,
+    operator: Operator,
+    left: se::Expression<'c>,
+    right: se::Expression<'c>,
+    span: SourceSpan,
+  ) -> Result<se::Expression<'c>, Diag<'c>> {
+    debug_assert!(
+      left.unqualified_type().is_pointer()
+        || right.unqualified_type().is_pointer()
+    );
+    // if one of the operand is not a pointer and is not zero, emit a warning.
+    match (left.unqualified_type(), right.unqualified_type()) {
+      (Type::Pointer(left_ptr), Type::Pointer(right_ptr)) => {
+        let left_pointee = &left_ptr.pointee;
+        let right_pointee = &right_ptr.pointee;
+        if Compatibility::compatible(left_pointee, right_pointee) {
+          Ok(se::Expression::new_rvalue(
+            se::Binary::new(operator, left, right, span).into(),
+            self.context().converted_bool().into(),
+          ))
+        } else {
+          Err(
+            CompareDistinctPointerTypes(
+              *left.qualified_type(),
+              *right.qualified_type(),
+            )
+            .into_with(Severity::Error) // should be warning
+            .into_with(span),
+          )
+        }
+      },
+      _ => todo!(),
+    }
   }
 
   fn arithmetic(
@@ -1594,10 +1641,10 @@ impl<'c> Sema<'c> {
     let right = right.lvalue_conversion().decay(self.context());
 
     match (left.unqualified_type(), right.unqualified_type()) {
-      (l, r) if l.is_pointer() || r.is_pointer() =>
-        self.pointer_arithematic(operator, left, right, span),
       (l, r) if l.is_arithmetic() && r.is_arithmetic() =>
         self.usual_arithmetic(operator, left, right, span),
+      (l, r) if l.is_pointer() || r.is_pointer() =>
+        self.pointer_arithematic(operator, left, right, span),
       // todo: enum constant..
       _ => Err(
         NonArithmeticInBinaryOp(left.to_string(), right.to_string(), operator)
@@ -1656,8 +1703,8 @@ impl<'c> Sema<'c> {
           )),
           false => Err(
             IncompatiblePointerTypes(
-              left_ptr.pointee.to_string(),
-              right_ptr.pointee.to_string(),
+              *left.qualified_type(),
+              *right.qualified_type(),
             )
             .into_with(Severity::Error)
             .into_with(span),
@@ -1728,27 +1775,23 @@ impl<'c> Sema<'c> {
     right: se::Expression<'c>,
     span: SourceSpan,
   ) -> Result<se::Expression<'c>, Diag<'c>> {
-    let left = left.lvalue_conversion().decay(self.context());
-    let right = right.lvalue_conversion().decay(self.context());
+    let lhs = left.lvalue_conversion().decay(self.context());
+    let rhs = right.lvalue_conversion().decay(self.context());
 
-    if !left.unqualified_type().is_integer()
-      || !right.unqualified_type().is_integer()
+    if !lhs.unqualified_type().is_integer()
+      || !rhs.unqualified_type().is_integer()
     {
       self.add_error(
-        NonIntegerInBitwiseBinaryOp(
-          left.to_string(),
-          right.to_string(),
-          operator,
-        ),
+        NonIntegerInBitwiseBinaryOp(lhs.to_string(), rhs.to_string(), operator),
         span,
       );
     }
 
-    let (lhs, rhs, result_type) =
-      se::Expression::usual_arithmetic_conversion(left, right, self.context())?;
+    let (left, right, result_type) =
+      se::Expression::usual_arithmetic_conversion(lhs, rhs, self.context())?;
 
     Ok(se::Expression::new_rvalue(
-      se::Binary::new(operator, lhs, rhs, span).into(),
+      se::Binary::new(operator, left, right, span).into(),
       result_type,
     ))
   }
@@ -1763,28 +1806,30 @@ impl<'c> Sema<'c> {
     right: se::Expression<'c>,
     span: SourceSpan,
   ) -> Result<se::Expression<'c>, Diag<'c>> {
-    let lhs = left
+    let left = left
       .lvalue_conversion()
       .decay(self.context())
       .promote(self.context());
-    let rhs = right
+    let right = right
       .lvalue_conversion()
       .decay(self.context())
       .promote(self.context());
 
-    if !lhs.unqualified_type().is_integer()
-      || !rhs.unqualified_type().is_integer()
+    if !left.unqualified_type().is_integer()
+      || !right.unqualified_type().is_integer()
     {
       Err(
-        NonIntegerInBitshiftOp(lhs.to_string(), rhs.to_string(), operator)
+        NonIntegerInBitshiftOp(left.to_string(), right.to_string(), operator)
           .into_with(Severity::Error)
           .into_with(span),
       )?
     }
 
-    let expr_type = *lhs.qualified_type();
+    // TODO: if the right is constant and it's not  a positive value, issue a warning.
+
+    let expr_type = *left.qualified_type();
     Ok(se::Expression::new_rvalue(
-      se::Binary::new(operator, lhs, rhs, span).into(),
+      se::Binary::new(operator, left, right, span).into(),
       expr_type,
     ))
   }
@@ -2109,10 +2154,10 @@ impl<'c> Sema<'c> {
       analyzed_value.fold(self.diag()).transform(|expr| {
         if let se::RawExpr::Constant(constant) = expr.raw_expr() {
           if constant.is_integral() {
-            constant.value.clone()
+            constant.inner.clone()
           } else {
             self.add_error(
-              NonIntegerInCaseStmt(constant.value.clone()),
+              NonIntegerInCaseStmt(constant.inner.clone()),
               expr.span(),
             );
             Integral::default().into()

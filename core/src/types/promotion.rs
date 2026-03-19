@@ -110,6 +110,10 @@ impl Primitive {
     matches!(self, Bool)
   }
 
+  pub fn is_contextual_bool(&self) -> bool {
+    matches!(self, Int)
+  }
+
   pub fn is_nullptr(&self) -> bool {
     matches!(self, Nullptr)
   }
@@ -154,24 +158,6 @@ impl Primitive {
         breakpoint!();
         panic!("Type {:?} is not a signed integer type", self);
       },
-    }
-  }
-}
-impl<'c> Type<'c> {
-  pub fn is_unsigned(&self) -> bool {
-    match self {
-      Type::Primitive(p) => p.is_unsigned(),
-      Type::Pointer(_) => true,
-      Type::Enum(e) => e.underlying_type.is_unsigned(),
-      _ => false,
-    }
-  }
-
-  pub fn is_signed(&self) -> bool {
-    match self {
-      Type::Primitive(p) => p.is_signed(),
-      Type::Enum(e) => e.underlying_type.is_signed(),
-      _ => false,
     }
   }
 }

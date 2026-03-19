@@ -7,7 +7,8 @@ type Underlying = u128;
 type SignedUnderlying = signed_type_of!(u128);
 
 /// Signedness of an integer type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Hash)]
+#[derive_const(Clone, PartialEq, Eq)]
 pub enum Signedness {
   Unsigned = 0,
   Signed = 1,
@@ -46,7 +47,8 @@ impl From<bool> for Signedness {
 /// that the operands have the same width and signedness, otherwise panic.
 ///
 /// It does not support 0-width integers, and the current maximum width is 128 bits.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Hash)]
+#[derive_const(Clone, PartialEq, Eq)]
 pub struct Integral {
   /// The raw bits, stored in the lower `width` bits.
   ///
@@ -61,6 +63,15 @@ pub struct Integral {
 }
 
 ensure_is_pod!(Integral);
+
+const fn consteval(a: bool, b: bool) {
+  assert!(a);
+  assert!(b);
+}
+fn notconsteval(a: bool, b: bool) {
+  debug_assert!(a);
+  debug_assert!(b);
+}
 
 impl Integral {
   pub const WIDTH_BOOL: u8 = 1;
@@ -119,6 +130,22 @@ impl Integral {
   #[inline]
   pub const fn from_uintptr(value: usize) -> Self {
     Self::new(value, Self::WIDTH_UINTPTR, Unsigned)
+  }
+
+  #[inline]
+  pub const fn bitmask(width: u8) -> Self {
+    debug_assert!(width > 0 && width <= 128, "width must be 1-128");
+    Self::new(Self::mask(u128::MAX, width), width, Unsigned)
+  }
+
+  #[inline]
+  pub const fn i1_true() -> Self {
+    Self::new(1, 1, Unsigned)
+  }
+
+  #[inline]
+  pub const fn i1_false() -> Self {
+    Self::new(0, 1, Unsigned)
   }
 }
 impl Integral {
@@ -307,9 +334,12 @@ impl Integral {
 }
 impl Integral {
   /// Add with overflow detection.
-  pub fn overflowing_add(self, rhs: Self) -> (Self, bool) {
-    debug_assert_eq!(self.width, rhs.width);
-    debug_assert_eq!(self.signedness, rhs.signedness);
+  pub const fn overflowing_add(self, rhs: Self) -> (Self, bool) {
+    const_eval_select(
+      (self.signedness == rhs.signedness, self.width == rhs.width),
+      consteval,
+      notconsteval,
+    );
 
     let sum = self.bits.wrapping_add(rhs.bits);
     let result = Self::new(sum, self.width, self.signedness);
@@ -329,9 +359,12 @@ impl Integral {
   }
 
   /// Subtract with overflow detection.
-  pub fn overflowing_sub(self, rhs: Self) -> (Self, bool) {
-    debug_assert_eq!(self.width, rhs.width);
-    debug_assert_eq!(self.signedness, rhs.signedness);
+  pub const fn overflowing_sub(self, rhs: Self) -> (Self, bool) {
+    const_eval_select(
+      (self.signedness == rhs.signedness, self.width == rhs.width),
+      consteval,
+      notconsteval,
+    );
 
     let diff = self.bits.wrapping_sub(rhs.bits);
     let result = Self::new(diff, self.width, self.signedness);
@@ -352,9 +385,12 @@ impl Integral {
   }
 
   /// Multiply with overflow detection.
-  pub fn overflowing_mul(self, rhs: Self) -> (Self, bool) {
-    debug_assert_eq!(self.width, rhs.width);
-    debug_assert_eq!(self.signedness, rhs.signedness);
+  pub const fn overflowing_mul(self, rhs: Self) -> (Self, bool) {
+    const_eval_select(
+      (self.signedness == rhs.signedness, self.width == rhs.width),
+      consteval,
+      notconsteval,
+    );
 
     let (product, overflow) = if self.is_signed() {
       let a = self.as_signed();
@@ -379,9 +415,12 @@ impl Integral {
   }
 
   /// Divide, returns None on division by zero.
-  pub fn checked_div(self, rhs: Self) -> Option<Self> {
-    debug_assert_eq!(self.width, rhs.width);
-    debug_assert_eq!(self.signedness, rhs.signedness);
+  pub const fn checked_div(self, rhs: Self) -> Option<Self> {
+    const_eval_select(
+      (self.signedness == rhs.signedness, self.width == rhs.width),
+      consteval,
+      notconsteval,
+    );
 
     if rhs.is_zero() {
       None?
@@ -397,9 +436,12 @@ impl Integral {
   }
 
   /// Remainder, returns [`None`] on division by zero.
-  pub fn checked_rem(self, rhs: Self) -> Option<Self> {
-    debug_assert_eq!(self.width, rhs.width);
-    debug_assert_eq!(self.signedness, rhs.signedness);
+  pub const fn checked_rem(self, rhs: Self) -> Option<Self> {
+    const_eval_select(
+      (self.signedness == rhs.signedness, self.width == rhs.width),
+      consteval,
+      notconsteval,
+    );
 
     if rhs.is_zero() {
       None?
@@ -415,13 +457,13 @@ impl Integral {
   }
 
   /// Logical right shift, always zero-fill.
-  pub fn lshr(self, amount: u32) -> Self {
+  pub const fn lshr(self, amount: u32) -> Self {
     let amount = amount.min(self.width.to());
     Self::new(self.bits >> amount, self.width, self.signedness)
   }
 
   /// Arithmetic right shift, always sign-fill.
-  pub fn ashr(self, amount: u32) -> Self {
+  pub const fn ashr(self, amount: u32) -> Self {
     Self::new(
       (self.as_signed() >> amount.min(self.width.to())) as u128,
       self.width,
@@ -448,9 +490,12 @@ impl Integral {
   }
 }
 
-use ::std::ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Not, Shl, Shr, Sub};
+use ::std::{
+  intrinsics::const_eval_select,
+  ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Not, Shl, Shr, Sub},
+};
 
-impl Add for Integral {
+impl const Add for Integral {
   type Output = Self;
 
   #[inline]
@@ -459,7 +504,7 @@ impl Add for Integral {
   }
 }
 
-impl Sub for Integral {
+impl const Sub for Integral {
   type Output = Self;
 
   #[inline]
@@ -468,7 +513,7 @@ impl Sub for Integral {
   }
 }
 
-impl Mul for Integral {
+impl const Mul for Integral {
   type Output = Self;
 
   #[inline]
@@ -477,7 +522,7 @@ impl Mul for Integral {
   }
 }
 
-impl Neg for Integral {
+impl const Neg for Integral {
   type Output = Self;
 
   /// Negate (two's complement).
@@ -487,7 +532,7 @@ impl Neg for Integral {
   }
 }
 
-impl Not for Integral {
+impl const Not for Integral {
   type Output = Self;
 
   #[inline]
@@ -496,39 +541,43 @@ impl Not for Integral {
   }
 }
 
-impl BitAnd for Integral {
+impl const BitAnd for Integral {
   type Output = Self;
 
   #[inline]
   fn bitand(self, rhs: Self) -> Self {
     {
-      debug_assert_eq!(self.width, rhs.width);
+      const_eval_select(
+        (true, self.width == rhs.width),
+        consteval,
+        notconsteval,
+      );
       Self::new(self.bits & rhs.bits, self.width, self.signedness)
     }
   }
 }
 
-impl BitOr for Integral {
+impl const BitOr for Integral {
   type Output = Self;
 
   #[inline]
   fn bitor(self, rhs: Self) -> Self {
-    debug_assert_eq!(self.width, rhs.width);
+    const_eval_select((true, self.width == rhs.width), consteval, notconsteval);
     Self::new(self.bits | rhs.bits, self.width, self.signedness)
   }
 }
 
-impl BitXor for Integral {
+impl const BitXor for Integral {
   type Output = Self;
 
   #[inline]
   fn bitxor(self, rhs: Self) -> Self {
-    debug_assert_eq!(self.width, rhs.width);
+    const_eval_select((true, self.width == rhs.width), consteval, notconsteval);
     Self::new(self.bits ^ rhs.bits, self.width, self.signedness)
   }
 }
 
-impl Shl<u32> for Integral {
+impl const Shl<u32> for Integral {
   type Output = Self;
 
   #[inline]
@@ -538,7 +587,7 @@ impl Shl<u32> for Integral {
   }
 }
 
-impl Shr<u32> for Integral {
+impl const Shr<u32> for Integral {
   type Output = Self;
 
   #[inline]
@@ -553,13 +602,19 @@ impl Shr<u32> for Integral {
   }
 }
 
-impl PartialOrd for Integral {
+impl const PartialOrd for Integral {
   fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
     if self.width != other.width || self.signedness != other.signedness {
       None
     } else {
-      debug_assert_eq!(self.width, other.width);
-      debug_assert_eq!(self.signedness, other.signedness);
+      const_eval_select(
+        (
+          self.signedness == other.signedness,
+          self.width == other.width,
+        ),
+        consteval,
+        notconsteval,
+      );
 
       if self.is_signed() {
         self.as_signed().cmp(&other.as_signed())
@@ -570,31 +625,35 @@ impl PartialOrd for Integral {
     }
   }
 }
+mod fmt {
+  use ::std::fmt;
 
-impl ::std::fmt::Debug for Integral {
-  fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-    if self.is_signed() {
-      write!(f, "{}i{}", self.as_signed(), self.width)
-    } else {
-      write!(f, "{}u{}", self.bits, self.width)
+  use super::Integral;
+  impl fmt::Debug for Integral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+      if self.is_signed() {
+        write!(f, "{}i{}", self.as_signed(), self.width)
+      } else {
+        write!(f, "{}u{}", self.bits, self.width)
+      }
     }
   }
-}
 
-impl ::std::fmt::Display for Integral {
-  fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-    if self.is_signed() {
-      write!(f, "{}", self.as_signed())
-    } else {
-      write!(f, "{}", self.bits)
+  impl fmt::Display for Integral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+      if self.is_signed() {
+        self.as_signed().fmt(f)
+      } else {
+        self.bits.fmt(f)
+      }
     }
   }
-}
 
-impl ::std::default::Default for Integral {
-  #[inline]
-  fn default() -> Self {
-    Self::from(0)
+  impl Default for Integral {
+    #[inline]
+    fn default() -> Self {
+      Self::from(0)
+    }
   }
 }
 

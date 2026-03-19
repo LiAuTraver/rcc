@@ -41,8 +41,6 @@ macro_rules! type_alias_expr {
     pub type ConstantLiteral<'c> = $crate::types::Constant<'c>;
     /// type or expression
     pub type SizeOfKind<'c> = $crate::blueprints::RawSizeOfKind<$exprty, $typety>;
-    /// unary kind
-    pub type UnaryKind = $crate::blueprints::RawUnaryKind;
     pub type Constant<'c> = $crate::blueprints::RawConstant<'c>;
     pub type Unary<'c> = $crate::blueprints::RawUnary<$exprty>;
     pub type Binary<'c> = $crate::blueprints::RawBinary<$exprty>;
@@ -153,21 +151,15 @@ pub(in super::super) use type_alias_expr;
 
 #[derive(Debug)]
 pub struct RawConstant<'c> {
-  pub value: Constant<'c>,
+  pub inner: Constant<'c>,
   pub span: SourceSpan,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ::strum_macros::Display)]
-pub enum RawUnaryKind {
-  #[strum(to_string = "prefix")]
-  Prefix,
-  #[strum(serialize = "postfix")]
-  Postfix,
-}
+
 #[derive(Debug)]
 pub struct RawUnary<ExprTy> {
   pub operator: Operator,
   pub operand: Box<ExprTy>,
-  pub kind: RawUnaryKind,
+  pub kind: super::UnaryKind,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
@@ -203,7 +195,7 @@ pub struct RawTernary<ExprTy> {
 }
 #[derive(Debug)]
 pub enum RawSizeOfKind<ExprTy, TypeTy> {
-  Type(Box<TypeTy>), // ignore for now
+  Type(Box<TypeTy>),
   Expression(Box<ExprTy>),
 }
 
@@ -235,7 +227,7 @@ pub struct RawCompoundLiteral {
 impl<'c> RawConstant<'c> {
   pub fn new(constant: Constant<'c>, span: SourceSpan) -> Self {
     Self {
-      value: constant,
+      inner: constant,
       span,
     }
   }
@@ -245,13 +237,11 @@ impl<'c> ::std::ops::Deref for RawConstant<'c> {
   type Target = Constant<'c>;
 
   fn deref(&self) -> &Self::Target {
-    &self.value
+    &self.inner
   }
 }
 
-impl<'c> IntoWith<SourceSpan, RawConstant<'c>>
-  for Constant<'c>
-{
+impl<'c> IntoWith<SourceSpan, RawConstant<'c>> for Constant<'c> {
   fn into_with(self, span: SourceSpan) -> RawConstant<'c> {
     RawConstant::new(self, span)
   }
@@ -261,7 +251,7 @@ impl<ExprTy> RawUnary<ExprTy> {
   pub fn new(
     operator: Operator,
     operand: ExprTy,
-    kind: RawUnaryKind,
+    kind: super::UnaryKind,
     span: SourceSpan,
   ) -> Self {
     debug_assert!(operator.unary(), "not a unary operator! got {:?}", operator);
@@ -276,7 +266,7 @@ impl<ExprTy> RawUnary<ExprTy> {
   #[inline(always)]
   pub fn prefix(operator: Operator, operand: ExprTy, span: SourceSpan) -> Self {
     debug_assert!(operator.unary(), "not a unary operator! got {:?}", operator);
-    Self::new(operator, operand, RawUnaryKind::Prefix, span)
+    Self::new(operator, operand, super::UnaryKind::Prefix, span)
   }
 
   #[inline(always)]
@@ -286,7 +276,7 @@ impl<ExprTy> RawUnary<ExprTy> {
     span: SourceSpan,
   ) -> Self {
     debug_assert!(operator.unary(), "not a unary operator! got {:?}", operator);
-    Self::new(operator, operand, RawUnaryKind::Postfix, span)
+    Self::new(operator, operand, super::UnaryKind::Postfix, span)
   }
 }
 
@@ -396,7 +386,7 @@ mod fmt {
 
   impl<'c> Display for RawConstant<'c> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "{}", self.value)
+      write!(f, "{}", self.inner)
     }
   }
 

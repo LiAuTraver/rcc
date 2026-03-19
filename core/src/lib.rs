@@ -7,11 +7,19 @@
 #![feature(const_convert)]
 // for `impl const` traits
 #![feature(const_trait_impl)]
+#![feature(derive_const)]
+#![feature(const_clone)]
+#![feature(const_cmp)]
+#![feature(const_try)]
+#![feature(const_ops)]
+#![feature(const_eval_select)]
 // NTTP
 #![feature(adt_const_params)]
 // for using core::intrinsics::breakpoint
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
+// workaround
+#![feature(thread_local)]
 pub(crate) mod blueprints;
 pub mod codegen;
 #[macro_use]

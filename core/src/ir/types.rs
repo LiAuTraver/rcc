@@ -1,10 +1,10 @@
+use crate::common::FloatFormat;
 /// IR Type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type<'ir> {
   Void(),
   Label(),
-  Float(),
-  Double(),
+  Floating(FloatFormat),
 
   Pointer(),
   Integer(u8),
@@ -20,8 +20,8 @@ pub type TypeRefMut<'ir> = &'ir mut Type<'ir>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 
 pub struct Array<'ir> {
-  element_type: TypeRef<'ir>,
-  length: usize,
+  pub(super) element_type: TypeRef<'ir>,
+  pub(super) length: usize,
 }
 
 impl<'ir> Array<'ir> {
@@ -68,11 +68,10 @@ interconvert!(u8, Type<'ir>, Integer);
 
 make_trio_for_unit_tuple!(Void, Type<'ir>);
 make_trio_for_unit_tuple!(Label, Type<'ir>);
-make_trio_for_unit_tuple!(Float, Type<'ir>);
-make_trio_for_unit_tuple!(Double, Type<'ir>);
 make_trio_for_unit_tuple!(Pointer, Type<'ir>);
 
 make_trio_for!(u8, Type<'ir>, Integer);
+make_trio_for!(FloatFormat, Type<'ir>, Floating);
 make_trio_for!(Array, Type, 'ir);
 make_trio_for!(Function, Type, 'ir);
 make_trio_for!(Struct, Type, 'ir);

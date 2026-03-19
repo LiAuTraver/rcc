@@ -1165,7 +1165,7 @@ impl<'c> Parser<'c> {
     match self.peek_lit().clone() {
       Literal::Operator(op) if op.unary() => {
         self.get();
-        let ((), r_bp) = op.prefix_binding_power();
+        let (.., r_bp) = op.prefix_binding_power();
         let rhs = self.next_expression(r_bp);
         Unary::prefix(op, rhs, self.eloc(location)).into()
       },
@@ -1292,8 +1292,8 @@ impl<'c> Parser<'c> {
   /// [here](https://github.com/rust-lang/rust-analyzer/blob/3cf298f9a92cb4fd0999859821b578bd361d5da2/crates/parser/src/grammar/expressions.rs#L246)
   /// (it's far more complicated than this one, tho).
   ///
-  /// For more information, read this excellent blog
-  /// [post](https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html)
+  /// For more information, read this excellent
+  /// [blog post](https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html)
   /// by Matklad.
   fn next_expression(&mut self, min_bp: u8) -> Expression<'c> {
     let location = *self.peek_loc();
@@ -1306,7 +1306,7 @@ impl<'c> Parser<'c> {
         _ => break,
       };
 
-      if let Some((l_bp, ())) = op.postfix_binding_power() {
+      if let Some((l_bp, ..)) = op.postfix_binding_power() {
         if l_bp < min_bp {
           break;
         }
