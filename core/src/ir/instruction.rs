@@ -1,6 +1,9 @@
 use super::value::ValueID;
 use crate::common::{Operator, Signedness};
 
+pub trait User {
+  fn use_list(&self) -> &[ValueID];
+}
 /// result = phi [val1, label1], [val2, label2]
 ///
 /// left here as placeholder, do it later.
@@ -8,16 +11,34 @@ use crate::common::{Operator, Signedness};
 pub struct Phi {
   pub incomings: Vec<(ValueID, ValueID)>, // (Value, From_Block_Label)
 }
+impl User for Phi {
+  fn use_list(&self) -> &[ValueID] {
+    todo!("implement operands for phi instruction")
+  }
+}
 
 /// Creater must ensure [`Jump::label`] must be am ID points to a [`super::BasicBlock`].
 #[derive(Debug)]
 pub struct Jump {
-  pub to: ValueID,
+  operands: [ValueID; 1],
 }
 
 impl Jump {
   pub fn new(to: ValueID) -> Self {
-    Self { to }
+    Self { operands: [to] }
+  }
+
+  pub fn target(&self) -> ValueID {
+    self.operands[0]
+  }
+
+  pub fn set_target(&mut self, to: ValueID) {
+    self.operands[0] = to;
+  }
+}
+impl User for Jump {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operands
   }
 }
 /// Creater must ensure [`Branch::true_label`] and [`Branch::false_label`] must be am ID points to a [`super::BasicBlock`].
@@ -25,9 +46,7 @@ impl Jump {
 /// The owner of this instruction must ensure the type of [`Branch::cond`] is i1 (boolean).
 #[derive(Debug)]
 pub struct Branch {
-  pub condition: ValueID,
-  pub then_branch: ValueID,
-  pub else_branch: ValueID,
+  operands: [ValueID; 3], // [cond, then_label, else_label]
 }
 
 impl Branch {
@@ -37,21 +56,71 @@ impl Branch {
     else_branch: ValueID,
   ) -> Self {
     Self {
-      condition,
-      then_branch,
-      else_branch,
+      operands: [condition, then_branch, else_branch],
     }
+  }
+
+  pub fn condition(&self) -> ValueID {
+    self.operands[0]
+  }
+
+  pub fn then_branch(&self) -> ValueID {
+    self.operands[1]
+  }
+
+  pub fn else_branch(&self) -> ValueID {
+    self.operands[2]
+  }
+
+  pub fn set_condition(&mut self, condition: ValueID) {
+    self.operands[0] = condition;
+  }
+
+  pub fn set_then_branch(&mut self, then_branch: ValueID) {
+    self.operands[1] = then_branch;
+  }
+
+  pub fn set_else_branch(&mut self, else_branch: ValueID) {
+    self.operands[2] = else_branch;
+  }
+}
+impl User for Branch {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operands
   }
 }
 /// Must match the return type of the function. For void function, [`Return::result`] should be [`None`].
 #[derive(Debug)]
 pub struct Return {
-  pub result: Option<ValueID>,
+  operands: [ValueID; 1], // for void function, this operand should be null
 }
 
 impl Return {
   pub fn new(result: Option<ValueID>) -> Self {
-    Self { result }
+    Self {
+      operands: [result.unwrap_or(ValueID::null())],
+    }
+  }
+
+  pub fn result(&self) -> Option<ValueID> {
+    if self.operands[0].is_null() {
+      None
+    } else {
+      Some(self.operands[0])
+    }
+  }
+
+  pub fn set_result(&mut self, result: Option<ValueID>) {
+    self.operands[0] = result.unwrap_or(ValueID::null());
+  }
+}
+impl User for Return {
+  fn use_list(&self) -> &[ValueID] {
+    if self.operands[0].is_null() {
+      &[]
+    } else {
+      &self.operands
+    }
   }
 }
 #[derive(Debug)]
@@ -64,11 +133,17 @@ pub enum Terminator {
   Return(Return),
 }
 
+impl User for Terminator {
+  fn use_list(&self) -> &[ValueID] {
+    static_dispatch!(self, |variant| variant.use_list() => Jump Branch Return)
+  }
+}
+
 /// result = unary_op operand
 #[derive(Debug)]
 pub struct Unary {
   pub operator: UnaryOp,
-  pub operand: ValueID,
+  pub operand: [ValueID; 1],
 }
 #[derive(Debug)]
 pub enum UnaryOp {
@@ -76,24 +151,68 @@ pub enum UnaryOp {
   Not,
   Compl,
 }
+impl Unary {
+  pub fn new(operator: UnaryOp, operand: ValueID) -> Self {
+    Self {
+      operator,
+      operand: [operand],
+    }
+  }
+
+  pub fn operand(&self) -> ValueID {
+    self.operand[0]
+  }
+
+  pub fn operator(&self) -> &UnaryOp {
+    &self.operator
+  }
+
+  pub fn set_operand(&mut self, operand: ValueID) {
+    self.operand[0] = operand;
+  }
+}
+
+impl User for Unary {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
+  }
+}
+
 /// result = binary_op lhs, rhs
 ///
 /// - The type of `lhs` and `rhs` must be the same.
 /// - `lhs` and `rhs` cannot be [`super::module::Function`], [`super::module::BasicBlock`] or [`super::module::Variable`].  
 #[derive(Debug)]
 pub struct Binary {
-  pub operator: BinaryOp,
-  pub left: ValueID,
-  pub right: ValueID,
+  operator: BinaryOp,
+  // pub left: ValueID,
+  // pub right: ValueID,
+  operand: [ValueID; 2],
 }
 
 impl Binary {
   pub fn new(operator: BinaryOp, left: ValueID, right: ValueID) -> Self {
     Self {
       operator,
-      left,
-      right,
+      operand: [left, right],
     }
+  }
+
+  pub fn operator(&self) -> BinaryOp {
+    self.operator
+  }
+
+  pub fn left(&self) -> ValueID {
+    self.operand[0]
+  }
+
+  pub fn right(&self) -> ValueID {
+    self.operand[1]
+  }
+}
+impl User for Binary {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 // arithematic ops only consider integer for now
@@ -120,17 +239,30 @@ pub enum BinaryOp {
 #[derive(Debug)]
 pub struct ICmp {
   pub predicate: ICmpPredicate,
-  pub lhs: ValueID,
-  pub rhs: ValueID,
+  // pub lhs: ValueID,
+  // pub rhs: ValueID,
+  operand: [ValueID; 2],
 }
 
 impl ICmp {
   pub fn new(predicate: ICmpPredicate, lhs: ValueID, rhs: ValueID) -> Self {
     Self {
       predicate,
-      lhs,
-      rhs,
+      operand: [lhs, rhs],
     }
+  }
+
+  pub fn lhs(&self) -> ValueID {
+    self.operand[0]
+  }
+
+  pub fn rhs(&self) -> ValueID {
+    self.operand[1]
+  }
+}
+impl User for ICmp {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 #[derive(Debug, Clone, Copy, ::strum_macros::Display)]
@@ -174,23 +306,31 @@ impl ICmpPredicate {
 #[derive(Debug)]
 pub struct FCmp {
   pub predicate: FCmpPredicate,
-  pub lhs: ValueID,
-  pub rhs: ValueID,
+  // pub lhs: ValueID,
+  // pub rhs: ValueID,
+  operand: [ValueID; 2],
 }
 
 impl FCmp {
   pub fn new(predicate: FCmpPredicate, lhs: ValueID, rhs: ValueID) -> Self {
     Self {
       predicate,
-      lhs,
-      rhs,
+      operand: [lhs, rhs],
     }
   }
+
+  pub fn lhs(&self) -> ValueID {
+    self.operand[0]
+  }
+
+  pub fn rhs(&self) -> ValueID {
+    self.operand[1]
+  }
 }
-#[derive(Debug)]
-pub enum Cmp {
-  ICmp(ICmp),
-  FCmp(FCmp),
+impl User for FCmp {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
+  }
 }
 #[derive(Debug, Clone, Copy, ::strum_macros::Display)]
 #[strum(serialize_all = "lowercase")]
@@ -210,30 +350,66 @@ pub enum FCmpPredicate {
   Ugt,
   Uge,
 }
+#[derive(Debug)]
+pub enum Cmp {
+  ICmp(ICmp),
+  FCmp(FCmp),
+}
+impl User for Cmp {
+  fn use_list(&self) -> &[ValueID] {
+    static_dispatch!(self, |variant| variant.use_list() => ICmp FCmp)
+  }
+}
 /// Store value to address: *addr = value
 ///
 /// [`Store::addr`] must have pointer type
 #[derive(Debug)]
 pub struct Store {
-  pub into: ValueID,
-  pub from: ValueID,
+  // pub into: ValueID,
+  // pub from: ValueID,
+  operand: [ValueID; 2], // [into, from]
 }
 
 impl Store {
   pub fn new(into: ValueID, from: ValueID) -> Self {
-    Self { into, from }
+    Self {
+      operand: [into, from],
+    }
+  }
+
+  pub fn target(&self) -> ValueID {
+    self.operand[0]
+  }
+
+  pub fn from(&self) -> ValueID {
+    self.operand[1]
+  }
+}
+impl User for Store {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 
 /// Load value from address: result = *addr
 #[derive(Debug)]
 pub struct Load {
-  pub from: ValueID,
+  // pub from: ValueID,
+  operand: [ValueID; 1],
 }
 
 impl Load {
   pub fn new(from: ValueID) -> Self {
-    Self { from }
+    Self { operand: [from] }
+  }
+
+  pub fn from(&self) -> ValueID {
+    self.operand[0]
+  }
+}
+impl User for Load {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 /// Stack allocation.
@@ -247,6 +423,11 @@ impl Alloca {
     Self {}
   }
 }
+impl User for Alloca {
+  fn use_list(&self) -> &[ValueID] {
+    &[]
+  }
+}
 /// memory opeartion's `addr` must have type [`super::Type::Pointer`]
 /// and the pointee type cannot be [`super::Type::Function`] or [`super::Type::Label`] (opaque pointer, we cannotr know, MUST check at construction),
 /// which means the `Value` behind `ValueID` cannnot be a [`super::module::Function`] or [`super::BasicBlock`].
@@ -256,16 +437,31 @@ pub enum Memory {
   Load(Load),
   Alloca(Alloca),
 }
+impl User for Memory {
+  fn use_list(&self) -> &[ValueID] {
+    static_dispatch!(self, |variant| variant.use_list() => Store Load Alloca)
+  }
+}
 /// the target width must be smaller than the operand.
 #[derive(Debug)]
 pub struct Trunc {
   /// operand type must be [`super::Type::Integer`].
-  pub operand: ValueID,
+  // pub operand: ValueID,
+  operand: [ValueID; 1],
 }
 
 impl Trunc {
   pub fn new(operand: ValueID) -> Self {
-    Self { operand }
+    Self { operand: [operand] }
+  }
+
+  pub fn operand(&self) -> ValueID {
+    self.operand[0]
+  }
+}
+impl User for Trunc {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 /// the target width must be larger than the operand.
@@ -273,24 +469,45 @@ impl Trunc {
 #[derive(Debug)]
 pub struct Zext {
   /// operand type must be [`super::Type::Integer`].
-  pub operand: ValueID,
+  // pub operand: ValueID,
+  operand: [ValueID; 1],
 }
 
 impl Zext {
   pub fn new(operand: ValueID) -> Self {
-    Self { operand }
+    Self { operand: [operand] }
+  }
+
+  pub fn operand(&self) -> ValueID {
+    self.operand[0]
+  }
+}
+impl User for Zext {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 /// the target width must be larger than the operand.
 #[derive(Debug)]
 pub struct Sext {
   /// operand type must be [`super::Type::Integer`].
-  pub operand: ValueID,
+  // pub operand: ValueID,
+  operand: [ValueID; 1],
 }
 
 impl Sext {
   pub fn new(operand: ValueID) -> Self {
-    Self { operand }
+    Self { operand: [operand] }
+  }
+
+  pub fn operand(&self) -> ValueID {
+    self.operand[0]
+  }
+}
+
+impl User for Sext {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 
@@ -301,6 +518,11 @@ pub enum Cast {
   Sext(Sext),
   // ...
 }
+impl User for Cast {
+  fn use_list(&self) -> &[ValueID] {
+    static_dispatch!(self, |variant| variant.use_list() => Trunc Zext Sext)
+  }
+}
 
 /// Function call: result = call func(args)
 ///
@@ -309,13 +531,28 @@ pub enum Cast {
 /// - The size of [`Call::args`] must match the parameter count of the parameter counts in [`super::types::Function`].
 #[derive(Debug)]
 pub struct Call {
-  pub callee: ValueID,
-  pub args: Vec<ValueID>,
+  // pub callee: ValueID,
+  // pub args: Vec<ValueID>,
+  operand: Vec<ValueID>, // [callee, arg1, arg2, ...]
 }
 
 impl Call {
-  pub fn new(callee: ValueID, args: Vec<ValueID>) -> Self {
-    Self { callee, args }
+  pub fn new(operand: Vec<ValueID>) -> Self {
+    Self { operand }
+  }
+
+  pub fn callee(&self) -> ValueID {
+    self.operand[0]
+  }
+
+  pub fn args(&self) -> &[ValueID] {
+    &self.operand[1..]
+  }
+}
+
+impl User for Call {
+  fn use_list(&self) -> &[ValueID] {
+    &self.operand
   }
 }
 
@@ -331,7 +568,17 @@ pub enum Instruction {
   Call(Call),
   Cmp(Cmp),
 }
-use ::rcc_utils::{interconvert, make_trio_for};
+impl User for Instruction {
+  fn use_list(&self) -> &[ValueID] {
+    static_dispatch!(
+      self,
+      |variant| variant.use_list() => Phi Terminator Unary Binary Memory Cast Call Cmp
+    )
+  }
+}
+
+use ::rcc_utils::{interconvert, make_trio_for, static_dispatch};
+use ::slotmap::Key;
 
 interconvert!(Branch, Terminator);
 interconvert!(Jump, Terminator);

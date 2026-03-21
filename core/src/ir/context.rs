@@ -1,5 +1,8 @@
+use ::slotmap::Key;
+
 use super::{
   Type, TypeRef, Value, ValueID,
+  instruction::User,
   types::{Array, Function},
   value::{WithAction, WithActionMut},
 };
@@ -102,7 +105,8 @@ impl<'c> Context<'c> {
       let value_id = self.storage.ir_arena.borrow_mut().insert(Value::new(
         qualified_type,
         self.ir_type(&qualified_type),
-        value.clone().into(),
+        value.clone(),
+        Default::default(),
       ));
       self
         .storage
@@ -155,7 +159,36 @@ impl<'c> Context<'c> {
 use ::std::cell::{Ref, RefMut};
 impl<'c> Context<'c> {
   pub fn insert(&self, value: Value<'c>) -> ValueID {
-    self.storage.ir_arena.borrow_mut().insert(value)
+    let user = self.storage.ir_arena.borrow_mut().insert(value);
+    self.new_use_def_chain(user);
+    self.apply_mut(user, |value| {
+      value
+        .use_list()
+        .iter()
+        .filter(|&usee| !usee.is_null())
+        .for_each(|usee| self.add_user_for(user, *usee));
+    });
+    user
+  }
+
+  pub fn add_user_for(&self, user: ValueID, usee: ValueID) {
+    self
+      .storage
+      .ir_def_use
+      .borrow_mut()
+      .entry(usee)
+      .expect("not inserted, or key is null")
+      .and_modify(|users| users.push(user));
+  }
+
+  pub fn new_use_def_chain(&self, user: ValueID) {
+    assert!(!user.is_null());
+    let _ = self
+      .storage
+      .ir_def_use
+      .borrow_mut()
+      .insert(user, Default::default())
+      .is_none_or(|_| panic!("{user:#?} has already inserted..."));
   }
 
   pub fn get(&self, id: ValueID) -> Ref<'_, Value<'c>> {
@@ -165,6 +198,14 @@ impl<'c> Context<'c> {
   pub fn get_mut(&self, id: ValueID) -> RefMut<'_, Value<'c>> {
     RefMut::map(self.storage.ir_arena.borrow_mut(), |slotmap| {
       &mut slotmap[id]
+    })
+  }
+
+  pub fn get_use_list(&self, usee: ValueID) -> Ref<'_, Vec<ValueID>> {
+    Ref::map(self.storage.ir_def_use.borrow(), |def_use| {
+      def_use
+        .get(usee)
+        .unwrap_or_else(|| panic!("usee {usee:#?} not found in def-use chain"))
     })
   }
 

@@ -2,9 +2,8 @@ use super::value::ValueID;
 use crate::{common::StrRef, types::Constant};
 #[derive(Debug, Default)]
 pub struct Module {
-  /// global function and variable entry. Shall be either [`Function`] or [`Variable`].
+  /// global function and variable entry. Shall be either [`Function`] or [`Variable`], or [`Constant`].
   pub globals: Vec<ValueID>,
-  // pub constants: Vec<ValueID>,
 }
 
 /// **Global** function in TAC-SSA form
@@ -86,13 +85,12 @@ impl BasicBlock {
 #[derive(Debug)]
 pub struct Argument {
   /// Shall be [`Function`].
-  pub function: ValueID,
   pub index: usize,
 }
 
 impl Argument {
-  pub fn new(function: ValueID, index: usize) -> Self {
-    Self { function, index }
+  pub fn new(index: usize) -> Self {
+    Self { index }
   }
 }
 

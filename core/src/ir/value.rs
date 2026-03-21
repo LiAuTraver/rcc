@@ -3,7 +3,7 @@ use ::std::cell::{Ref, RefMut};
 
 use super::{
   Argument, BasicBlock, TypeRef,
-  instruction::Instruction,
+  instruction::{Instruction, User},
   module::{Function, Variable},
 };
 use crate::types::{Constant, QualifiedType};
@@ -13,11 +13,6 @@ new_key_type! {
 }
 
 impl ValueID {
-  #[inline]
-  pub fn is_none(&self) -> bool {
-    self.is_null()
-  }
-
   #[inline]
   pub fn is_some_and<F: FnOnce(Self) -> bool>(self, f: F) -> bool {
     !self.is_null() && f(self)
@@ -46,6 +41,11 @@ impl ValueID {
   pub fn handle(&self) -> u64 {
     self.0.as_ffi()
   }
+
+  #[inline]
+  pub fn to_option(self) -> Option<Self> {
+    if self.is_null() { None } else { Some(self) }
+  }
 }
 
 #[derive(Debug)]
@@ -57,6 +57,45 @@ pub enum Data<'c> {
   BasicBlock(BasicBlock),
   Argument(Argument),
 }
+impl User for Data<'_> {
+  fn use_list(&self) -> &[ValueID] {
+    ::rcc_utils::static_dispatch!(
+      self, |variant| variant.use_list() =>
+      Instruction Constant Function Variable BasicBlock Argument
+    )
+  }
+}
+
+impl User for Argument {
+  fn use_list(&self) -> &[ValueID] {
+    &[]
+  }
+}
+impl User for BasicBlock {
+  fn use_list(&self) -> &[ValueID] {
+    &[]
+  }
+}
+
+impl User for Constant<'_> {
+  fn use_list(&self) -> &[ValueID] {
+    // TODO
+    &[]
+  }
+}
+impl User for Function<'_> {
+  fn use_list(&self) -> &[ValueID] {
+    // TODO
+    &[]
+  }
+}
+
+impl User for Variable<'_> {
+  fn use_list(&self) -> &[ValueID] {
+    // TODO
+    &[]
+  }
+}
 
 #[derive(Debug)]
 pub struct Value<'c> {
@@ -64,34 +103,27 @@ pub struct Value<'c> {
   pub qualified_type: QualifiedType<'c>,
   pub ir_type: TypeRef<'c>,
   pub data: Data<'c>,
-  pub use_list: Vec<ValueID>,
+  pub parent: ValueID,
+}
+
+impl User for Value<'_> {
+  fn use_list(&self) -> &[ValueID] {
+    self.data.use_list()
+  }
 }
 
 impl<'c> Value<'c> {
   pub fn new(
     qualified_type: QualifiedType<'c>,
     ir_type: TypeRef<'c>,
-    value: Data<'c>,
+    value: impl Into<Data<'c>>,
+    parent: ValueID,
   ) -> Self {
     Self {
       qualified_type,
       ir_type,
-      data: value,
-      use_list: Default::default(),
-    }
-  }
-
-  pub fn with_users(
-    qualified_type: QualifiedType<'c>,
-    ir_type: TypeRef<'c>,
-    value: Data<'c>,
-    use_list: Vec<ValueID>,
-  ) -> Self {
-    Self {
-      qualified_type,
-      ir_type,
-      data: value,
-      use_list,
+      data: value.into(),
+      parent,
     }
   }
 }

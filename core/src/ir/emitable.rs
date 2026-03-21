@@ -44,7 +44,8 @@ impl<'c> Emitable<'c, inst::Alloca> for Emitter<'c> {
     let value_id = self.ir().insert(Value::new(
       qualified_type,
       self.ir().pointer_type(),
-      Instruction::from(inst::Memory::from(alloca)).into(),
+      Instruction::from(inst::Memory::from(alloca)),
+      self.current_block,
     ));
 
     self.apply_mut(self.current_block, |value| {
@@ -156,7 +157,6 @@ impl<'c> Emitter<'c> {
     &self,
     value: T,
     qualified_type: QualifiedType<'c>,
-    // users: Vec<ValueID>,
   ) -> ValueID {
     if self.current_block.is_null() {
       panic!("no block to emit into")
@@ -164,7 +164,8 @@ impl<'c> Emitter<'c> {
     let value_id = self.ir().insert(Value::new(
       qualified_type,
       ty!(self, qualified_type),
-      value.into().into(),
+      value.into(),
+      self.current_block,
     ));
     self.apply_mut(self.current_block, |value| {
       value
@@ -185,6 +186,7 @@ impl<'c> Emitter<'c> {
       qualified_type,
       ty!(self, qualified_type),
       value.into(),
+      Default::default(),
     ));
     self.module.globals.push(value_id);
     value_id
@@ -200,11 +202,11 @@ impl<'c> Emitter<'c> {
       panic!("no block to emit terminator into")
     }
 
-    let value_id = self.ir().insert(Value::with_users(
+    let value_id = self.ir().insert(Value::new(
       qualified_type,
       ty!(self, qualified_type),
-      Instruction::from(terminator.into()).into(),
-      vec![block_id],
+      Instruction::from(terminator.into()),
+      self.current_block,
     ));
 
     self.apply_mut(block_id, |value| {
@@ -255,7 +257,8 @@ impl<'c> Emitable<'c, Argument> for Emitter<'c> {
     self.ir().insert(Value::new(
       qualified_type,
       ty!(self, qualified_type),
-      value.into(),
+      value,
+      self.current_function,
     ))
   }
 }

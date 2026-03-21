@@ -8,6 +8,7 @@ use ::std::{cell::RefMut, collections::HashMap};
 
 use super::{
   Argument,
+  dump::counter,
   emitable::Emitable,
   instruction::{self as inst},
   module::{self, BasicBlock, Module},
@@ -29,7 +30,8 @@ pub struct Emitter<'c> {
   /// The basic block currently being written into
   pub(super) current_block: ValueID,
   /// Blocks finalized in the current function
-  pub(super) current_blocks: Vec<ValueID>,
+  pub(super) current_function: ValueID,
+  // pub(super) current_blocks: Vec<ValueID>,
   pub(super) locals: HashMap<SymbolPtr<'c>, ValueID>,
   /// function name → ValueID for call resolution
   pub(super) globals: HashMap<SymbolPtr<'c>, ValueID>,
@@ -65,7 +67,7 @@ impl<'c> Emitter<'c> {
     Self {
       session,
       current_block: Default::default(),
-      current_blocks: Default::default(),
+      current_function: Default::default(),
       locals: Default::default(),
       globals: Default::default(),
       module: Default::default(),
@@ -107,7 +109,7 @@ impl<'c> Emitter<'c> {
   }
 }
 impl<'c> Emitter<'c> {
-  #[must_use]
+  #[must_use = "it is recommended that we use returned value as assertion."]
   fn push_block(&mut self, block_id: ValueID) -> ValueID {
     let old_id = self.seal_current_block();
     self.current_block = block_id;
@@ -117,6 +119,7 @@ impl<'c> Emitter<'c> {
   #[must_use]
   fn seal_current_block(&mut self) -> ValueID {
     let current_block_id = self.current_block;
+
     current_block_id.and_then(|block_id| {
       assert!(
         !lookup!(self, self.current_block)
@@ -124,9 +127,14 @@ impl<'c> Emitter<'c> {
           .as_basicblock_unchecked()
           .terminator
           .is_null(),
-        "BasicBlock must ends with a proper terminator."
+        "BasicBlock must ends with a proper terminator before adding it to \
+         parent function."
       );
-      self.current_blocks.push(self.current_block);
+      lookup_mut!(self, self.current_function)
+        .data
+        .as_function_mut_unchecked()
+        .blocks
+        .push(self.current_block);
       self.current_block = ValueID::null();
       current_block_id
     })
@@ -134,56 +142,51 @@ impl<'c> Emitter<'c> {
 
   #[must_use]
   fn new_block(
+    &mut self,
     basic_block: BasicBlock,
-    session: SessionRef<'c>,
     users: Vec<ValueID>,
   ) -> ValueID {
-    session.ir().insert(Value::with_users(
-      session.ast().void_type().into(),
-      session.ir().label_type(),
-      basic_block.into(),
-      users,
+    debug_assert!(!self.current_function.is_null());
+    self.ir().insert(Value::new(
+      self.ast().void_type().into(),
+      self.ir().label_type(),
+      basic_block,
+      self.current_function,
     ))
   }
 
   fn refill_branch(
     &mut self,
-    now_block_terminator: ValueID,
+    branch_id: ValueID,
     then_block_id: ValueID,
     else_block_id: ValueID,
-  ) {
-    lookup_mut!(self, now_block_terminator).with_action_mut(|now| {
+  ) -> ValueID {
+    lookup_mut!(self, branch_id).with_action_mut(|now| {
       let branch = now
         .data
         .as_instruction_mut_unchecked()
         .as_terminator_mut_unchecked()
         .as_branch_mut_unchecked();
-      branch.else_branch = else_block_id;
-      branch.then_branch = then_block_id;
+      branch.set_else_branch(else_block_id);
+      branch.set_then_branch(then_block_id);
     });
+    self.ir().add_user_for(branch_id, then_block_id);
+    self.ir().add_user_for(branch_id, else_block_id);
+    branch_id
   }
 
-  fn refill_terminator(
-    &mut self,
-    terminator_id: ValueID,
-    to_block_id: ValueID,
-  ) -> ValueID {
-    lookup_mut!(self, terminator_id).with_action_mut(|term| {
-      match term
+  /// terminator return also handlede here, but no effect.
+  fn refill_jump(&mut self, jump_id: ValueID, to_block_id: ValueID) -> ValueID {
+    lookup_mut!(self, jump_id).with_action_mut(|jump| {
+      jump
         .data
         .as_instruction_mut_unchecked()
         .as_terminator_mut_unchecked()
-      {
-        inst::Terminator::Jump(jump) => jump.to = to_block_id,
-        inst::Terminator::Branch(branch) => branch.then_branch = to_block_id,
-        inst::Terminator::Return(_) => (),
-      }
-      terminator_id
-    })
-  }
-
-  fn is_global(&self) -> bool {
-    self.current_block.is_null()
+        .as_jump_mut()
+        .map(|j| j.set_target(to_block_id))
+    });
+    self.ir().add_user_for(jump_id, to_block_id);
+    jump_id
   }
 }
 
@@ -243,7 +246,7 @@ impl<'c> Emitter<'c> {
   fn global_funcdef(&mut self, function: sd::Function<'c>) {
     assert!(function.is_definition());
 
-    let function_id = if let Some(&value_id) =
+    self.current_function = if let Some(&value_id) =
       self.globals.get(&(function.symbol.as_ptr() as *const _))
     {
       // should be function and declaration-only
@@ -293,14 +296,15 @@ impl<'c> Emitter<'c> {
       parameters, body, ..
     } = function;
     self.locals.clear();
-    self.current_blocks = Default::default();
+
     assert!(self.current_block.is_null());
 
-    let block_id = Self::new_block(Default::default(), self.session(), vec![]);
+    let block_id = self.new_block(Default::default(), vec![]);
 
-    _ = self.push_block(block_id);
+    assert!(self.push_block(block_id).is_null());
+
     let params = {
-      let return_type = lookup!(self, function_id)
+      let return_type = lookup!(self, self.current_function)
         .qualified_type
         .as_functionproto_unchecked()
         .return_type;
@@ -321,8 +325,7 @@ impl<'c> Emitter<'c> {
         .enumerate()
         .map(|(index, parameter)| {
           let qualified_type = parameter.symbol.borrow().qualified_type;
-          let arg_id =
-            self.emit(Argument::new(function_id, index), qualified_type);
+          let arg_id = self.emit(Argument::new(index), qualified_type);
           self.locals.insert(parameter.symbol.as_ptr(), arg_id);
           let localed_arg_id = self.emit(inst::Alloca::new(), qualified_type);
           _ = self.emit(
@@ -335,11 +338,6 @@ impl<'c> Emitter<'c> {
     };
     self.compound(body.expect("Precondition: function.is_definition()"));
     _ = self.seal_current_block();
-
-    let mut refmut = lookup_mut!(self, function_id);
-    let mutref = refmut.data.as_function_mut_unchecked();
-    mutref.params = params;
-    mutref.blocks = ::std::mem::take(&mut self.current_blocks);
 
     self.locals.clear();
   }
@@ -368,7 +366,7 @@ impl<'c> Emitter<'c> {
   }
 
   fn local_decl(&mut self, external_declaration: sd::ExternalDeclaration<'c>) {
-    debug_assert!(!self.is_global());
+    debug_assert!(!self.current_block.is_null());
     match external_declaration {
       sd::ExternalDeclaration::Function(function) => {
         debug_assert!(function.is_declaration());
@@ -476,14 +474,11 @@ impl<'c> Emitter<'c> {
         ValueID::null(),
         ValueID::null(),
       )),
-      self.i1(),
+      self.void(),
     );
 
-    let then_block_id = Self::new_block(
-      Default::default(),
-      self.session(),
-      vec![now_block_terminator],
-    );
+    let then_block_id =
+      self.new_block(Default::default(), vec![now_block_terminator]);
     let should_be_now = self.push_block(then_block_id);
     assert!(should_be_now == now_block_id);
 
@@ -504,11 +499,8 @@ impl<'c> Emitter<'c> {
       })
     };
 
-    let else_block_id = Self::new_block(
-      Default::default(),
-      self.session(),
-      vec![now_block_terminator],
-    );
+    let else_block_id =
+      self.new_block(Default::default(), vec![now_block_terminator]);
     let shuold_be_then = self.push_block(else_block_id);
     assert!(shuold_be_then == then_block_id);
 
@@ -531,18 +523,17 @@ impl<'c> Emitter<'c> {
       })
       .unwrap_or_default()
       .and_then(|else_block_terminator| {
-        let immediate_block_id = Self::new_block(
+        let immediate_block_id = self.new_block(
           Default::default(),
-          self.session(),
           vec![then_block_terminator, else_block_terminator],
         );
         let should_be_else = self.push_block(immediate_block_id);
         assert!(should_be_else == else_block_id);
 
-        self.refill_terminator(then_block_terminator, immediate_block_id);
-        self.refill_terminator(else_block_terminator, immediate_block_id)
+        self.refill_jump(then_block_terminator, immediate_block_id);
+        self.refill_jump(else_block_terminator, immediate_block_id)
       })
-      .or_else(|| self.refill_terminator(then_block_terminator, else_block_id));
+      .or_else(|| self.refill_jump(then_block_terminator, else_block_id));
   }
 
   fn while_stmt(&self, while_stmt: ss::While<'c>) {
@@ -843,7 +834,8 @@ impl<'c> Emitter<'c> {
       .map(|arg| self.expression(arg))
       .collect();
 
-    self.emit(inst::Call::new(callee, args), qualified_type)
+    todo!()
+    // self.emit(inst::Call::new(callee, args), qualified_type)
   }
 
   #[inline]
