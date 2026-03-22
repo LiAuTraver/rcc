@@ -1,3 +1,3 @@
 [workspace]
-members = ["core/*", "utils", "compiler"]
+members = ["utils", "compiler/*"]
 resolver = "3"

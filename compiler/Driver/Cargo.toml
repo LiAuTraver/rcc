@@ -1,0 +1,18 @@
+[package]
+name = "rcc"
+version = "0.1.0"
+edition = "2024"
+authors = ["LiAuTraver"]
+license-file = "LICENSE"
+homepage = "https://github.com/LiAuTraver/rcc"
+readme = "README.md"
+
+[dependencies]
+rcc-utils = { path = "../../utils" }
+rcc-shared = { path = "../Shared" }
+rcc-ast = { path = "../AST" }
+rcc-lex = { path = "../Lex" }
+rcc-parse = { path = "../Parse" }
+rcc-sema = { path = "../Sema" }
+rcc-ir = { path = "../IR" }
+rcc-serialize = { path = "../Serialize" }

@@ -1,0 +1,16 @@
+[package]
+name = "rcc-serialize"
+version = "0.1.0"
+edition = "2024"
+authors = ["LiAuTraver"]
+
+[dependencies]
+
+rcc-utils = { path = "../../utils" }
+rcc-adt = { path = "../ADT" }
+rcc-shared = { path = "../Shared" }
+rcc-ast = { path = "../AST" }
+rcc-sema = { path = "../Sema" }
+rcc-ir = { path = "../IR" }
+
+termcolor = "1.4.1"
