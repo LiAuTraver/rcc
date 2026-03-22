@@ -14,3 +14,4 @@ rcc-sema = { path = "../Sema" }
 rcc-ir = { path = "../IR" }
 
 termcolor = "1.4.1"
+slotmap = "1.1.1"

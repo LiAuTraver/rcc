@@ -2,44 +2,11 @@ use ::rcc_ast::{Context, Session};
 use ::rcc_shared::{Diagnosis, SourceManager, SourceSpan};
 use ::termcolor::{BufferedStandardStream, ColorChoice, ColorSpec};
 
-use crate::{FlushOnDropRAII, Palette, StickyWriter, TreeDumper};
+use crate::{FlushOnDropRAII, Palette, RenderEngine, StickyWriter, TreeDumper};
 
-pub trait Dumper<'c> {
-  #[inline(always)]
-  fn write<T: ::std::fmt::Display>(&mut self, arg: T, spec: &ColorSpec) {
-    self.write_fmt(format_args!("{}", arg), spec)
-  }
-
-  #[inline(always)]
-  fn writeln<T: ::std::fmt::Display>(&mut self, arg: T, spec: &ColorSpec) {
-    self.write_fmt(format_args!("{}\n", arg), spec)
-  }
-
-  fn write_fmt(&mut self, args: ::std::fmt::Arguments<'_>, spec: &ColorSpec);
-
-  #[inline(always)]
-  fn writeln_fmt(&mut self, args: ::std::fmt::Arguments<'_>, spec: &ColorSpec) {
-    self.write_fmt(format_args!("{}\n", args), spec)
-  }
-
-  fn newline(&mut self);
-
-  fn print_indent(&mut self, prefix: &str, is_last: bool);
-
-  /// Build the new prefix for children based on whether the current node is the last child.
-  #[must_use]
-  fn child_prefix(&self, prefix: &str, is_last: bool) -> String;
-
-  #[must_use]
-  fn palette(&self) -> &Palette;
-
-  #[must_use]
-  fn src(&self) -> &'c SourceManager;
-
+pub trait Dumper<'c>: RenderEngine<'c> {
   #[must_use]
   fn ast(&self) -> &'c Context<'c>;
-
-  fn finalize(self) -> ::std::io::Result<()>;
 }
 
 type Inner = TreeDumper<"├── ", "└── ", "│   ", "    ", "">;
@@ -50,7 +17,7 @@ pub struct ASTDumper<'c> {
   manager: &'c SourceManager,
 }
 
-impl<'c> Dumper<'c> for ASTDumper<'c> {
+impl<'c> RenderEngine<'c> for ASTDumper<'c> {
   fn write_fmt(&mut self, args: ::std::fmt::Arguments<'_>, spec: &ColorSpec) {
     self.inner.write_fmt(args, spec);
   }
@@ -78,7 +45,9 @@ impl<'c> Dumper<'c> for ASTDumper<'c> {
   fn src(&self) -> &'c SourceManager {
     self.manager
   }
+}
 
+impl<'c> Dumper<'c> for ASTDumper<'c> {
   fn ast(&self) -> &'c Context<'c> {
     self.context
   }

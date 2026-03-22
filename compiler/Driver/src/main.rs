@@ -5,7 +5,7 @@ use ::rcc_ir::{
 use ::rcc_lex::Lexer;
 use ::rcc_parse::Parser;
 use ::rcc_sema::Sema;
-use ::rcc_serialize::{ASTDumper, IRPrinter};
+use ::rcc_serialize::{render_ast, render_ir};
 use ::rcc_shared::{Arena, Diagnosis, OpDiag, SourceManager};
 use ::rcc_utils::DisplayWith;
 enum Stage {
@@ -128,7 +128,7 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
       .iter()
       .for_each(|e| eprintln!("{}", e.display_with(ast_session.src())));
   }
-  ASTDumper::dump(&translation_unit, &ast_session).unwrap();
+  render_ast(&translation_unit, &ast_session).unwrap();
   if let Stage::Analyze = stage {
     return 0;
   }
@@ -144,7 +144,7 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
 
   let m = builder.build(translation_unit);
   println!("{m:#?}");
-  IRPrinter::print(&m, &session).unwrap();
+  render_ir(&m, &session).unwrap();
   0
 }
 

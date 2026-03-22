@@ -191,6 +191,7 @@ dependencies = [
  "rcc-sema",
  "rcc-shared",
  "rcc-utils",
+ "slotmap",
  "termcolor",
 ]
 
