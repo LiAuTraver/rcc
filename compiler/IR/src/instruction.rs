@@ -144,8 +144,8 @@ impl User for Terminator {
 /// result = unary_op operand
 #[derive(Debug)]
 pub struct Unary {
-  pub operator: UnaryOp,
-  pub operand: [ValueID; 1],
+  operator: UnaryOp,
+  operand: [ValueID; 1],
 }
 #[derive(Debug)]
 pub enum UnaryOp {
@@ -187,8 +187,6 @@ impl User for Unary {
 #[derive(Debug)]
 pub struct Binary {
   operator: BinaryOp,
-  // pub left: ValueID,
-  // pub right: ValueID,
   operand: [ValueID; 2],
 }
 
@@ -240,9 +238,7 @@ pub enum BinaryOp {
 
 #[derive(Debug)]
 pub struct ICmp {
-  pub predicate: ICmpPredicate,
-  // pub lhs: ValueID,
-  // pub rhs: ValueID,
+  predicate: ICmpPredicate,
   operand: [ValueID; 2],
 }
 
@@ -252,6 +248,10 @@ impl ICmp {
       predicate,
       operand: [lhs, rhs],
     }
+  }
+
+  pub fn predicate(&self) -> ICmpPredicate {
+    self.predicate
   }
 
   pub fn lhs(&self) -> ValueID {
@@ -307,7 +307,7 @@ impl ICmpPredicate {
 
 #[derive(Debug)]
 pub struct FCmp {
-  pub predicate: FCmpPredicate,
+  predicate: FCmpPredicate,
   // pub lhs: ValueID,
   // pub rhs: ValueID,
   operand: [ValueID; 2],
@@ -319,6 +319,10 @@ impl FCmp {
       predicate,
       operand: [lhs, rhs],
     }
+  }
+
+  pub fn predicate(&self) -> FCmpPredicate {
+    self.predicate
   }
 
   pub fn lhs(&self) -> ValueID {
@@ -367,23 +371,21 @@ impl User for Cmp {
 /// [`Store::addr`] must have pointer type
 #[derive(Debug)]
 pub struct Store {
-  // pub into: ValueID,
-  // pub from: ValueID,
-  operand: [ValueID; 2], // [into, from]
+  operand: [ValueID; 2],
 }
 
 impl Store {
-  pub fn new(into: ValueID, from: ValueID) -> Self {
+  pub fn new(target: ValueID, from: ValueID) -> Self {
     Self {
-      operand: [into, from],
+      operand: [target, from],
     }
   }
 
-  pub fn target(&self) -> ValueID {
+  pub fn data(&self) -> ValueID {
     self.operand[0]
   }
 
-  pub fn from(&self) -> ValueID {
+  pub fn addr(&self) -> ValueID {
     self.operand[1]
   }
 }
@@ -396,7 +398,6 @@ impl User for Store {
 /// Load value from address: result = *addr
 #[derive(Debug)]
 pub struct Load {
-  // pub from: ValueID,
   operand: [ValueID; 1],
 }
 
@@ -405,7 +406,7 @@ impl Load {
     Self { operand: [from] }
   }
 
-  pub fn from(&self) -> ValueID {
+  pub fn addr(&self) -> ValueID {
     self.operand[0]
   }
 }
@@ -535,26 +536,26 @@ impl User for Cast {
 pub struct Call {
   // pub callee: ValueID,
   // pub args: Vec<ValueID>,
-  operand: Vec<ValueID>, // [callee, arg1, arg2, ...]
+  operands: Vec<ValueID>, // [callee, arg1, arg2, ...]
 }
 
 impl Call {
-  pub fn new(operand: Vec<ValueID>) -> Self {
-    Self { operand }
+  pub fn new(operands: Vec<ValueID>) -> Self {
+    Self { operands }
   }
 
   pub fn callee(&self) -> ValueID {
-    self.operand[0]
+    self.operands[0]
   }
 
   pub fn args(&self) -> &[ValueID] {
-    &self.operand[1..]
+    &self.operands[1..]
   }
 }
 
 impl User for Call {
   fn use_list(&self) -> &[ValueID] {
-    &self.operand
+    &self.operands
   }
 }
 

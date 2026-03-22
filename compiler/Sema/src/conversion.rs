@@ -88,41 +88,14 @@ impl<'c> Expression<'c> {
   }
 
   #[must_use]
-  pub fn contextually_convertible_to_bool(self) -> Result<Self, Diag<'c>> {
-    match self.unqualified_type() {
-      Type::Pointer(_) => Ok(self),
-      Type::Primitive(p) if p.is_arithmetic() => Ok(self),
-      Type::Primitive(Primitive::Void) => Err(
-        InvalidConversion(
-          "cannot convert void to int in conditional conversion".to_string(),
-        )
-        .into_with(Severity::Error)
-        .into_with(self.span()),
-      ),
-      Type::Primitive(_) => Err(
-        InvalidConversion(format!(
-          "cannot convert '{}' to int in conditional conversion",
-          self.unqualified_type()
-        ))
-        .into_with(Severity::Error)
-        .into_with(self.span()),
-      ),
-      Type::Array(array) => panic!(
-        "should be decayed before conditional conversion: {:#?}",
-        array
-      ),
-
-      Type::FunctionProto(function_proto) => panic!(
-        "should be decayed before conditional conversion: {:#?}",
-        function_proto
-      ),
-      Type::Enum(e) => {
-        todo!("conditional conversion for enum types {:#?}", e)
-      },
-      Type::Record(_) | Type::Union(_) => {
-        todo!("conditional conversion for complex types")
-      },
-    }
+  #[inline]
+  pub fn is_contextually_convertible_to_bool(self) -> Result<Self, Diag<'c>> {
+    assert!(
+      !self.is_lvalue(),
+      "perform lvalue_conversion() first; an lvalue is not contextually \
+       convertible to bool"
+    );
+    Self::is_contextually_convertible_to_bool_unchecked(self)
   }
 
   /// If an expression of any other type is evaluated as a void expression, its value or designator is discarded.
@@ -445,6 +418,46 @@ impl<'c> Expression<'c> {
         context.i1_bool_type().into(),
       )),
 
+      Type::Array(array) => panic!(
+        "should be decayed before conditional conversion: {:#?}",
+        array
+      ),
+
+      Type::FunctionProto(function_proto) => panic!(
+        "should be decayed before conditional conversion: {:#?}",
+        function_proto
+      ),
+      Type::Enum(e) => {
+        todo!("conditional conversion for enum types {:#?}", e)
+      },
+      Type::Record(_) | Type::Union(_) => {
+        todo!("conditional conversion for complex types")
+      },
+    }
+  }
+
+  #[must_use]
+  pub fn is_contextually_convertible_to_bool_unchecked(
+    self,
+  ) -> Result<Self, Diag<'c>> {
+    match self.unqualified_type() {
+      Type::Pointer(_) => Ok(self),
+      Type::Primitive(p) if p.is_arithmetic() => Ok(self),
+      Type::Primitive(Primitive::Void) => Err(
+        InvalidConversion(
+          "cannot convert void to int in conditional conversion".to_string(),
+        )
+        .into_with(Severity::Error)
+        .into_with(self.span()),
+      ),
+      Type::Primitive(_) => Err(
+        InvalidConversion(format!(
+          "cannot convert '{}' to int in conditional conversion",
+          self.unqualified_type()
+        ))
+        .into_with(Severity::Error)
+        .into_with(self.span()),
+      ),
       Type::Array(array) => panic!(
         "should be decayed before conditional conversion: {:#?}",
         array

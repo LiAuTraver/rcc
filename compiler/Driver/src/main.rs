@@ -133,7 +133,7 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));
-  let ir_context = arena.alloc(IRContext::new(&arena));
+  let ir_context = arena.alloc(IRContext::new(&arena, ast_context));
   let session = IRSession::new(
     ast_session.diag(),
     ast_session.src(),

@@ -63,6 +63,11 @@ impl<'c> Emitable<'c, inst::Unary> for Emitter<'c> {
     value: inst::Unary,
     qualified_type: QualifiedType<'c>,
   ) -> ValueID {
+    assert!(self.apply(value.operand(), |val| {
+      val.ir_type.is_pointer()
+        || val.ir_type.is_integer()
+        || val.ir_type.is_floating()
+    }));
     self.emit_common_instruction(value, qualified_type)
   }
 }

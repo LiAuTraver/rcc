@@ -326,14 +326,14 @@ impl<'c> Print<'c, module::BasicBlock> for Value<'c> {
           inst::Memory::Store(store),
         )) => {
           Print::print(&*value, printer, "", is_last, palette, store);
-          print_users(printer, palette, inst_id);
+          // print_users(printer, palette, inst_id);
         },
         _ => {
           printer
             .write_fmt(pre!("%"=> printer.get_id(inst_id)), &palette.skeleton);
           printer.write(" = ", &palette.skeleton);
           Printable::print(&*value, printer, "", is_last, palette);
-          print_users(printer, palette, inst_id);
+          // print_users(printer, palette, inst_id);
         },
       }
       printer.newline();
@@ -351,7 +351,7 @@ impl<'c> Print<'c, module::BasicBlock> for Value<'c> {
         .as_instruction_unchecked()
         .as_terminator_unchecked(),
     );
-    print_users(printer, palette, variant.terminator);
+    // print_users(printer, palette, variant.terminator);
     printer.newline();
   }
 }
@@ -503,7 +503,7 @@ impl<'c> Print<'c, inst::ICmp> for Value<'c> {
     variant: &inst::ICmp,
   ) {
     printer.write("icmp ", &palette.literal);
-    printer.write(suff!(" " => variant.predicate), &palette.literal);
+    printer.write(suff!(" " => variant.predicate()), &palette.literal);
 
     self::pretty_print_contant_or_id(printer, variant.lhs(), palette, true);
     printer.write(", ", &palette.skeleton);
@@ -521,7 +521,7 @@ impl<'c> Print<'c, inst::FCmp> for Value<'c> {
     variant: &inst::FCmp,
   ) {
     printer.write("fcmp ", &palette.literal);
-    printer.write(suff!(" " => variant.predicate), &palette.literal);
+    printer.write(suff!(" " => variant.predicate()), &palette.literal);
 
     self::pretty_print_contant_or_id(printer, variant.lhs(), palette, true);
     printer.write(", ", &palette.skeleton);
@@ -624,11 +624,11 @@ impl<'c> Print<'c, inst::Load> for Value<'c> {
     printer.write(self.ir_type, &palette.meta);
     printer.write(", ", &palette.skeleton);
 
-    debug_assert!(lookup!(printer, variant.from()).ir_type.is_pointer());
+    debug_assert!(lookup!(printer, variant.addr()).ir_type.is_pointer());
 
     printer.write("ptr ", &palette.meta);
     printer.write(
-      pre!("%" => printer.get_id(variant.from())),
+      pre!("%" => printer.get_id(variant.addr())),
       &palette.skeleton,
     );
   }
@@ -645,15 +645,15 @@ impl<'c> Print<'c, inst::Store> for Value<'c> {
     printer.write(prefix, &palette.dim);
     printer.write("store ", &palette.literal);
 
-    self::pretty_print_contant_or_id(printer, variant.from(), palette, true);
+    self::pretty_print_contant_or_id(printer, variant.addr(), palette, true);
 
     printer.write(", ", &palette.skeleton);
 
-    debug_assert!(lookup!(printer, variant.target()).ir_type.is_pointer());
+    debug_assert!(lookup!(printer, variant.data()).ir_type.is_pointer());
 
     printer.write("ptr ", &palette.meta);
     printer.write(
-      pre!("%" => printer.get_id(variant.target())),
+      pre!("%" => printer.get_id(variant.data())),
       &palette.skeleton,
     );
   }

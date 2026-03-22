@@ -1,4 +1,4 @@
-use ::rcc_adt::FloatFormat;
+use ::rcc_adt::{FloatFormat, Integral};
 use ::rcc_ast::{
   Context as ASTContext,
   types::{self, QualifiedType},
@@ -26,6 +26,10 @@ pub struct Context<'c> {
   ir_def_use: RefCell<SecondaryMap<ValueID, Vec<ValueID>>>,
 
   ir_type_interner: Interner<TypeRef<'c>>,
+
+  nullptr: ValueID,
+  i1_true: ValueID,
+  i1_false: ValueID,
   /// currently only for ir stage. use it in previous stage could cause unprecedented catastrophe. see the git stash.
   constant_interner: RefCell<BiHashMap<ValueID, ::rcc_shared::Constant<'c>>>,
 
@@ -74,8 +78,10 @@ impl<'c, D: Diagnosis<'c>> Session<'c, D> {
 }
 
 impl<'c> Context<'c> {
-  pub fn new(ast_arena: &'c Arena) -> Self {
-    let this = Self {
+  #[allow(clippy::uninit_assumed_init)]
+  #[allow(invalid_value)]
+  pub fn new(ast_arena: &'c Arena, ast_context: &'c ASTContext) -> Self {
+    let mut this = Self {
       void_type: ast_arena.alloc(Type::Void()),
       label_type: ast_arena.alloc(Type::Label()),
       float32_type: ast_arena.alloc(Type::Floating(FloatFormat::IEEE32)),
@@ -94,6 +100,9 @@ impl<'c> Context<'c> {
       ir_arena: Default::default(),
       ir_def_use: Default::default(),
       ir_type_interner: Default::default(),
+      nullptr: unsafe { MaybeUninit::uninit().assume_init() },
+      i1_true: unsafe { MaybeUninit::uninit().assume_init() },
+      i1_false: unsafe { MaybeUninit::uninit().assume_init() },
     };
     {
       let mut refmut = this.ir_type_interner.borrow_mut();
@@ -105,6 +114,37 @@ impl<'c> Context<'c> {
       this.common_integer_types.iter().for_each(|&t| {
         refmut.insert(t);
       });
+    }
+    {
+      let mut refmut = this.constant_interner.borrow_mut();
+      let mut ir_arena_ref = this.ir_arena.borrow_mut();
+
+      let nullptr_qual = ast_context.nullptr_type().into();
+      this.nullptr = ir_arena_ref.insert(Value::new(
+        nullptr_qual,
+        this.pointer_type,
+        Constant::Nullptr(),
+        Default::default(),
+      ));
+      refmut.insert(this.nullptr, Constant::Nullptr());
+
+      let i1_true_qual = ast_context.i1_bool_type().into();
+      this.i1_true = ir_arena_ref.insert(Value::new(
+        i1_true_qual,
+        this.common_integer_types[0],
+        Constant::Integral(Integral::i1_true()),
+        Default::default(),
+      ));
+      refmut.insert(this.i1_true, Constant::Integral(Integral::i1_true()));
+
+      let i1_false_qual = ast_context.i1_bool_type().into();
+      this.i1_false = ir_arena_ref.insert(Value::new(
+        i1_false_qual,
+        this.common_integer_types[0],
+        Constant::Integral(Integral::i1_false()),
+        Default::default(),
+      ));
+      refmut.insert(this.i1_false, Constant::Integral(Integral::i1_false()));
     }
     this
   }
@@ -128,6 +168,18 @@ impl<'c> Context<'c> {
 
   pub fn pointer_type(&self) -> TypeRef<'c> {
     self.pointer_type
+  }
+
+  pub fn nullptr(&self) -> ValueID {
+    self.nullptr
+  }
+
+  pub fn i1_true(&self) -> ValueID {
+    self.i1_true
+  }
+
+  pub fn i1_false(&self) -> ValueID {
+    self.i1_false
   }
 
   fn do_intern(&self, value: Type<'c>) -> TypeRef<'c> {
@@ -204,7 +256,10 @@ impl<'c> Context<'c> {
     self.intern(Function::new(result_type, params, is_variadic))
   }
 }
-use ::std::cell::{Ref, RefMut};
+use ::std::{
+  cell::{Ref, RefMut},
+  mem::MaybeUninit,
+};
 impl<'c> Context<'c> {
   pub fn insert(&self, value: Value<'c>) -> ValueID {
     let user = self.ir_arena.borrow_mut().insert(value);
@@ -238,11 +293,15 @@ impl<'c> Context<'c> {
   }
 
   pub fn get(&self, id: ValueID) -> Ref<'_, Value<'c>> {
-    Ref::map(self.ir_arena.borrow(), |slotmap| &slotmap[id])
+    Ref::map(self.ir_arena.borrow(), |slotmap| {
+      slotmap.get(id).expect("invalid id used!")
+    })
   }
 
   pub fn get_mut(&self, id: ValueID) -> RefMut<'_, Value<'c>> {
-    RefMut::map(self.ir_arena.borrow_mut(), |slotmap| &mut slotmap[id])
+    RefMut::map(self.ir_arena.borrow_mut(), |slotmap| {
+      slotmap.get_mut(id).expect("invalid id used!")
+    })
   }
 
   pub fn get_use_list(&self, usee: ValueID) -> Ref<'_, Vec<ValueID>> {
@@ -313,7 +372,6 @@ impl<'c> Context<'c> {
     }
   }
 }
-
 use ::bimap::BiHashMap;
 use ::slotmap::{SecondaryMap, SlotMap};
 use ::std::{cell::RefCell, collections::HashSet};

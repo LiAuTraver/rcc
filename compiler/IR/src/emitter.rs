@@ -104,6 +104,47 @@ impl<'c> Emitter<'c> {
   pub(super) fn void(&self) -> QualifiedType<'c> {
     self.ast().void_type().into()
   }
+
+  fn contextual_convert_to_i1(&mut self, value_id: ValueID) -> ValueID {
+    let (ir_type, qualified_type) = {
+      let value = lookup!(self, value_id);
+      (value.ir_type, value.qualified_type)
+    };
+    use super::types::Type;
+    match ir_type {
+      Type::Void()
+      | Type::Label()
+      | Type::Struct(_)
+      | Type::Array(_)
+      | Type::Function(_) => unreachable!(),
+      Type::Pointer() => self.emit(
+        inst::ICmp::new(inst::ICmpPredicate::Ne, value_id, self.ir().nullptr()),
+        self.i1(),
+      ),
+      Type::Floating(format) => {
+        let zero = self
+          .emit(Constant::Floating(Floating::zero(*format)), qualified_type);
+        self.emit(
+          inst::FCmp::new(inst::FCmpPredicate::Une, value_id, zero),
+          self.i1(),
+        )
+      },
+      Type::Integer(width) => {
+        let zero = self.emit(
+          Constant::Integral(Integral::new(
+            0,
+            *width,
+            qualified_type.signedness().unwrap(),
+          )),
+          qualified_type,
+        );
+        self.emit(
+          inst::ICmp::new(inst::ICmpPredicate::Ne, value_id, zero),
+          self.i1(),
+        )
+      },
+    }
+  }
 }
 impl<'c> Emitter<'c> {
   #[must_use = "it is recommended that we use returned value as assertion."]
@@ -115,7 +156,7 @@ impl<'c> Emitter<'c> {
 
   #[must_use]
   fn seal_current_block(&mut self) -> ValueID {
-    self.current_block.and_then(|block_id| {
+    self.current_block.and_then(|block_id: ValueID| {
       assert!(
         !lookup!(self, self.current_block)
           .data
@@ -445,18 +486,8 @@ impl<'c> Emitter<'c> {
       ..
     } = if_stmt;
 
-    debug_assert!(
-      RefEq::ref_eq(condition.unqualified_type(), self.ast().converted_bool())
-        || RefEq::ref_eq(
-          condition.unqualified_type(),
-          self.ast().i1_bool_type()
-        ),
-    );
-
-    let (raw_expr, ..) = condition.destructure();
-
-    let condition = se::Expression::new_rvalue(raw_expr, self.i1());
-    let condition = self.expression(condition);
+    let boolean_condition = self.expression(condition);
+    let condition = self.contextual_convert_to_i1(boolean_condition);
 
     let now_block_id = self.current_block;
     let now_block_terminator = self.emit(
@@ -469,10 +500,11 @@ impl<'c> Emitter<'c> {
     );
 
     let then_block_id = self.new_block(Default::default());
+
     let should_be_now = self.push_block(then_block_id);
     assert_eq!(should_be_now, now_block_id);
 
-    self.statement(*then_branch);
+    self.statement(then_branch);
 
     let then_block_terminator = {
       let terminator = lookup!(self, self.current_block)
@@ -490,8 +522,12 @@ impl<'c> Emitter<'c> {
     };
 
     let else_block_id = self.new_block(Default::default());
-    let shuold_be_then = self.push_block(else_block_id);
-    assert_eq!(shuold_be_then, then_block_id);
+
+    // the assertion here is wrong. new controlflow may add many blocks.
+    // let shuold_be_then = self.push_block(else_block_id);
+    // assert_eq!(shuold_be_then, then_block_id);
+
+    let _last_block_of_then = self.push_block(else_block_id);
 
     self.refill_branch(now_block_terminator, then_block_id, else_block_id);
 
@@ -513,8 +549,10 @@ impl<'c> Emitter<'c> {
       .unwrap_or_default()
       .and_then(|else_block_terminator| {
         let immediate_block_id = self.new_block(Default::default());
-        let should_be_else = self.push_block(immediate_block_id);
-        assert_eq!(should_be_else, else_block_id);
+
+        // ditto
+        let _last_block_of_else = self.push_block(immediate_block_id);
+        // assert_eq!(should_be_else, else_block_id);
 
         self.refill_jump(then_block_terminator, immediate_block_id);
         self.refill_jump(else_block_terminator, immediate_block_id)
@@ -522,8 +560,68 @@ impl<'c> Emitter<'c> {
       .or_else(|| self.refill_jump(then_block_terminator, else_block_id));
   }
 
-  fn while_stmt(&self, while_stmt: ss::While<'c>) {
-    todo!()
+  fn while_stmt(&mut self, while_stmt: ss::While<'c>) {
+    let ss::While {
+      condition,
+      body,
+      tag, // tag is needed for break and continue, now TODO.
+      ..
+    } = while_stmt;
+
+    let now_block_id = self.current_block;
+
+    let cond_block_id = self.new_block(Default::default());
+
+    let now_block_terminator = self.emit(
+      inst::Terminator::Jump(inst::Jump::new(cond_block_id)),
+      self.void(),
+    );
+
+    let should_be_now = self.push_block(cond_block_id);
+    assert_eq!(should_be_now, now_block_id);
+
+    let boolean_condition = self.expression(condition);
+    let condition = self.contextual_convert_to_i1(boolean_condition);
+
+    let cond_block_terminator = self.emit(
+      inst::Terminator::Branch(inst::Branch::new(
+        condition,
+        ValueID::null(),
+        ValueID::null(),
+      )),
+      self.void(),
+    );
+
+    let body_block_id = self.new_block(Default::default());
+
+    let should_be_cond = self.push_block(body_block_id);
+    assert_eq!(should_be_cond, cond_block_id);
+
+    self.statement(body);
+
+    let body_block_terminator = {
+      let terminator = lookup!(self, self.current_block)
+        .data
+        .as_basicblock_unchecked()
+        .terminator;
+      terminator.unwrap_or_else(|| {
+        self.emit_terminator(
+          inst::Jump::new(cond_block_id),
+          self.void(),
+          self.current_block,
+        )
+      })
+    };
+
+    let immediate_block_id = self.new_block(Default::default());
+    let _last_block_of_body = self.push_block(immediate_block_id);
+
+    self.refill_jump(body_block_terminator, cond_block_id);
+    self.refill_branch(
+      cond_block_terminator,
+      body_block_id,
+      immediate_block_id,
+    );
   }
 
   fn do_while(&self, do_while: ss::DoWhile<'c>) {
@@ -804,15 +902,16 @@ impl<'c> Emitter<'c> {
       callee, arguments, ..
     } = call;
 
-    let callee = self.expression(callee);
+    let mut operands = vec![self.expression(callee)];
 
-    let args: Vec<ValueID> = arguments
-      .into_iter()
-      .map(|arg| self.expression(arg))
-      .collect();
+    operands.extend(
+      arguments
+        .into_iter()
+        .map(|arg| self.expression(arg))
+        .collect::<Vec<_>>(),
+    );
 
-    todo!()
-    // self.emit(inst::Call::new(callee, args), qualified_type)
+    self.emit(inst::Call::new(operands), qualified_type)
   }
 
   #[inline]
@@ -867,10 +966,10 @@ impl<'c> Emitter<'c> {
   ) -> ValueID {
     use super::Type::*;
 
-    debug_assert!(
-      RefEq::ref_eq(*qualified_type, self.ast().converted_bool())
-        || RefEq::ref_eq(*qualified_type, self.ast().i1_bool_type()),
-    );
+    // debug_assert!(
+    //   RefEq::ref_eq(*qualified_type, self.ast().converted_bool())
+    //     || RefEq::ref_eq(*qualified_type, self.ast().i1_bool_type()),
+    // );
 
     let lhs_ir_type = lookup!(self, left).ir_type;
     let rhs_ir_type = lookup!(self, right).ir_type;
@@ -960,7 +1059,18 @@ impl<'c> Emitter<'c> {
     qualified_type: QualifiedType<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    todo!()
+    use Operator::*;
+    use inst::BinaryOp;
+    // currently only do integer arithmetic here
+    let op = match operator {
+      Plus => BinaryOp::Add,
+      Minus => BinaryOp::Sub,
+      Star => BinaryOp::Mul,
+      // Slash => BinaryOp::SDiv,
+      // Percent => BinaryOp::SRem,
+      _ => todo!(),
+    };
+    self.emit(inst::Binary::new(op, left, right), qualified_type)
   }
 
   fn bitwise(
@@ -972,10 +1082,11 @@ impl<'c> Emitter<'c> {
     span: SourceSpan,
   ) -> ValueID {
     use Operator::*;
+    use inst::BinaryOp;
     let bitwise = match operator {
-      Ampersand => inst::BinaryOp::And,
-      Pipe => inst::BinaryOp::Or,
-      Caret => inst::BinaryOp::Xor,
+      Ampersand => BinaryOp::And,
+      Pipe => BinaryOp::Or,
+      Caret => BinaryOp::Xor,
       _ => unreachable!(),
     };
     self.emit(inst::Binary::new(bitwise, left, right), qualified_type)
@@ -1057,15 +1168,15 @@ impl<'c> Emitter<'c> {
   ) -> ValueID {
     assert_eq!(operator, Operator::Not);
 
-    debug_assert!(
-      RefEq::ref_eq(
-        lookup!(self, operand).qualified_type.unqualified_type,
-        self.ast().converted_bool()
-      ) || RefEq::ref_eq(
-        lookup!(self, operand).qualified_type.unqualified_type,
-        self.ast().i1_bool_type()
-      ),
-    );
+    // debug_assert!(
+    //   RefEq::ref_eq(
+    //     lookup!(self, operand).qualified_type.unqualified_type,
+    //     self.ast().converted_bool()
+    //   ) || RefEq::ref_eq(
+    //     lookup!(self, operand).qualified_type.unqualified_type,
+    //     self.ast().i1_bool_type()
+    //   ),
+    // );
 
     // FIXME: avoid this trick but also reuse the code below. borrowck wont let self being borrowed
     // SAFETY: safe today, maybe not tomorrow.
@@ -1073,10 +1184,8 @@ impl<'c> Emitter<'c> {
 
     let common = move |cmp| {
       let this = unsafe { &mut *this };
-      let i1_true =
-        this.emit(Constant::Integral(Integral::i1_true()), this.i1());
       let xor = this.emit(
-        inst::Binary::new(inst::BinaryOp::Xor, cmp, i1_true),
+        inst::Binary::new(inst::BinaryOp::Xor, cmp, this.ir().i1_true()),
         this.i1(),
       );
       this.emit(inst::Cast::from(inst::Zext::new(xor)), qualified_type)
@@ -1094,11 +1203,7 @@ impl<'c> Emitter<'c> {
       lookup!(self, operand).ir_type;
 
     match cannot_inline_me_otherwise_refcell_panic {
-      super::Type::Pointer() => {
-        let nullptr =
-          self.emit(Constant::Nullptr(), self.ast().nullptr_type().into());
-        integral(nullptr)
-      },
+      super::Type::Pointer() => integral(self.ir().nullptr()),
       super::Type::Integer(width) => {
         let zero = self.emit(
           Constant::Integral(Integral::new(

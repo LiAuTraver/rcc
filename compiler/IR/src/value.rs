@@ -30,6 +30,11 @@ impl ValueID {
   }
 
   #[inline]
+  pub fn unwrap(self) -> Self {
+    if self.is_null() { panic!() } else { self }
+  }
+
+  #[inline]
   pub fn unwrap_or_else<F: FnOnce() -> Self>(self, f: F) -> Self {
     if self.is_null() { f() } else { self }
   }

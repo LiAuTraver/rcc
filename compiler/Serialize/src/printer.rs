@@ -1,6 +1,7 @@
 use ::rcc_ir::{Context, Session, ValueID};
 use ::rcc_shared::{Diagnosis, SourceManager};
 use ::slotmap::SecondaryMap;
+use ::std::cell::RefCell;
 use ::termcolor::{BufferedStandardStream, ColorChoice, ColorSpec};
 
 use crate::{FlushOnDropRAII, Palette, RenderEngine, StickyWriter, TreeDumper};
@@ -28,7 +29,7 @@ pub struct IRPrinter<'c> {
   inner: Inner,
   context: &'c Context<'c>,
   manager: &'c SourceManager,
-  counter: ::std::cell::RefCell<SecondaryMap<ValueID, usize>>,
+  counter: RefCell<SecondaryMap<ValueID, usize>>,
 }
 impl<'c> RenderEngine<'c> for IRPrinter<'c> {
   fn write_fmt(&mut self, args: ::std::fmt::Arguments<'_>, spec: &ColorSpec) {

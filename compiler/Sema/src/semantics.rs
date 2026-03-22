@@ -1428,7 +1428,9 @@ impl<'c> Sema<'c> {
     assert_eq!(operator, Operator::Not);
     let operand = operand.lvalue_conversion().decay(self.context());
 
-    let converted_operand = operand.contextually_convertible_to_bool()?;
+    let converted_operand = operand
+      .lvalue_conversion()
+      .is_contextually_convertible_to_bool()?;
     Ok(se::Expression::new_rvalue(
       se::Unary::prefix(operator, converted_operand, span).into(),
       self.context().converted_bool().into(),
@@ -1560,8 +1562,12 @@ impl<'c> Sema<'c> {
     let left = left.lvalue_conversion().decay(self.context());
     let right = right.lvalue_conversion().decay(self.context());
 
-    let lhs = left.contextually_convertible_to_bool()?;
-    let rhs = right.contextually_convertible_to_bool()?;
+    let lhs = left
+      .lvalue_conversion()
+      .is_contextually_convertible_to_bool()?;
+    let rhs = right
+      .lvalue_conversion()
+      .is_contextually_convertible_to_bool()?;
     Ok(se::Expression::new_rvalue(
       se::Binary::new(operator, lhs, rhs, span).into(),
       self.context().converted_bool().into(), // todo: this should be an `int` according to standard(?)
@@ -2001,7 +2007,7 @@ impl<'c> Sema<'c> {
     } = if_stmt;
     let analyzed_condition = self
       .expression(condition)
-      .and_then(|e| e.contextually_convertible_to_bool())
+      .and_then(|e| e.lvalue_conversion().is_contextually_convertible_to_bool())
       .handle_with(
         self,
         se::Expression::new_error_node(self.context().converted_bool().into()),
@@ -2031,7 +2037,7 @@ impl<'c> Sema<'c> {
     } = while_stmt;
     let analyzed_condition = self
       .expression(condition)
-      .and_then(|e| e.contextually_convertible_to_bool())
+      .and_then(|e| e.lvalue_conversion().is_contextually_convertible_to_bool())
       .handle_with(
         self,
         se::Expression::new_error_node(self.context().converted_bool().into()),
@@ -2058,7 +2064,7 @@ impl<'c> Sema<'c> {
     let analyzed_body = self.statement(*body).handle_or_default(self).into();
     let analyzed_condition = self
       .expression(condition)
-      .and_then(|e| e.contextually_convertible_to_bool())
+      .and_then(|e| e.lvalue_conversion().is_contextually_convertible_to_bool())
       .handle_with(
         self,
         se::Expression::new_error_node(self.context().converted_bool().into()),
