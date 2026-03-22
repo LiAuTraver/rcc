@@ -1,0 +1,9 @@
+[package]
+name = "rcc-adt"
+version = "0.1.0"
+edition = "2024"
+authors = ["LiAuTraver"]
+
+
+[dependencies]
+rcc-utils = { path = "../../utils" }

@@ -70,3 +70,66 @@ impl Dummy for usize {
     usize::MAX
   }
 }
+
+pub type StrRef<'c> = &'c str;
+
+pub trait RefEq {
+  fn ref_eq(lhs: Self, rhs: Self) -> bool
+  where
+    Self: PartialEq + Sized;
+}
+
+impl RefEq for StrRef<'_> {
+  fn ref_eq(lhs: Self, rhs: Self) -> bool
+  where
+    Self: PartialEq + Sized,
+  {
+    let ref_eq = ::std::ptr::eq(lhs, rhs);
+    if const { cfg!(debug_assertions) } {
+      let actual_eq = lhs == rhs;
+      if ref_eq != actual_eq {
+        eprintln!(
+          "INTERNAL ERROR: comparing by pointer address result did not match 
+          the actual result: {:p}: {:?} and {:p}: {:?}
+        ",
+          lhs, lhs, rhs, rhs
+        );
+      }
+      return actual_eq;
+    }
+    ref_eq
+  }
+}
+
+pub trait Unbox {
+  type Output;
+  #[must_use]
+  fn unbox(self) -> Self::Output
+  where
+    Self::Output: Unbox<Output = Self::Output>;
+}
+// impl<T> Unbox for T {
+//   default type Output = T;
+
+//   #[inline(always)]
+//   default fn unbox(self) -> Self::Output {
+//     self
+//     // unsafe {
+//     //   let result = ::std::ptr::read
+//     //     (&self as *const _ as *const Self::Output);
+//     //   ::std::mem::forget(self);
+//     //   result
+//     // }
+//   }
+// }
+impl<T> Unbox for Box<T> {
+  type Output = T;
+
+  #[inline(always)]
+  fn unbox(self) -> Self::Output
+  where
+    Self::Output: Unbox<Output = Self::Output>,
+  {
+    *self
+  }
+}

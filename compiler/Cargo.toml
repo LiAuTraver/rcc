@@ -8,6 +8,10 @@ homepage = "https://github.com/LiAuTraver/rcc"
 readme = "README.md"
 
 [dependencies]
-rcc-core = { path = "../core" }
 rcc-utils = { path = "../utils" }
-termcolor = "1.4.1"
+rcc-shared = { path = "../core/shared" }
+rcc-ast = { path = "../core/AST" }
+rcc-lex = { path = "../core/Lex" }
+rcc-parse = { path = "../core/Parse" }
+rcc-sema = { path = "../core/Sema" }
+rcc-ir = { path = "../core/IR" }

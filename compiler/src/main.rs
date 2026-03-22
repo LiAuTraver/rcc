@@ -1,14 +1,13 @@
-use ::rcc_core::{
-  common::SourceManager,
-  diagnosis::Diagnosis,
-  ir::{Context as IRContext, Emitter as IREmitter, IRDumper},
-  lexer::Lexer,
-  parse::Parser,
-  sema::{ASTDumper, Sema},
-  session::{Session, SessionRef},
-  storage::{Arena, Storage},
-  types::Context as ASTContext,
+use ::rcc_ast::{
+  ASTDumper, Arena, Context as ASTContext, Session as ASTSession,
 };
+use ::rcc_ir::{
+  Context as IRContext, Emitter as IREmitter, IRPrinter, Session as IRSession,
+};
+use ::rcc_lex::Lexer;
+use ::rcc_parse::Parser;
+use ::rcc_sema::Sema;
+use ::rcc_shared::{Diagnosis, OpDiag, SourceManager};
 use ::rcc_utils::DisplayWith;
 enum Stage {
   Lex,
@@ -49,26 +48,24 @@ fn main() {
       ::std::process::exit(1);
     },
   };
-  let arena = Arena::default();
-  let storage = arena.alloc(Storage::new(&arena));
-  let ast_context = arena.alloc(ASTContext::new(storage));
-  let ir_context = arena.alloc(IRContext::new(storage));
-  let session =
-    arena.alloc(Session::new(&source_manager, ast_context, ir_context));
-  pipeline(session, stage, false);
+
+  pipeline(source_manager, stage, false);
 }
 
-fn pipeline(session: SessionRef, stage: Stage, pretty_print: bool) -> i32 {
-  // let content = session.manager.files.first().unwrap().source;
-  let mut lexer = Lexer::new(session);
+fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
+  let arena = Arena::default();
+  let ast_context = arena.alloc(ASTContext::new(&arena));
+  let diagnosis = OpDiag::default();
+  let ast_session = ASTSession::new(&diagnosis, &manager, ast_context);
+  let mut lexer = Lexer::new(&ast_session);
   let tokens = lexer.lex();
-  if session.diag().has_errors() {
+  if ast_session.diag().has_errors() {
     eprintln!("Lex errors:");
-    session
+    ast_session
       .diag()
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(session.src())));
+      .for_each(|e| eprintln!("{}", e.display_with(ast_session.src())));
     return 1;
   }
   if let Stage::Lex = stage {
@@ -85,15 +82,15 @@ fn pipeline(session: SessionRef, stage: Stage, pretty_print: bool) -> i32 {
     println!("Lex succeeded.");
     return 0;
   }
-  let mut parser = Parser::new(tokens, session);
+  let mut parser = Parser::new(tokens, &ast_session);
   let program = parser.parse();
-  if session.diag().has_errors() {
+  if ast_session.diag().has_errors() {
     eprintln!("Parser errors:");
-    session
+    ast_session
       .diag()
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(session.src())));
+      .for_each(|e| eprintln!("{}", e.display_with(ast_session.src())));
     return 1;
   }
   if let Stage::Parse = stage {
@@ -105,15 +102,15 @@ fn pipeline(session: SessionRef, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
 
-  let mut analyzer = Sema::new(program, session);
+  let mut analyzer = Sema::new(program, &ast_session);
   let translation_unit = analyzer.analyze();
-  if session.diag().has_errors() {
+  if ast_session.diag().has_errors() {
     eprintln!("Analyzer errors:");
-    session
+    ast_session
       .diag()
       .errors()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(session.src())));
+      .for_each(|e| eprintln!("{}", e.display_with(ast_session.src())));
     return 1;
   }
   if let Stage::Analyze = stage {
@@ -124,24 +121,31 @@ fn pipeline(session: SessionRef, stage: Stage, pretty_print: bool) -> i32 {
     println!("Analyze succeeded.");
   }
 
-  if session.diag().has_warnings() {
+  if ast_session.diag().has_warnings() {
     eprintln!("Analyzer warnings:");
-    session
+    ast_session
       .diag()
       .warnings()
       .iter()
-      .for_each(|e| eprintln!("{}", e.display_with(session.src())));
+      .for_each(|e| eprintln!("{}", e.display_with(ast_session.src())));
   }
-  ASTDumper::dump(&translation_unit, session).unwrap();
+  ASTDumper::dump(&translation_unit, &ast_session).unwrap();
   if let Stage::Analyze = stage {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));
-  let builder = IREmitter::new(session);
+  let ir_context = arena.alloc(IRContext::new(&arena));
+  let session = IRSession::new(
+    ast_session.diag(),
+    ast_session.src(),
+    ast_session.ast(),
+    ir_context,
+  );
+  let builder = IREmitter::new(&session);
 
   let m = builder.build(translation_unit);
   println!("{m:#?}");
-  IRDumper::dump(&m, session).unwrap();
+  IRPrinter::print(&m, &session).unwrap();
   0
 }
 
@@ -231,40 +235,10 @@ int main(int argc, char **argv) { //
     let s = "long int p = 0 && 8 ? 1, 0 : 2;";
     assert_eq!(test_str(s), 0);
   }
-  fn test_str(_source: &str) -> i32 {
-    0
-    // let mut source_manager = SourceManager::default();
-    // source_manager.add_string(source.into());
-    // let arena = Default::default();
-    // let ast_type_interner = Default::default();
-    // let ast_str_interner = Default::default();
-    // let ast_context =
-    //   ASTContext::new(&arena, &ast_type_interner, &ast_str_interner);
-    // let ir_type_interner = Default::default();
-    // let slotmap = Default::default();
-    // let ir_context = IRContext::new(&arena, &ir_type_interner, &slotmap);
-    // let session = Session::new(&source_manager, &ast_context, &ir_context);
-    // pipeline(session, Stage::Analyze, true)
-  }
-  #[test]
-  fn t4() {
-    use ::std::io::Write;
-    use termcolor::*;
-    // Create a stream for Standard Output (Stdout)
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+  fn test_str(source: &str) -> i32 {
+    let mut source_manager = SourceManager::default();
+    source_manager.add_string(source.into());
 
-    // 1. Create a Color Specification
-    let mut spec = ColorSpec::new();
-    spec.set_fg(Some(Color::Cyan)).set_bold(true);
-
-    // 2. Apply the spec to the stream
-    stdout.set_color(&spec).unwrap();
-
-    // 3. Write your text
-    write!(&mut stdout, "BinaryExpr").unwrap();
-
-    // 4. Reset to default colors
-    stdout.reset().unwrap();
-    writeln!(&mut stdout, ": +").unwrap();
+    pipeline(source_manager, Stage::Analyze, true)
   }
 }

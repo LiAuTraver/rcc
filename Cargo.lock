@@ -89,24 +89,119 @@ dependencies = [
 name = "rcc"
 version = "0.1.0"
 dependencies = [
- "rcc-core",
+ "rcc-ast",
+ "rcc-ir",
+ "rcc-lex",
+ "rcc-parse",
+ "rcc-sema",
+ "rcc-shared",
  "rcc-utils",
+]
+
+[[package]]
+name = "rcc-adt"
+version = "0.1.0"
+dependencies = [
+ "rcc-utils",
+]
+
+[[package]]
+name = "rcc-ast"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "bumpalo",
+ "paste",
+ "rcc-adt",
+ "rcc-serialize",
+ "rcc-shared",
+ "rcc-utils",
+ "strum",
+ "strum_macros",
  "termcolor",
 ]
 
 [[package]]
-name = "rcc-core"
+name = "rcc-ir"
+version = "0.1.0"
+dependencies = [
+ "bimap",
+ "paste",
+ "rcc-adt",
+ "rcc-ast",
+ "rcc-sema",
+ "rcc-serialize",
+ "rcc-shared",
+ "rcc-utils",
+ "slotmap",
+ "strum",
+ "strum_macros",
+ "termcolor",
+]
+
+[[package]]
+name = "rcc-lex"
+version = "0.1.0"
+dependencies = [
+ "rcc-ast",
+ "rcc-shared",
+ "rcc-utils",
+]
+
+[[package]]
+name = "rcc-parse"
 version = "0.1.0"
 dependencies = [
  "bimap",
  "bitflags",
  "bumpalo",
  "paste",
+ "rcc-adt",
+ "rcc-ast",
+ "rcc-shared",
  "rcc-utils",
- "slotmap",
  "strum",
  "strum_macros",
  "termcolor",
+]
+
+[[package]]
+name = "rcc-sema"
+version = "0.1.0"
+dependencies = [
+ "bimap",
+ "bitflags",
+ "bumpalo",
+ "paste",
+ "rcc-adt",
+ "rcc-ast",
+ "rcc-parse",
+ "rcc-serialize",
+ "rcc-shared",
+ "rcc-utils",
+ "strum",
+ "strum_macros",
+ "termcolor",
+]
+
+[[package]]
+name = "rcc-serialize"
+version = "0.1.0"
+dependencies = [
+ "rcc-shared",
+ "rcc-utils",
+ "termcolor",
+]
+
+[[package]]
+name = "rcc-shared"
+version = "0.1.0"
+dependencies = [
+ "paste",
+ "rcc-adt",
+ "rcc-utils",
+ "strum",
+ "strum_macros",
  "thiserror",
 ]
 

@@ -1,0 +1,19 @@
+[package]
+name = "rcc-ast"
+version = "0.1.0"
+edition = "2024"
+authors = ["LiAuTraver"]
+
+
+[dependencies]
+
+rcc-utils = { path = "../../utils" }
+rcc-adt = { path = "../ADT" }
+rcc-shared = { path = "../shared" }
+rcc-serialize = { path = "../Serialize" }
+termcolor = "1.4.1"
+strum_macros = "0.25.3"
+strum = "0.27.2"
+bitflags = "2.10.0"
+paste = "1.0.15"
+bumpalo = { version = "3.19.1", features = ["collections"] }
