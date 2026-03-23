@@ -1,10 +1,9 @@
 use ::rcc_utils::{
-  BuiltinFloat, NumTo, ToI128, ToU128, ensure_is_pod, underlying_type_of,
+  BuiltinFloat, NumTo, ToI128, ToU128, ensure_is_pod, pre, underlying_type_of,
 };
 
-#[derive(
-  Debug, Clone, Copy, PartialEq, Eq, Hash, ::std::marker::ConstParamTy,
-)]
+#[derive(Debug, Copy, Hash, ::std::marker::ConstParamTy)]
+#[derive_const(Clone, PartialEq, Eq)]
 pub enum Format {
   /// standard IEEE float.
   IEEE32 = 32,
@@ -25,7 +24,8 @@ use Format::*;
 /// That being said, I didn't reference
 /// [LLVM's APFloat](https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/ADT/APFloat.h) at all,
 /// which is a far more comprehensive and complex implementation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Hash)]
+#[derive_const(Clone, PartialEq, Eq)]
 pub struct Floating {
   // i dont thinks its need ed to use the u128 jere, just a tagger union would be fine.
   bits: u128,
@@ -75,7 +75,7 @@ impl Floating {
 }
 
 impl Floating {
-  pub fn is_zero(&self) -> bool {
+  pub const fn is_zero(&self) -> bool {
     match self.format {
       // pos zero: 0x00000000, neg zero: 0x80000000
       IEEE32 => (self.bits as underlying_type_of!(f32) & 0x7FFF_FFFF) == 0,
@@ -84,7 +84,7 @@ impl Floating {
     }
   }
 
-  pub fn is_infinite(&self) -> bool {
+  pub const fn is_infinite(&self) -> bool {
     match self.format {
       // Exponent all 1s, Fraction all 0s
       IEEE32 =>
@@ -95,7 +95,7 @@ impl Floating {
     }
   }
 
-  pub fn is_nan(&self) -> bool {
+  pub const fn is_nan(&self) -> bool {
     match self.format {
       // Exponent all 1s, Fraction non-zero
       IEEE32 =>
@@ -106,7 +106,7 @@ impl Floating {
     }
   }
 
-  pub fn is_finite(&self) -> bool {
+  pub const fn is_finite(&self) -> bool {
     match self.format {
       // Exponent is NOT all 1s
       IEEE32 =>
@@ -117,7 +117,7 @@ impl Floating {
     }
   }
 
-  pub fn cast(self, format: Format) -> Floating {
+  pub const fn cast(self, format: Format) -> Floating {
     match (self.format, format) {
       (IEEE32, IEEE64) => {
         let f = f32::from_bits(self.bits as underlying_type_of!(f32));
@@ -159,11 +159,11 @@ use super::{Integral, Signedness};
 
 macro_rules! impl_op {
   ($trait:ident, $method:ident, $op:tt) => {
-    impl $trait for Floating {
+    impl const $trait for Floating {
       type Output = Self;
       #[inline]
       fn $method(self, rhs: Self) -> Self::Output {
-        debug_assert_eq!(
+        pre + (
           self.format, rhs.format,
           "Cannot perform operation on Floating values of different formats"
         );
@@ -201,7 +201,7 @@ impl_all_ops! {
   Div, div, /;
 }
 
-impl Neg for Floating {
+impl const Neg for Floating {
   type Output = Self;
 
   fn neg(self) -> Self::Output {
@@ -218,7 +218,7 @@ impl Neg for Floating {
   }
 }
 
-impl Not for Floating {
+impl const Not for Floating {
   type Output = bool;
 
   #[inline(always)]
@@ -227,12 +227,14 @@ impl Not for Floating {
   }
 }
 
-impl PartialOrd for Floating {
+impl const PartialOrd for Floating {
   fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
-    debug_assert_eq!(
-      self.format, other.format,
-      "Cannot compare Floating values of different formats"
-    );
+    pre
+      + (
+        self.format,
+        other.format,
+        "Cannot compare Floating values of different formats",
+      );
     match self.format {
       IEEE32 => f32::partial_cmp(
         &f32::from_bits(self.bits as underlying_type_of!(f32)),
@@ -248,7 +250,7 @@ impl PartialOrd for Floating {
 
 impl Integral {
   #[inline]
-  pub fn to_floating(self, format: Format) -> Floating {
+  pub const fn to_floating(self, format: Format) -> Floating {
     match format {
       IEEE32 => Floating::from(self.to_builtin::<u32>() as f32),
       IEEE64 => Floating::from(self.to_builtin::<u64>() as f64),
@@ -258,7 +260,11 @@ impl Integral {
 
 impl Floating {
   #[inline]
-  pub fn to_integral(self, width: u8, signedness: Signedness) -> Integral {
+  pub const fn to_integral(
+    self,
+    width: u8,
+    signedness: Signedness,
+  ) -> Integral {
     debug_assert!(width > 0 && width <= 128);
     match (self.format, signedness) {
       // Float to signed
@@ -289,12 +295,18 @@ impl Floating {
 }
 
 /// Clamp a float to the range of a signed integer with given width.
-fn clamp_float_to_signed<F: ToI128 + BuiltinFloat>(f: F, width: u8) -> i128 {
+const fn clamp_float_to_signed<F: [const] ToI128 + BuiltinFloat>(
+  f: F,
+  width: u8,
+) -> i128 {
   f.to_i128()
     .clamp(-(1i128 << (width - 1)), (1i128 << (width - 1)) - 1)
 }
 
 /// Clamp a float to the range of an unsigned integer with given width.
-fn clamp_float_to_unsigned<F: ToU128 + BuiltinFloat>(f: F, width: u8) -> u128 {
+const fn clamp_float_to_unsigned<F: [const] ToU128 + BuiltinFloat>(
+  f: F,
+  width: u8,
+) -> u128 {
   f.to_u128().clamp(0, (1u128 << width) - 1)
 }

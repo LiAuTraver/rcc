@@ -369,4 +369,32 @@ macro_rules! not_implemented_feature {
   }};
 }
 
+/// [`assert`] in constant evaluation, [`debug_assert`] in runtime evaluation.
+#[macro_export]
+macro_rules! const_assert {
+  ($cond:expr) => {
+    ::core::intrinsics::const_eval_select(
+      ($cond, stringify!($cond)),
+      $crate::static_assert,
+      $crate::debug_assertion,
+    )
+  };
+  ($cond:expr, $msg:expr) => {
+    ::core::intrinsics::const_eval_select(
+      ($cond, $msg),
+      $crate::static_assert,
+      $crate::debug_assertion,
+    )
+  };
+}
+#[macro_export]
+macro_rules! const_assert_eq {
+  ($left:expr, $right:expr) => {
+    $crate::const_assert!($left == $right)
+  };
+  ($left:expr, $right:expr, $msg:expr) => {
+    $crate::const_assert!($left == $right, $msg)
+  };
+}
+
 mod tests {}

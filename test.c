@@ -18,7 +18,7 @@ int main() {
       break;
     }
     continue;
-    i = i - 1;
+    i = i / 5;
   } while (i);
   return 0;
 

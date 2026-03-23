@@ -1,5 +1,11 @@
+#![allow(internal_features)]
+#![feature(core_intrinsics)]
 #![feature(negative_impls)]
 #![feature(const_trait_impl)]
+#![feature(const_destruct)]
+#![feature(const_cmp)]
+#![feature(const_ops)]
+#![feature(const_eval_select)]
 mod macros;
 mod num_traits;
 
@@ -131,5 +137,37 @@ impl<T> Unbox for Box<T> {
     Self::Output: Unbox<Output = Self::Output>,
   {
     *self
+  }
+}
+
+#[track_caller]
+pub const fn static_assert(cond: bool, _: &str) {
+  assert!(cond, "static assertion failed");
+}
+#[track_caller]
+pub fn debug_assertion(cond: bool, msg: &str) {
+  debug_assert!(cond, "debug assertion failed: {}", msg);
+}
+
+#[allow(non_camel_case_types)]
+pub struct pre;
+
+use ::std::marker::Destruct;
+impl<T: [const] PartialEq + [const] Destruct> const ::std::ops::Add<(T, T)>
+  for pre
+{
+  type Output = ();
+
+  fn add(self, (lhs, rhs): (T, T)) {
+    const_assert_eq!(lhs, rhs)
+  }
+}
+impl<T: [const] PartialEq + [const] Destruct> const
+  ::std::ops::Add<(T, T, &str)> for pre
+{
+  type Output = ();
+
+  fn add(self, (lhs, rhs, msg): (T, T, &str)) {
+    const_assert_eq!(lhs, rhs, msg)
   }
 }

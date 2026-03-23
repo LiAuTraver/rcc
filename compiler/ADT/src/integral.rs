@@ -1,6 +1,6 @@
 use ::rcc_utils::{
   BuiltinFloat, BuiltinIntegerOrBoolean, NumFrom, NumTo, ToU128, ensure_is_pod,
-  signed_type_of,
+  pre, signed_type_of,
 };
 
 type Underlying = u128;
@@ -47,6 +47,9 @@ impl const From<bool> for Signedness {
 /// that the operands have the same width and signedness, otherwise panic.
 ///
 /// It does not support 0-width integers, and the current maximum width is 128 bits.
+///
+/// It's an oversight that the signedness does not matter at IR Level,
+/// so at IR Level the [`Integral::signedness`] field should always be ignored.
 #[derive(Copy, Hash)]
 #[derive_const(Clone, PartialEq, Eq)]
 pub struct Integral {
@@ -59,19 +62,12 @@ pub struct Integral {
   /// The bit width of this integer (1-128).
   width: u8,
   /// Whether this integer should be interpreted as signed.
+  ///
+  /// U should always ignore the signedness after IR pass.
   signedness: Signedness,
 }
 
 ensure_is_pod!(Integral);
-
-const fn consteval(a: bool, b: bool) {
-  assert!(a);
-  assert!(b);
-}
-fn notconsteval(a: bool, b: bool) {
-  debug_assert!(a);
-  debug_assert!(b);
-}
 
 impl Integral {
   pub const WIDTH_BOOL: u8 = 1;
@@ -140,12 +136,12 @@ impl Integral {
 
   #[inline]
   pub const fn i1_true() -> Self {
-    Self::new(1, 1, Unsigned)
+    Self::BIT_TRUE
   }
 
   #[inline]
   pub const fn i1_false() -> Self {
-    Self::new(0, 1, Unsigned)
+    Self::BIT_FALSE
   }
 }
 impl Integral {
@@ -335,11 +331,8 @@ impl Integral {
 impl Integral {
   /// Add with overflow detection.
   pub const fn overflowing_add(self, rhs: Self) -> (Self, bool) {
-    const_eval_select(
-      (self.signedness == rhs.signedness, self.width == rhs.width),
-      consteval,
-      notconsteval,
-    );
+    pre + (self.signedness, rhs.signedness);
+    pre + (self.width, rhs.width, "width mismatch");
 
     let sum = self.bits.wrapping_add(rhs.bits);
     let result = Self::new(sum, self.width, self.signedness);
@@ -360,11 +353,8 @@ impl Integral {
 
   /// Subtract with overflow detection.
   pub const fn overflowing_sub(self, rhs: Self) -> (Self, bool) {
-    const_eval_select(
-      (self.signedness == rhs.signedness, self.width == rhs.width),
-      consteval,
-      notconsteval,
-    );
+    pre + (self.signedness, rhs.signedness);
+    pre + (self.width, rhs.width, "width mismatch");
 
     let diff = self.bits.wrapping_sub(rhs.bits);
     let result = Self::new(diff, self.width, self.signedness);
@@ -386,11 +376,8 @@ impl Integral {
 
   /// Multiply with overflow detection.
   pub const fn overflowing_mul(self, rhs: Self) -> (Self, bool) {
-    const_eval_select(
-      (self.signedness == rhs.signedness, self.width == rhs.width),
-      consteval,
-      notconsteval,
-    );
+    pre + (self.signedness, rhs.signedness);
+    pre + (self.width, rhs.width, "width mismatch");
 
     let (product, overflow) = if self.is_signed() {
       let a = self.as_signed();
@@ -416,11 +403,8 @@ impl Integral {
 
   /// Divide, returns None on division by zero.
   pub const fn checked_div(self, rhs: Self) -> Option<Self> {
-    const_eval_select(
-      (self.signedness == rhs.signedness, self.width == rhs.width),
-      consteval,
-      notconsteval,
-    );
+    pre + (self.signedness, rhs.signedness);
+    pre + (self.width, rhs.width, "width mismatch");
 
     if rhs.is_zero() {
       None?
@@ -437,11 +421,8 @@ impl Integral {
 
   /// Remainder, returns [`None`] on division by zero.
   pub const fn checked_rem(self, rhs: Self) -> Option<Self> {
-    const_eval_select(
-      (self.signedness == rhs.signedness, self.width == rhs.width),
-      consteval,
-      notconsteval,
-    );
+    pre + (self.signedness, rhs.signedness);
+    pre + (self.width, rhs.width, "width mismatch");
 
     if rhs.is_zero() {
       None?
@@ -490,10 +471,7 @@ impl Integral {
   }
 }
 
-use ::std::{
-  intrinsics::const_eval_select,
-  ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Not, Shl, Shr, Sub},
-};
+use ::std::ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Not, Shl, Shr, Sub};
 
 impl const Add for Integral {
   type Output = Self;
@@ -547,11 +525,7 @@ impl const BitAnd for Integral {
   #[inline]
   fn bitand(self, rhs: Self) -> Self {
     {
-      const_eval_select(
-        (true, self.width == rhs.width),
-        consteval,
-        notconsteval,
-      );
+      pre + (self.width, rhs.width, "width mismatch");
       Self::new(self.bits & rhs.bits, self.width, self.signedness)
     }
   }
@@ -562,7 +536,7 @@ impl const BitOr for Integral {
 
   #[inline]
   fn bitor(self, rhs: Self) -> Self {
-    const_eval_select((true, self.width == rhs.width), consteval, notconsteval);
+    pre + (self.width, rhs.width, "width mismatch");
     Self::new(self.bits | rhs.bits, self.width, self.signedness)
   }
 }
@@ -572,7 +546,8 @@ impl const BitXor for Integral {
 
   #[inline]
   fn bitxor(self, rhs: Self) -> Self {
-    const_eval_select((true, self.width == rhs.width), consteval, notconsteval);
+    pre + (self.width, rhs.width, "width mismatch");
+
     Self::new(self.bits ^ rhs.bits, self.width, self.signedness)
   }
 }
@@ -607,14 +582,13 @@ impl const PartialOrd for Integral {
     if self.width != other.width || self.signedness != other.signedness {
       None
     } else {
-      const_eval_select(
-        (
-          self.signedness == other.signedness,
-          self.width == other.width,
-        ),
-        consteval,
-        notconsteval,
-      );
+      pre
+        + (
+          self.signedness,
+          other.signedness,
+          "cannot compare Integral values of different signedness",
+        );
+      pre + (self.width, other.width, "width mismatch");
 
       if self.is_signed() {
         self.as_signed().cmp(&other.as_signed())
@@ -659,7 +633,7 @@ mod fmt {
 
 macro_rules! impl_from_integral {
   ($t:ty, $width:expr, $signedness:expr) => {
-    impl From<$t> for Integral {
+    impl const From<$t> for Integral {
       #[inline(always)]
       fn from(value: $t) -> Self {
         Integral::new(value, $width as u8, $signedness)
@@ -683,48 +657,54 @@ impl_from_integral!(usize, usize::BITS, Unsigned);
 
 #[cfg(test)]
 #[allow(clippy::unnecessary_cast)]
+#[allow(non_upper_case_globals)]
 mod tests {
+  macro_rules! const_assert_eq {
+    ($a:expr, $b:expr) => {
+      const _: () = assert!($a == $b);
+    };
+  }
   #[allow(unused)]
   use super::*;
 
   #[test]
-  fn test_sign_extension() {
-    let neg_one_i8 = Integral::from(-1 as i8);
-    assert_eq!(neg_one_i8.as_signed(), -1);
-    assert_eq!(neg_one_i8.bits(), 0xFF);
+  const fn test_sign_extension() {
+    const neg_one_i8: Integral = Integral::from(-1 as i8);
+    const_assert_eq!(neg_one_i8.as_signed(), -1);
+    const_assert_eq!(neg_one_i8.bits(), 0xFF);
 
-    let extended = neg_one_i8.sext(32);
-    assert_eq!(extended.as_signed(), -1);
-    assert_eq!(extended.bits(), 0xFFFFFFFF);
+    const extended: Integral = neg_one_i8.sext(32);
+    const_assert_eq!(extended.as_signed(), -1);
+    const_assert_eq!(extended.bits(), 0xFFFFFFFF);
   }
 
   #[test]
-  fn test_truncation() {
-    let big = Integral::from(0x12345678 as i32);
-    let small = big.trunc(8, Unsigned);
-    assert_eq!(small.bits(), 0x78);
+  const fn test_truncation() {
+    const big: Integral = Integral::from(0x12345678 as i32);
+    const small: Integral = big.trunc(8, Unsigned);
+    const_assert_eq!(small.bits(), 0x78);
   }
 
   #[test]
-  fn test_overflow_detection() {
-    let max_i8 = Integral::new(127, 8, Signed);
-    let one = Integral::new(1, 8, Signed);
-    let (result, overflow) = max_i8.overflowing_add(one);
-    assert!(overflow);
-    assert_eq!(result.as_signed(), -128);
+  const fn test_overflow_detection() {
+    const max_i8: Integral = Integral::new(127, 8, Signed);
+    const one: Integral = Integral::new(1, 8, Signed);
+    const R: (Integral, bool) = max_i8.overflowing_add(one);
+    assert!(R.1);
+    const_assert_eq!(R.0.as_signed(), -128);
   }
 
   #[test]
-  fn test_signed_comparison() {
-    let neg = Integral::from(-1 as i8);
-    let pos = Integral::from(1 as i8);
+  const fn test_signed_comparison() {
+    const neg: Integral = Integral::from(-1 as i8);
+    const pos: Integral = Integral::from(1 as i8);
     assert!(neg < pos);
   }
 
   #[test]
-  fn test_unsigned_comparison() {
-    let a = Integral::from(255 as u8);
-    let b = Integral::from(1 as u8);
+  const fn test_unsigned_comparison() {
+    const a: Integral = Integral::from(255 as u8);
+    const b: Integral = Integral::from(1 as u8);
     assert!(a > b);
   }
 }
