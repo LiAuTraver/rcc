@@ -410,7 +410,7 @@ impl<'c> Print<'c, inst::GetElementPtr> for Value<'c> {
     variant: &inst::GetElementPtr,
   ) {
     printer.write("getelementptr ", &palette.literal);
-    let ptr = variant.ptr();
+    let ptr = variant.base();
     debug_assert!(lookup!(printer, ptr).ir_type.is_pointer());
     printer.write(
       printer.ir().visit(ptr, |value| {
@@ -495,7 +495,7 @@ impl<'c> Print<'c, inst::Cast> for Value<'c> {
     ::rcc_utils::static_dispatch!(
         Cast : variant,
         |variant| Print::print(self, printer, prefix, is_last, palette, variant) =>
-        Zext Sext Trunc
+        Zext Sext Trunc FPExt FPTrunc FPToUI FPToSI UIToFP SIToFP PtrToInt IntToPtr BitCast
     )
   }
 }
@@ -753,52 +753,56 @@ impl<'c> Print<'c, inst::Store> for Value<'c> {
     printer.write(prefix, &palette.dim);
     printer.write("store ", &palette.literal);
 
-    self::pretty_print_contant_or_id(printer, variant.addr(), palette, true);
+    self::pretty_print_contant_or_id(printer, variant.data(), palette, true);
 
     printer.write(", ", &palette.skeleton);
 
-    debug_assert!(lookup!(printer, variant.data()).ir_type.is_pointer());
+    debug_assert!(lookup!(printer, variant.dest()).ir_type.is_pointer());
 
     printer.write("ptr ", &palette.meta);
     printer.write(
-      pre!("%" => printer.get_id(variant.data())),
+      pre!("%" => printer.get_id(variant.dest())),
       &palette.skeleton,
     );
   }
 }
 
-impl<'c> Print<'c, inst::Zext> for Value<'c> {
-  fn print(
-    &self,
-    printer: &mut impl Printer<'c>,
-    prefix: &str,
-    is_last: bool,
-    palette: &Palette,
-    variant: &inst::Zext,
-  ) {
-    printer.write("zext ", &palette.literal);
+macro_rules! impl_print_cast {
+  ($CastInst:ident) => {
+    impl<'c> Print<'c, inst::$CastInst> for Value<'c> {
+      fn print(
+        &self,
+        printer: &mut impl Printer<'c>,
+        prefix: &str,
+        is_last: bool,
+        palette: &Palette,
+        variant: &inst::$CastInst,
+      ) {
+        printer.write(stringify!($CastInst).to_lowercase(), &palette.literal);
+        printer.write(" ", &palette.skeleton);
 
-    self::pretty_print_contant_or_id(printer, variant.operand(), palette, true);
+        self::pretty_print_contant_or_id(
+          printer,
+          variant.operand(),
+          palette,
+          true,
+        );
 
-    printer.write(" to ", &palette.skeleton);
-    printer.write(self.ir_type, &palette.meta);
-  }
+        printer.write(" to ", &palette.skeleton);
+        printer.write(self.ir_type, &palette.meta);
+      }
+    }
+  };
 }
-impl<'c> Print<'c, inst::Sext> for Value<'c> {
-  fn print(
-    &self,
-    printer: &mut impl Printer<'c>,
-    prefix: &str,
-    is_last: bool,
-    palette: &Palette,
-    variant: &inst::Sext,
-  ) {
-    printer.write("sext ", &palette.literal);
-
-    self::pretty_print_contant_or_id(printer, variant.operand(), palette, true);
-
-    printer.write(" to ", &palette.skeleton);
-    printer.write(self.ir_type, &palette.meta);
-  }
-}
-please_print_me!(inst::Trunc);
+impl_print_cast!(Zext);
+impl_print_cast!(Sext);
+impl_print_cast!(Trunc);
+impl_print_cast!(FPExt);
+impl_print_cast!(FPTrunc);
+impl_print_cast!(FPToUI);
+impl_print_cast!(FPToSI);
+impl_print_cast!(UIToFP);
+impl_print_cast!(SIToFP);
+impl_print_cast!(PtrToInt);
+impl_print_cast!(IntToPtr);
+impl_print_cast!(BitCast);

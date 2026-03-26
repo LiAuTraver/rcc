@@ -353,7 +353,7 @@ impl<'c> Emitter<'c> {
         self.emit(return_type.default_value(), return_type);
 
       _ = self.emit(
-        inst::Memory::Store(inst::Store::new(return_slot_id, default_value_id)),
+        inst::Store::new(return_slot_id, default_value_id),
         self.ast().void_type(),
       );
     }
@@ -371,7 +371,7 @@ impl<'c> Emitter<'c> {
           .locals
           .insert(parameter.symbol.as_ptr(), localed_arg_id);
         _ = self.emit(
-          inst::Memory::Store(inst::Store::new(localed_arg_id, arg_id)),
+          inst::Store::new(localed_arg_id, arg_id),
           self.ast().void_type(),
         );
         arg_id
@@ -399,10 +399,8 @@ impl<'c> Emitter<'c> {
     // A | (B if B ...) this syntax is not supported.
     let make_unreachable_block = || {
       let this = unsafe { &mut *this };
-      let _unreachable = this.emit(
-        inst::Terminator::Unreachable(inst::Unreachable::new()),
-        this.ast().void_type(),
-      );
+      let _unreachable =
+        this.emit(inst::Unreachable::new(), this.ast().void_type());
       common();
     };
 
@@ -417,12 +415,12 @@ impl<'c> Emitter<'c> {
            =>
       {
         let _implicit_return = self.emit(
-          inst::Terminator::Return(inst::Return::new(Some(
+          inst::Return::new(Some(
             self
               .ir()
               .integer_zero(self.ast().int_type().size_bits() as u8),
-          ))),
-          self.ast().int_type(),
+          )),
+          self.ast().void_type(),
         );
         common()
       },
@@ -435,7 +433,7 @@ impl<'c> Emitter<'c> {
           || self.visit(self.current_function, |value|value.data.as_function_unchecked().blocks.is_empty())
         {
           let _implicit_return = self.emit(
-            inst::Terminator::Return(inst::Return::new(None)),
+            inst::Return::new(None),
             self.ast().void_type(),
           );
           common()
@@ -515,7 +513,7 @@ impl<'c> Emitter<'c> {
       Some(sd::Initializer::Scalar(expr)) => {
         let init_value_id = self.expression(expr);
         _ = self.emit(
-          inst::Memory::Store(inst::Store::new(value_id, init_value_id)),
+          inst::Store::new(value_id, init_value_id),
           self.ast().void_type(),
         );
       },
@@ -559,10 +557,8 @@ impl<'c> Emitter<'c> {
       .map(|e| e.unqualified_type())
       .unwrap_or(self.ast().void_type());
     let operand: Option<ValueID> = expression.map(|e| self.expression(e));
-    let _ret_inst = self.emit(
-      inst::Terminator::Return(inst::Return::new(operand)),
-      ast_type,
-    );
+    let _ret_inst =
+      self.emit(inst::Return::new(operand), self.ast().void_type());
     let immediate_block_id = self.new_empty_block();
     let _should_be_now = self.push_block(immediate_block_id);
   }
@@ -587,11 +583,7 @@ impl<'c> Emitter<'c> {
 
     let now_block_id = self.current_block;
     let now_block_terminator = self.emit(
-      inst::Terminator::Branch(inst::Branch::new(
-        condition,
-        ValueID::null(),
-        ValueID::null(),
-      )),
+      inst::Branch::new(condition, ValueID::null(), ValueID::null()),
       self.ast().void_type(),
     );
 
@@ -610,11 +602,7 @@ impl<'c> Emitter<'c> {
         .terminator;
 
       terminator.unwrap_or_else(|| {
-        self.emit_terminator(
-          inst::Jump::new(ValueID::null()),
-          self.ast().void_type(),
-          self.current_block,
-        )
+        self.emit(inst::Jump::new(ValueID::null()), self.ast().void_type())
       })
     };
 
@@ -634,11 +622,7 @@ impl<'c> Emitter<'c> {
           .as_basicblock_unchecked()
           .terminator;
         terminator.unwrap_or_else(|| {
-          self.emit_terminator(
-            inst::Jump::new(ValueID::null()),
-            self.ast().void_type(),
-            self.current_block,
-          )
+          self.emit(inst::Jump::new(ValueID::null()), self.ast().void_type())
         })
       })
       .unwrap_or_default()
@@ -674,10 +658,8 @@ impl<'c> Emitter<'c> {
       Some(cond_block_id),
     ));
 
-    let _now_block_terminator = self.emit(
-      inst::Terminator::Jump(inst::Jump::new(cond_block_id)),
-      self.ast().void_type(),
-    );
+    let _now_block_terminator =
+      self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
 
     let should_be_now = self.push_block(cond_block_id);
     assert_eq!(should_be_now, now_block_id);
@@ -686,11 +668,7 @@ impl<'c> Emitter<'c> {
     let condition = self.contextual_convert_to_i1(boolean_condition);
 
     let _cond_block_terminator = self.emit(
-      inst::Terminator::Branch(inst::Branch::new(
-        condition,
-        body_block_id,
-        immediate_block_id,
-      )),
+      inst::Branch::new(condition, body_block_id, immediate_block_id),
       self.ast().void_type(),
     );
 
@@ -705,11 +683,7 @@ impl<'c> Emitter<'c> {
         .as_basicblock_unchecked()
         .terminator;
       terminator.unwrap_or_else(|| {
-        self.emit_terminator(
-          inst::Jump::new(cond_block_id),
-          self.ast().void_type(),
-          self.current_block,
-        )
+        self.emit(inst::Jump::new(cond_block_id), self.ast().void_type())
       })
     };
 
@@ -740,10 +714,8 @@ impl<'c> Emitter<'c> {
       Some(cond_block_id),
     ));
 
-    let _now_block_terminator = self.emit(
-      inst::Terminator::Jump(inst::Jump::new(body_block_id)),
-      self.ast().void_type(),
-    );
+    let _now_block_terminator =
+      self.emit(inst::Jump::new(body_block_id), self.ast().void_type());
 
     let _should_be_now = self.push_block(cond_block_id);
     assert_eq!(_should_be_now, now_block_id);
@@ -752,11 +724,7 @@ impl<'c> Emitter<'c> {
     let condition = self.contextual_convert_to_i1(boolean_condition);
 
     let _cond_block_terminator = self.emit(
-      inst::Terminator::Branch(inst::Branch::new(
-        condition,
-        body_block_id,
-        immediate_block_id,
-      )),
+      inst::Branch::new(condition, body_block_id, immediate_block_id),
       self.ast().void_type(),
     );
 
@@ -771,11 +739,7 @@ impl<'c> Emitter<'c> {
         .as_basicblock_unchecked()
         .terminator;
       terminator.unwrap_or_else(|| {
-        self.emit_terminator(
-          inst::Jump::new(cond_block_id),
-          self.ast().void_type(),
-          self.current_block,
-        )
+        self.emit(inst::Jump::new(cond_block_id), self.ast().void_type())
       })
     };
 
@@ -811,10 +775,8 @@ impl<'c> Emitter<'c> {
       Some(increment_block_id), // < this is different than while and do-while
     ));
 
-    let _now_block_terminator = self.emit(
-      inst::Terminator::Jump(inst::Jump::new(cond_block_id)),
-      self.ast().void_type(),
-    );
+    let _now_block_terminator =
+      self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
 
     let _should_be_now = self.push_block(cond_block_id);
     assert_eq!(_should_be_now, now_block_id);
@@ -824,11 +786,7 @@ impl<'c> Emitter<'c> {
       .map(|cond| self.contextual_convert_to_i1(cond))
       .unwrap_or_else(|| self.ir().i1_true()); // if condition is omitted, it is treated as true.
     let _cond_block_terminator = self.emit(
-      inst::Terminator::Branch(inst::Branch::new(
-        boolean_condition,
-        body_block_id,
-        immediate_block_id,
-      )),
+      inst::Branch::new(boolean_condition, body_block_id, immediate_block_id),
       self.ast().void_type(),
     );
 
@@ -843,11 +801,7 @@ impl<'c> Emitter<'c> {
         .as_basicblock_unchecked()
         .terminator;
       terminator.unwrap_or_else(|| {
-        self.emit_terminator(
-          inst::Jump::new(increment_block_id),
-          self.ast().void_type(),
-          self.current_block,
-        )
+        self.emit(inst::Jump::new(increment_block_id), self.ast().void_type())
       })
     };
 
@@ -856,10 +810,8 @@ impl<'c> Emitter<'c> {
     if let Some(increment) = increment {
       self.expression(increment);
     }
-    let _inc_block_terminator = self.emit(
-      inst::Terminator::Jump(inst::Jump::new(cond_block_id)),
-      self.ast().void_type(),
-    );
+    let _inc_block_terminator =
+      self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
 
     let _should_be_inc = self.push_block(immediate_block_id);
     assert_eq!(_should_be_inc, increment_block_id);
@@ -899,10 +851,8 @@ impl<'c> Emitter<'c> {
 
     let now_block_id = self.current_block;
 
-    let _break_inst_id = self.emit(
-      inst::Terminator::Jump(inst::Jump::new(target_block_id)),
-      self.ast().void_type(),
-    );
+    let _break_inst_id =
+      self.emit(inst::Jump::new(target_block_id), self.ast().void_type());
 
     let immediate_block_id = self.new_empty_block();
     let _should_be_now = self.push_block(immediate_block_id);
@@ -926,10 +876,8 @@ impl<'c> Emitter<'c> {
 
     let now_block_id = self.current_block;
 
-    let _continue_inst_id = self.emit(
-      inst::Terminator::Jump(inst::Jump::new(target_block_id)),
-      self.ast().void_type(),
-    );
+    let _continue_inst_id =
+      self.emit(inst::Jump::new(target_block_id), self.ast().void_type());
 
     let immediate_block_id = self.new_empty_block();
     let _should_be_now = self.push_block(immediate_block_id);
@@ -1017,11 +965,7 @@ impl<'c> Emitter<'c> {
     let immediate_block_id = self.new_empty_block();
 
     let _now_block_terminator = self.emit(
-      inst::Terminator::Branch(inst::Branch::new(
-        condition,
-        then_block_id,
-        else_block_id,
-      )),
+      inst::Branch::new(condition, then_block_id, else_block_id),
       self.ast().void_type(),
     );
 
@@ -1039,10 +983,7 @@ impl<'c> Emitter<'c> {
           .is_null()
       );
 
-      self.emit(
-        inst::Terminator::Jump(inst::Jump::new(immediate_block_id)),
-        self.ast().void_type(),
-      )
+      self.emit(inst::Jump::new(immediate_block_id), self.ast().void_type())
     };
 
     let _last_block_of_then = self.push_block(else_block_id);
@@ -1057,10 +998,7 @@ impl<'c> Emitter<'c> {
           .terminator
           .is_null()
       );
-      self.emit(
-        inst::Terminator::Jump(inst::Jump::new(immediate_block_id)),
-        self.ast().void_type(),
-      )
+      self.emit(inst::Jump::new(immediate_block_id), self.ast().void_type())
     };
 
     let _last_block_of_else = self.push_block(immediate_block_id);
@@ -1178,28 +1116,22 @@ impl<'c> Emitter<'c> {
     use ::std::cmp::Ordering::*;
     use Signedness::*;
     use ast::CastType::*;
-    use inst::{Cast, Load, Memory, Sext, Trunc, Zext};
+    use inst::{Load, Sext, Trunc, Zext};
 
     match cast_type {
       Noop | FunctionToPointerDecay | ArrayToPointerDecay => operand,
-      LValueToRValue => self.emit(Memory::from(Load::new(operand)), ast_type),
+      LValueToRValue => self.emit(Load::new(operand), ast_type),
       IntegralCast => {
-        assert!(
-          ast_type.as_primitive().is_some_and(|p| p.is_integer())
-            && ast_type.size_bits() > 0
-            && ast_type.size_bits() <= 128
-        );
         let width =
           self.visit(operand, |value| value.ir_type.as_integer_unchecked());
         match Ord::cmp(width, &(ast_type.size_bits() as u8)) {
           Less => match ast_type.signedness() {
-            Some(Signed) => self.emit(Cast::from(Sext::new(operand)), ast_type),
-            Some(Unsigned) =>
-              self.emit(Cast::from(Zext::new(operand)), ast_type),
+            Some(Signed) => self.emit(Sext::new(operand), ast_type),
+            Some(Unsigned) => self.emit(Zext::new(operand), ast_type),
             None => unreachable!(),
           },
           Equal => operand,
-          Greater => self.emit(Cast::from(Trunc::new(operand)), ast_type),
+          Greater => self.emit(Trunc::new(operand), ast_type),
         }
       },
       _ => todo!("implicit cast: {:?}", cast_type),
@@ -1278,10 +1210,7 @@ impl<'c> Emitter<'c> {
     assert_eq!(operator, Operator::Assign);
     assert!(lookup!(self, left).ir_type.is_pointer());
 
-    self.emit(
-      inst::Memory::Store(inst::Store::new(left, right)),
-      self.ast().void_type(),
-    )
+    self.emit(inst::Store::new(left, right), self.ast().void_type())
   }
 
   fn logical(
@@ -1313,8 +1242,10 @@ impl<'c> Emitter<'c> {
     let lhs_ty = self.visit(left, |lhs| lhs.ast_type);
     let rhs_ty = self.visit(right, |rhs| rhs.ast_type);
 
-    // debug_assert_eq!(lhs_ty.signedness(), rhs_ty.signedness());
-    let singedness = lhs_ty.signedness().unwrap();
+    let singedness = lhs_ty.signedness().expect(
+      "arithmetic type always has signedness -- even pointers are considered \
+       unsigned here.",
+    );
 
     match (lhs_ty.is_pointer(), rhs_ty.is_pointer()) {
       (false, false) => self.emit(
@@ -1328,7 +1259,30 @@ impl<'c> Emitter<'c> {
       ),
       (true, true) => {
         // ptrtoint cast -> sub -> sdiv.
-        todo!()
+        let left =
+          self.emit(inst::PtrToInt::new(left), self.ast().uintptr_type());
+        let right =
+          self.emit(inst::PtrToInt::new(right), self.ast().uintptr_type());
+        let sub = self.emit(
+          Binary::new(BinaryOp::Sub, left, right),
+          self.ast().ptrdiff_type(),
+        );
+        debug_assert!(RefEq::ref_eq(
+          lhs_ty.as_pointer_unchecked().pointee.unqualified_type,
+          rhs_ty.as_pointer_unchecked().pointee.unqualified_type
+        ));
+        debug_assert!(RefEq::ref_eq(ast_type, self.ast().ptrdiff_type()));
+        let size = self.emit(
+          Constant::Integral(Integral::from_uintptr(
+            lhs_ty
+              .as_pointer_unchecked()
+              .pointee
+              .unqualified_type
+              .size(),
+          )),
+          self.ast().uintptr_type(),
+        );
+        self.emit(Binary::new(BinaryOp::SDiv, sub, size), ast_type)
       },
       (true, false) => {
         use ::std::debug_assert_matches;
@@ -1623,7 +1577,7 @@ impl<'c> Emitter<'c> {
   ) -> ValueID {
     assert_eq!(operator, Operator::Star);
     assert!(lookup!(self, operand).ir_type.is_pointer());
-    self.emit(inst::Memory::from(inst::Load::new(operand)), ast_type)
+    self.emit(inst::Load::new(operand), ast_type)
   }
 
   fn logical_not(

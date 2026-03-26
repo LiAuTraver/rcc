@@ -1238,9 +1238,9 @@ impl<'c> Sema<'c> {
     };
 
     match (lhs.unqualified_type(), rhs.unqualified_type()) {
-      (Type::Pointer(ptr), Type::Primitive(p)) if p.is_integer() =>
+      (Type::Pointer(_), Type::Primitive(p)) if p.is_integer() =>
         Ok(doit(lhs, rhs)),
-      (Type::Primitive(p), Type::Pointer(ptr)) if p.is_integer() =>
+      (Type::Primitive(p), Type::Pointer(_)) if p.is_integer() =>
         Ok(doit(rhs, lhs)),
 
       (Type::Pointer(_), t) | (t, Type::Pointer(_)) => Err(
@@ -1735,7 +1735,7 @@ impl<'c> Sema<'c> {
           ),
         },
       // int + ptr => ptr
-      (Type::Primitive(lhs), Type::Pointer(ptr))
+      (Type::Primitive(lhs), Type::Pointer(_))
         if lhs.is_integer() && operator == Operator::Plus =>
       {
         let ptrty = right.unqualified_type().clone().lookup(self.context());
@@ -1751,7 +1751,7 @@ impl<'c> Sema<'c> {
         ))
       },
       // ptr + int => ptr
-      (Type::Pointer(ptr), Type::Primitive(rhs))
+      (Type::Pointer(_), Type::Primitive(rhs))
         if rhs.is_integer() && operator == Operator::Plus =>
       {
         let ptrty = left.unqualified_type().clone().lookup(self.context());
@@ -1767,7 +1767,7 @@ impl<'c> Sema<'c> {
         ))
       },
       // ptr - int => ptr
-      (Type::Pointer(ptr), Type::Primitive(rhs))
+      (Type::Pointer(_), Type::Primitive(rhs))
         if rhs.is_integer() && operator == Operator::Minus =>
       {
         let ptrty = left.unqualified_type().clone().lookup(self.context());

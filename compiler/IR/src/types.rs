@@ -14,6 +14,33 @@ pub enum Type<'ir> {
   Struct(Struct<'ir>),
 }
 
+impl<'ir> TypeInfo<'ir> for Type<'ir> {
+  fn size(&self) -> usize {
+    self.size_bits() * 8
+  }
+
+  fn size_bits(&self) -> usize {
+    match self {
+      Self::Void() => 0,
+      Self::Label() => 0,
+      Self::Floating(format) => format.size_bits(),
+      Self::Pointer() => 64, // TODO: make it target dependent.
+      Self::Integer(width) => *width as usize,
+      Self::Array(array) => array.element_type.size_bits() * array.length,
+      Self::Function(_) => 0, // function type itself does not occupy space.
+      Self::Struct(_) => unimplemented!(),
+    }
+  }
+
+  fn is_scalar(&self) -> bool {
+    matches!(self, Self::Pointer() | Self::Integer(_))
+  }
+
+  fn default_value(&self) -> ::rcc_shared::Constant<'ir> {
+    todo!()
+  }
+}
+
 pub type TypeRef<'ir> = &'ir Type<'ir>;
 pub type TypeRefMut<'ir> = &'ir mut Type<'ir>;
 
@@ -57,6 +84,7 @@ impl<'ir> Function<'ir> {
 pub struct Struct<'ir> {
   _placeholder: &'ir ::std::marker::PhantomData<i8>,
 }
+use ::rcc_ast::types::TypeInfo;
 use ::rcc_utils::{
   RefEq, interconvert, make_trio_for, make_trio_for_unit_tuple,
 };

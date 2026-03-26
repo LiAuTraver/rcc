@@ -14,6 +14,14 @@ pub enum Format {
 // IEEE128,      // 'long double' Quad precision
 
 use Format::*;
+impl Format {
+  pub const fn size_bits(&self) -> usize {
+    match self {
+      IEEE32 => 32,
+      IEEE64 => 64,
+    }
+  }
+}
 
 // union Bits {
 //   ieee32: f32,
@@ -53,10 +61,7 @@ impl ::std::fmt::LowerExp for Floating {
   }
 }
 impl Floating {
-  pub const fn new<T: [const] ::rcc_utils::ToU128>(
-    bits: T,
-    format: Format,
-  ) -> Self {
+  pub const fn new<T: [const] ToU128>(bits: T, format: Format) -> Self {
     Self {
       bits: bits.to_u128(),
       format,
@@ -120,15 +125,24 @@ impl Floating {
 
   pub const fn cast(self, format: Format) -> Floating {
     match (self.format, format) {
-      (IEEE32, IEEE64) => {
-        let f = f32::from_bits(self.bits as underlying_type_of!(f32));
-        Floating::from(f as f64)
-      },
-      (IEEE64, IEEE32) => {
-        let f = f64::from_bits(self.bits as underlying_type_of!(f64));
-        Floating::from(f as f32)
-      },
+      (IEEE32, IEEE64) => Floating::from(f32::from_bits(
+        self.bits as underlying_type_of!(f32),
+      ) as f64),
+      (IEEE64, IEEE32) => Floating::from(f64::from_bits(
+        self.bits as underlying_type_of!(f64),
+      ) as f32),
       (IEEE32, IEEE32) | (IEEE64, IEEE64) => self,
+    }
+  }
+
+  pub const fn abs(self) -> Self {
+    match self.format {
+      IEEE32 => Floating::from(
+        f32::from_bits(self.bits as underlying_type_of!(f32)).abs(),
+      ),
+      IEEE64 => Floating::from(
+        f64::from_bits(self.bits as underlying_type_of!(f64)).abs(),
+      ),
     }
   }
 }
@@ -310,4 +324,35 @@ const fn clamp_float_to_unsigned<F: [const] ToU128 + BuiltinFloat>(
   width: u8,
 ) -> u128 {
   f.to_u128().clamp(0, (1u128 << width) - 1)
+}
+
+#[cfg(test)]
+#[allow(clippy::unnecessary_cast)]
+#[allow(non_upper_case_globals)]
+mod tests {
+  macro_rules! const_assert_eq {
+    ($a:expr, $b:expr) => {
+      const _: () = assert!($a == $b);
+    };
+  }
+  macro_rules! const_assert_approx_eq {
+    ($a:expr, $b:expr, $epsilon:expr) => {
+      const _: () = assert!(($a - $b).abs() <= $epsilon);
+    };
+  }
+
+  use ::std::{f32, f64};
+
+  #[allow(unused)]
+  use super::*;
+
+  #[test]
+  const fn test_floating() {
+    const F1: Floating = Floating::from(f32::consts::PI);
+    const F2: Floating = Floating::from(f64::consts::PI);
+    const_assert_eq!(F1.format(), Format::IEEE32);
+    const_assert_eq!(F2.format(), Format::IEEE64);
+    const_assert_approx_eq!(F1.cast(Format::IEEE64), F2, 1e-7f64.into());
+    const_assert_approx_eq!(F2.cast(Format::IEEE32), F1, f32::EPSILON.into());
+  }
 }

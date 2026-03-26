@@ -220,7 +220,6 @@ macro_rules! make_trio_for_unit_tuple {
         pub fn [<is_ $variant:lower>](&self) -> bool {
           matches!(self, Self::$variant())
         }
-
       }
     }
   };
