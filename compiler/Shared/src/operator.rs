@@ -122,6 +122,9 @@ pub enum Operator {
   // MS-ext
   #[strum(serialize = "#@")]
   HashAt,
+  // GNU-ext
+  #[strum(serialize = "?:")]
+  Elvis,
 
   #[strum(disabled)]
   #[default]
@@ -278,8 +281,8 @@ impl Operator {
       // logical OR
       Or => Some((0x08, 0x09)),
 
-      // Question mark (ternary operator)
-      Question => Some((0x07, 0x06)),
+      // Question n' Elvis
+      Question | Elvis => Some((0x07, 0x06)),
 
       // assignment
       _ if self.assignment() => Some((0x04, 0x03)),

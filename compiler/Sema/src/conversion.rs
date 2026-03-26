@@ -116,11 +116,16 @@ impl<'c> Expression<'c> {
   #[must_use]
   #[inline]
   pub fn void_conversion(self, context: &'c Context) -> Self {
-    let span = self.span();
-    Self::new_rvalue(
-      ImplicitCast::new(self.into(), CastType::ToVoid, span).into(),
-      context.void_type().into(),
-    )
+    match self.unqualified_type().is_void() {
+      true => self,
+      false => {
+        let span = self.span();
+        Self::new_rvalue(
+          ImplicitCast::new(self.into(), CastType::ToVoid, span).into(),
+          context.void_type().into(),
+        )
+      },
+    }
   }
 
   /// 6.5.17.2 Simple assignment

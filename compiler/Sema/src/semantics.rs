@@ -1136,80 +1136,69 @@ impl<'c> Sema<'c> {
       .lvalue_conversion()
       .decay(self.context())
       .is_contextually_convertible_to_bool()?;
-    let then_expr = self.expression(*pe_then_expr)?;
-    let else_expr = self.expression(*pe_else_expr)?;
 
-    match (then_expr.unqualified_type(), else_expr.unqualified_type()) {
-      (Type::Primitive(Primitive::Void), Type::Primitive(Primitive::Void)) =>
-        Ok(se::Expression::new_rvalue(
-          se::Ternary::new(condition, then_expr, else_expr, span).into(),
-          self.context().void_type().into(),
-        )),
-      (Type::Primitive(Primitive::Void), _) => Ok(se::Expression::new_rvalue(
-        se::Ternary::new(
-          condition,
-          then_expr,
-          se::Expression::void_conversion(else_expr, self.context()),
-          span,
-        )
-        .into(),
-        self.context().void_type().into(),
-      )),
-      (_, Type::Primitive(Primitive::Void)) => Ok(se::Expression::new_rvalue(
-        se::Ternary::new(
-          condition,
-          se::Expression::void_conversion(then_expr, self.context()),
-          else_expr,
-          span,
-        )
-        .into(),
-        self.context().void_type().into(),
-      )),
-      // both arithmetic -> usual arithmetic conversion
-      (left_type, right_type)
-        if left_type.is_arithmetic() && right_type.is_arithmetic() =>
-      {
-        let (then_converted, else_converted, result_type) =
-          se::Expression::usual_arithmetic_conversion(
-            then_expr,
-            else_expr,
-            self.context(),
-          )?;
-        Ok(se::Expression::new_rvalue(
-          se::Ternary::new(condition, then_converted, else_converted, span)
-            .into(),
-          result_type,
-        ))
-      },
-      // both pointer to compatible type -> composite type
-      (Type::Pointer(left_ptr), Type::Pointer(right_ptr)) => {
-        let left_pointee = &left_ptr.pointee;
-        let right_pointee = &right_ptr.pointee;
-        if Compatibility::compatible(left_pointee, right_pointee) {
-          let qualified_type = QualifiedType::composite_unchecked(
-            left_pointee,
-            right_pointee,
-            self.context(),
-          );
-          let result_type = Type::Pointer(Pointer::new(qualified_type))
-            .lookup(self.context())
-            .into();
+    if let Some(then) = pe_then_expr {
+      let then_expr = self.expression(*then)?;
+      let else_expr = self.expression(*pe_else_expr)?;
+
+      match (then_expr.unqualified_type(), else_expr.unqualified_type()) {
+        (left_type, right_type)
+          if left_type.is_void() || right_type.is_void() =>
           Ok(se::Expression::new_rvalue(
-            se::Ternary::new(condition, then_expr, else_expr, span).into(),
+            se::Ternary::new(
+              condition,
+              se::Expression::void_conversion(then_expr, self.context()),
+              se::Expression::void_conversion(else_expr, self.context()),
+              span,
+            )
+            .into(),
+            self.ast().void_type().into(),
+          )),
+        // both arithmetic -> usual arithmetic conversion
+        (left_type, right_type)
+          if left_type.is_arithmetic() && right_type.is_arithmetic() =>
+        {
+          let (then_converted, else_converted, result_type) =
+            se::Expression::usual_arithmetic_conversion(
+              then_expr,
+              else_expr,
+              self.context(),
+            )?;
+          Ok(se::Expression::new_rvalue(
+            se::Ternary::new(condition, then_converted, else_converted, span)
+              .into(),
             result_type,
           ))
-        } else {
-          Err(
-            IncompatiblePointerTypes(
-              then_expr.qualified_type().to_string(),
-              else_expr.qualified_type().to_string(),
-            )
-            .into_with(Severity::Error)
-            .into_with(span),
-          )
-        }
-      },
-      _ => todo!(),
+        },
+        // both pointer to compatible type -> composite type
+        (Type::Pointer(left_ptr), Type::Pointer(right_ptr)) =>
+          match Compatibility::composite(
+            &left_ptr.pointee,
+            &right_ptr.pointee,
+            self.context(),
+          ) {
+            Some(qualified_type) => {
+              let result_type = Type::Pointer(Pointer::new(qualified_type))
+                .lookup(self.context())
+                .into();
+              Ok(se::Expression::new_rvalue(
+                se::Ternary::new(condition, then_expr, else_expr, span).into(),
+                result_type,
+              ))
+            },
+            None => Err(
+              IncompatiblePointerTypes(
+                then_expr.qualified_type().to_string(),
+                else_expr.qualified_type().to_string(),
+              )
+              .into_with(Severity::Error)
+              .into_with(span),
+            ),
+          },
+        _ => todo!(),
+      }
+    } else {
+      todo!()
     }
   }
 

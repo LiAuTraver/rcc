@@ -560,7 +560,9 @@ impl<'c> Dumpable<'c> for Expression<'_> {
       Ternary(ternary) => {
         header!("Ternary", ternary, "\n");
         ternary.condition.dump(dumper, &subprefix, false, palette);
-        ternary.then_expr.dump(dumper, &subprefix, false, palette);
+        if let Some(ref then_expr) = ternary.then_expr {
+          then_expr.dump(dumper, &subprefix, false, palette);
+        }
         ternary.else_expr.dump(dumper, &subprefix, true, palette)
       },
 

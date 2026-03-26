@@ -278,6 +278,7 @@ impl<'c> Lexer<'c> {
         Hash,
         &[("##", HashHash), ("#@", HashAt)],
       ),
+      '?' => self.lex_compound_operator(start, Question, &[("?:", Elvis)]),
 
       // single-character operators
       ',' => Some(Token::operator(Comma, self.span(start))),
@@ -287,7 +288,6 @@ impl<'c> Lexer<'c> {
       '{' => Some(Token::operator(LeftBrace, self.span(start))),
       '}' => Some(Token::operator(RightBrace, self.span(start))),
       '~' => Some(Token::operator(Tilde, self.span(start))),
-      '?' => Some(Token::operator(Question, self.span(start))),
       '\'' => self.character(start),
       '\\' => self.line_escape(start),
 

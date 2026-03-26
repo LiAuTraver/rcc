@@ -1003,6 +1003,7 @@ impl<'c> Emitter<'c> {
       else_expr,
       span,
     } = ternary;
+    let then_expr = then_expr.expect("unimplemened for ?:");
     debug_assert_eq!(then_expr.qualified_type(), else_expr.qualified_type());
     // type res; if (cond) { res = then; } else { res = else; }
 

@@ -42,7 +42,16 @@
 //   return i;
 // }
 
-int getchar();
+// int getchar();
+// int getchar2();
+// int getchar3();
+// int getchar4();
+// int getchar5();
 int main() {
-  return getchar() ? getchar() ? getchar() ? getchar() ? 0 : 4 : 5 : 6 : 7;
+  int *p;
+  int *q = p + 1;
+  // int c[2];
+  // 1 [c] = 0;
+  // return getchar() ? getchar2() ? getchar3() ? getchar4() ? 0 : 4 : 5 : 6 :
+  // 7;
 }

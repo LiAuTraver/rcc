@@ -1265,17 +1265,29 @@ impl<'c> Parser<'c> {
           break;
         }
         self.get();
-        if op == Question {
-          let then_branch = self.next_expression(Operator::DEFAULT);
-          self.recoverable_get::<{ Colon }>();
-          let else_branch = self.next_expression(r_bp);
-          lhs =
-            Ternary::new(lhs, then_branch, else_branch, self.eloc(location))
-              .into();
-        } else {
-          let rhs = self.next_expression(r_bp);
-          lhs = Binary::new(op, lhs, rhs, self.eloc(location)).into();
-        }
+        lhs = match op {
+          Question if self.peek_lit() != Literal::Operator(Colon) => {
+            let then_expr = self.next_expression(Operator::DEFAULT);
+            self.recoverable_get::<{ Colon }>();
+
+            let else_expr = self.next_expression(r_bp);
+
+            Ternary::new(lhs, then_expr, else_expr, self.eloc(location)).into()
+          },
+          Question => {
+            self.must_get_op::<{ Colon }>();
+            let else_expr = self.next_expression(r_bp);
+            Ternary::elvis(lhs, else_expr, self.eloc(location)).into()
+          },
+          Elvis => {
+            let else_expr = self.next_expression(r_bp);
+            Ternary::elvis(lhs, else_expr, self.eloc(location)).into()
+          },
+          _ => {
+            let rhs = self.next_expression(r_bp);
+            Binary::new(op, lhs, rhs, self.eloc(location)).into()
+          },
+        };
         continue;
       }
 

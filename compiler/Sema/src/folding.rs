@@ -398,6 +398,8 @@ impl<'c> Folding<'c> for Ternary<'c> {
     debug_assert!(
       self
         .then_expr
+        .as_deref()
+        .expect("?: unimplemented")
         .qualified_type()
         .compatible_with(self.else_expr.qualified_type()),
       "type checker ensures both branches have compatible types!"
@@ -412,14 +414,21 @@ impl<'c> Folding<'c> for Ternary<'c> {
           .is_zero()
         {
           true => self.else_expr.fold(diag),
-          false => self.then_expr.fold(diag),
+          false => self.then_expr.expect("?: unimplemented").fold(diag),
         }
       },
       Failure(_) => fc.map(|folded_condition| {
         Expression::new(
           Self {
             condition: folded_condition.into(),
-            then_expr: self.then_expr.fold(diag).take().into(),
+            then_expr: Some(
+              self
+                .then_expr
+                .expect("?: unimplemented")
+                .fold(diag)
+                .take()
+                .into(),
+            ),
             else_expr: self.else_expr.fold(diag).take().into(),
             ..self
           }

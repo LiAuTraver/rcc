@@ -187,7 +187,7 @@ pub struct RawMemberAccess<'c, ExprTy> {
 #[derive(Debug, Clone)]
 pub struct RawTernary<ExprTy> {
   pub condition: Box<ExprTy>,
-  pub then_expr: Box<ExprTy>,
+  pub then_expr: Option<Box<ExprTy>>,
   pub else_expr: Box<ExprTy>,
   pub span: SourceSpan,
 }
@@ -331,10 +331,24 @@ impl<ExprTy> RawTernary<ExprTy> {
   ) -> Self {
     Self {
       condition: condition.into(),
-      then_expr: then_expr.into(),
+      then_expr: Some(then_expr.into()),
       else_expr: else_expr.into(),
       span,
     }
+  }
+
+  pub fn elvis(condition: ExprTy, else_expr: ExprTy, span: SourceSpan) -> Self {
+    Self {
+      condition: condition.into(),
+      then_expr: None,
+      else_expr: else_expr.into(),
+      span,
+    }
+  }
+
+  #[inline]
+  pub fn is_elvis(&self) -> bool {
+    self.then_expr.is_some()
   }
 }
 
@@ -416,11 +430,15 @@ mod fmt {
   }
   impl<ExprTy: Display> Display for RawTernary<ExprTy> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(
-        f,
-        "({} ? {} : {})",
-        self.condition, self.then_expr, self.else_expr
-      )
+      match &self.then_expr {
+        Some(then_expr) => write!(
+          f,
+          "({} ? {} : {})",
+          self.condition, then_expr, self.else_expr
+        ),
+
+        None => write!(f, "({} ?: {})", self.condition, self.else_expr),
+      }
     }
   }
   impl<ExprTy: Display> Display for RawParen<ExprTy> {
