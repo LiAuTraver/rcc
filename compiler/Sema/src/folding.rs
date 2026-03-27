@@ -623,11 +623,6 @@ impl<'c> Folding<'c> for CompoundAssign<'c> {
     value_category: ValueCategory,
     _diag: &impl Diagnosis<'c>,
   ) -> FoldingResult<Expression<'c>> {
-    // let (raw_binary, inner_ty, inner_vc) = self.intermediate.destructure();
-    // let res = raw_binary
-    //   .as_binary_unchecked()
-    //   .fold(inner_ty, inner_vc, diag);
-
     Failure(Expression::new(self.into(), target_type, value_category))
   }
 }

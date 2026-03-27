@@ -148,3 +148,16 @@ impl Primitive {
     }
   }
 }
+use ::rcc_adt::FloatFormat;
+
+impl From<Primitive> for FloatFormat {
+  fn from(value: Primitive) -> Self {
+    use FloatFormat::*;
+    use Primitive::*;
+    match value {
+      Float => IEEE32,
+      Double => IEEE64,
+      _ => panic!("Invalid primitive type for float format: {:?}", value),
+    }
+  }
+}

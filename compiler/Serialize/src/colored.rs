@@ -118,6 +118,8 @@ pub struct Palette {
   /// The color for dimmed text, less important info.
   pub dim: ColorSpec,
   /// The color for the skeleton of the tree, like vertical bars.
+  ///
+  /// This should always left as default(no color, no bold, no intense).
   pub skeleton: ColorSpec,
   /// For error nodes and error messages.
   pub error: ColorSpec,

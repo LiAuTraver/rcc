@@ -138,6 +138,11 @@ mod data {
     LabelNotFound(StrRef<'c>),
     #[error("Variable '{0}' cannot have function specifiers")]
     FunctionSpecsInVariableDecl(Elem),
+    #[error(
+      "Declaration of variable '{0}' declared with deduced type '__auto_type' \
+       requires an initializer"
+    )]
+    DeducedTypeWithNoInitializer(Elem),
     #[error("Variable '{0}' already defined")]
     VariableAlreadyDefined(Elem),
     #[error("Function '{0}' already defined")]

@@ -78,6 +78,13 @@ impl Floating {
       IEEE64 => Floating::from(0.0f64),
     }
   }
+
+  pub const fn one(format: Format) -> Self {
+    match format {
+      IEEE32 => Floating::from(1.0f32),
+      IEEE64 => Floating::from(1.0f64),
+    }
+  }
 }
 
 impl Floating {

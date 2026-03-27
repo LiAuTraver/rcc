@@ -140,6 +140,22 @@ pub enum Keyword {
   Xor,
   #[strum(serialize = "xor_eq")]
   XorEq,
+
+  // some stuffs.
+  #[strum(serialize = "__auto_type")]
+  AutoType,
+  #[strum(serialize = "_Nullable")]
+  Nullable,
+  #[strum(serialize = "_Nonnull")]
+  Nonnull,
+  #[strum(serialize = "_Null_unspecified")]
+  NullUnspecified,
+  #[strum(serialize = "__func__")]
+  Func,
+  #[strum(serialize = "__FUNCTION__")]
+  Function,
+  #[strum(serialize = "__PRETTY_FUNCTION__")]
+  PrettyFunction,
 }
 #[derive(
   Debug,

@@ -9,8 +9,8 @@ impl Display for types::Function<'_> {
   }
 }
 impl Display for types::Array<'_> {
-  fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    todo!()
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "[{} x {}]", self.length, self.element_type)
   }
 }
 impl Display for types::Struct<'_> {

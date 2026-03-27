@@ -642,13 +642,6 @@ impl<'c> Sema<'c> {
       initializer,
       span,
     } = vardef;
-    let (function_specifier, storage, qualified_type) =
-      self.parse_declspecs(declspecs).shall_ok("vardef");
-    contract_assert!(
-      function_specifier.is_empty(),
-      "variable cannot have function specifier; this should be handled in \
-       parser"
-    );
     let pd::Declarator {
       modifiers,
       name,
@@ -656,19 +649,69 @@ impl<'c> Sema<'c> {
     } = declarator;
     let name = name
       .shall_ok("variable must have a name; it should be handled in parser");
-    let qualified_type =
-      self.apply_modifiers_for_varty(qualified_type, modifiers);
-    let initializer = initializer.and_then(|initializer| {
-      self.initializer(
-        initializer,
-        &qualified_type,
-        self.environment.is_global()
-          || matches!(
-            storage,
-            Some(Storage::Constexpr | Storage::Static | Storage::ThreadLocal)
-          ),
-      )
-    });
+
+    let (storage, qualified_type, initializer) = if declspecs
+      .type_specifiers
+      .len()
+      == 1
+      && matches!(
+        unsafe { declspecs.type_specifiers.first().unwrap_unchecked() },
+        ::rcc_parse::declaration::TypeSpecifier::AutoType
+      ) {
+      let storage = declspecs.storage_class;
+      let function_specifier = declspecs.function_specifiers;
+      contract_assert!(
+        function_specifier.is_empty(),
+        "variable cannot have function specifier; this should be handled in \
+         parser"
+      );
+      let initializer = initializer.and_then(|initializer| {
+        self.initializer(
+          initializer,
+          None,
+          self.environment.is_global()
+            || matches!(
+              storage,
+              Some(Storage::Constexpr | Storage::Static | Storage::ThreadLocal)
+            ),
+        )
+      });
+      if initializer.is_none() {
+        Err(
+          DeducedTypeWithNoInitializer(name.to_string())
+            .into_with(Severity::Error)
+            .into_with(span),
+        )?
+      }
+      let qualified_type =
+        match unsafe { initializer.as_ref().unwrap_unchecked() } {
+          sd::Initializer::Scalar(expression) => *expression.qualified_type(),
+          sd::Initializer::Aggregate(_) => todo!(),
+        };
+      (storage, qualified_type, initializer)
+    } else {
+      let (function_specifier, storage, qualified_type) =
+        self.parse_declspecs(declspecs).shall_ok("vardef");
+      contract_assert!(
+        function_specifier.is_empty(),
+        "variable cannot have function specifier; this should be handled in \
+         parser"
+      );
+      let qualified_type =
+        self.apply_modifiers_for_varty(qualified_type, modifiers);
+      let initializer = initializer.and_then(|initializer| {
+        self.initializer(
+          initializer,
+          Some(&qualified_type),
+          self.environment.is_global()
+            || matches!(
+              storage,
+              Some(Storage::Constexpr | Storage::Static | Storage::ThreadLocal)
+            ),
+        )
+      });
+      (storage, qualified_type, initializer)
+    };
 
     let vardef = match self.environment.is_global() {
       true =>
@@ -761,17 +804,19 @@ impl<'c> Sema<'c> {
   fn initializer(
     &self,
     initializer: pd::Initializer<'c>,
-    target_type: &QualifiedType<'c>,
+    target_type: Option<&QualifiedType<'c>>,
     requires_folding: bool,
   ) -> Option<sd::Initializer<'c>> {
     match initializer {
       pd::Initializer::Expression(expression) => self
         .expression(*expression)
         .map(|expr| {
-          expr
-            .decay(self.context())
-            .assignment_conversion(target_type)
-            .handle_or_default(self)
+          let decayed = expr.decay(self.context());
+          if let Some(t) = target_type {
+            decayed.assignment_conversion(t).handle_or_default(self)
+          } else {
+            decayed
+          }
         })
         .map(|expr| {
           Some(sd::Initializer::Scalar(if !requires_folding {
@@ -1302,7 +1347,7 @@ impl<'c> Sema<'c> {
   /// __auto_type i = c++; //< deduced as of type `char`
   /// __auto_type j = ++c; //  ditto
   /// __auto_type k = c+1; //< deduced as type `int`
-  /// __auto_type is_equal = j == k; // true
+  /// _Static_assert(j == k, "success");
   /// ```
   fn ppmm(
     &self,
@@ -1311,42 +1356,24 @@ impl<'c> Sema<'c> {
     kind: se::UnaryKind,
     span: SourceSpan,
   ) -> Result<se::Expression<'c>, Diag<'c>> {
-    match operator.ppmm2pm() {
-      Some(_) if !operand.is_modifiable_lvalue() => Err(
+    if !operand.is_modifiable_lvalue() {
+      Err(
         ExprNotAssignable(operand.to_string())
           .into_with(Severity::Error)
           .into_with(span),
-      ),
-      Some(_) if !operand.qualified_type().is_scalar() => Err(
+      )
+    } else if !operand.qualified_type().is_scalar() {
+      Err(
         NonArithmeticInUnaryOp(operator, operand.to_string())
           .into_with(Severity::Error)
           .into_with(span),
-      ),
-      Some(pm) => {
-        let one = se::Expression::new_rvalue(
-          se::Constant::new(
-            se::ConstantLiteral::Integral(Integral::from(1i32)),
-            span,
-          )
-          .into(),
-          self.ast().int_type().into(),
-        );
-        #[allow(unused)]
-        let expr_type = *operand.qualified_type();
-        _ = kind;
-        #[allow(unused)]
-        let (raw_expr, qualified_type, value_category) =
-          self.arithmetic(pm, operand, one, span)?.destructure();
-        todo!()
-        // let se::Binary { left, .. } = raw_expr.into_binary_unchecked();
-
-        // Ok(se::Expression::new(
-        //   se::Unary::new(operator, *left, kind, span).into(),
-        //   expr_type,
-        //   value_category,
-        // ))
-      },
-      None => unreachable!(),
+      )
+    } else {
+      let operand_type = *operand.qualified_type();
+      Ok(se::Expression::new_rvalue(
+        se::Unary::new(operator, operand, kind, span).into(),
+        operand_type,
+      ))
     }
   }
 
@@ -1514,18 +1541,18 @@ impl<'c> Sema<'c> {
           .do_binary(binary_op, se::Expression::clone(&left), right, span)?
           .destructure();
 
-        let se::Binary { right, .. } = raw_binary.into_binary_unchecked();
-
-        let assigned_expr = right
-          .lvalue_conversion()
-          .decay(self.context())
-          .assignment_conversion(&expr_type)?;
+        let se::Binary {
+          right,
+          left: intermediate_left,
+          ..
+        } = raw_binary.into_binary_unchecked();
 
         Ok(se::Expression::new_rvalue(
           se::CompoundAssign::new(
             operator,
             left,
-            assigned_expr,
+            *right,
+            *intermediate_left.qualified_type(),
             intermediate_result_type,
             span,
           )
@@ -1783,6 +1810,8 @@ impl<'c> Sema<'c> {
           ),
         },
       // int + ptr => ptr
+
+      // be aware that the left and right switched their position in order to make irgen earsier.
       (Type::Primitive(lhs), Type::Pointer(_))
         if lhs.is_integer() && operator == Operator::Plus =>
       {
@@ -1790,8 +1819,8 @@ impl<'c> Sema<'c> {
         Ok(se::Expression::new_rvalue(
           se::Binary::new(
             operator,
-            left.ptrdiff_conversion_unchecked(self.context()),
             right,
+            left.ptrdiff_conversion_unchecked(self.context()),
             span,
           )
           .into(),
@@ -1952,10 +1981,11 @@ impl<'c> Sema<'c> {
     statement: ps::Statement<'c>,
   ) -> Result<ss::Statement<'c>, Diag<'c>> {
     match statement {
-      ps::Statement::Expression(expression) => self.exprstmt(expression),
+      ps::Statement::Empty(_) => Ok(Default::default()),
+      ps::Statement::Expression(expression) =>
+        self.exprstmt(expression).map(Into::into),
       ps::Statement::Compound(compound_stmt) =>
         self.compound(compound_stmt).map(Into::into),
-      ps::Statement::Empty(_) => Ok(ss::Statement::default()),
       ps::Statement::Return(return_stmt) =>
         self.returnstmt(return_stmt).map(Into::into),
       ps::Statement::Declaration(declaration) =>
@@ -2006,9 +2036,9 @@ impl<'c> Sema<'c> {
   fn exprstmt(
     &self,
     expr_stmt: pe::Expression<'c>,
-  ) -> Result<ss::Statement<'c>, Diag<'c>> {
+  ) -> Result<se::Expression<'c>, Diag<'c>> {
     // todo: unused expression result warning
-    Ok(self.expression(expr_stmt)?.into())
+    self.expression(expr_stmt)
   }
 
   fn returnstmt(

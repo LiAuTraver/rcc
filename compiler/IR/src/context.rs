@@ -26,6 +26,7 @@ pub struct Context<'c> {
   nullptr: ValueID,
   common_integer_one: [ValueID; 5],
   common_integer_zero: [ValueID; 5],
+  common_floating_one: [ValueID; 2],
   common_floating_zero: [ValueID; 2],
   /// currently only for ir stage. use it in previous stage could cause unprecedented catastrophe. see the git stash.
   constant_interner: RefCell<BiHashMap<ValueID, Constant<'c>>>,
@@ -111,6 +112,13 @@ impl<'c> Context<'c> {
     match format {
       FloatFormat::IEEE32 => self.common_floating_zero[0],
       FloatFormat::IEEE64 => self.common_floating_zero[1],
+    }
+  }
+
+  pub fn floating_one(&self, format: FloatFormat) -> ValueID {
+    match format {
+      FloatFormat::IEEE32 => self.common_floating_one[0],
+      FloatFormat::IEEE64 => self.common_floating_one[1],
     }
   }
 
@@ -359,6 +367,7 @@ impl<'c> Context<'c> {
       nullptr: unsafe { MaybeUninit::uninit().assume_init() },
       common_integer_one: unsafe { MaybeUninit::uninit().assume_init() },
       common_integer_zero: unsafe { MaybeUninit::uninit().assume_init() },
+      common_floating_one: unsafe { MaybeUninit::uninit().assume_init() },
       common_floating_zero: unsafe { MaybeUninit::uninit().assume_init() },
     };
     {
@@ -405,6 +414,26 @@ impl<'c> Context<'c> {
         this.common_floating_zero[1],
         Constant::Floating(Floating::zero(FloatFormat::IEEE64)),
       );
+      this.common_floating_one[0] = ir_arena_ref.insert(Value::new(
+        ast_context.float32_type(),
+        this.float32_type,
+        Constant::Floating(Floating::one(FloatFormat::IEEE32)),
+        Default::default(),
+      ));
+      refmut.insert(
+        this.common_floating_one[0],
+        Constant::Floating(Floating::one(FloatFormat::IEEE32)),
+      );
+      this.common_floating_one[1] = ir_arena_ref.insert(Value::new(
+        ast_context.float64_type(),
+        this.float64_type,
+        Constant::Floating(Floating::one(FloatFormat::IEEE64)),
+        Default::default(),
+      ));
+      refmut.insert(
+        this.common_floating_one[1],
+        Constant::Floating(Floating::one(FloatFormat::IEEE64)),
+      );
 
       let ast_types = [
         ast_context.i1_bool_type(),
@@ -419,12 +448,12 @@ impl<'c> Context<'c> {
           this.common_integer_one[index] = ir_arena_ref.insert(Value::new(
             ast_type,
             this.common_integer_types[index],
-            Constant::Integral(Integral::bitmask(width)),
+            Constant::Integral(Integral::from_unsigned(1, width)),
             Default::default(),
           ));
           refmut.insert(
             this.common_integer_one[index],
-            Constant::Integral(Integral::bitmask(width)),
+            Constant::Integral(Integral::from_unsigned(1, width)),
           );
 
           this.common_integer_zero[index] = ir_arena_ref.insert(Value::new(

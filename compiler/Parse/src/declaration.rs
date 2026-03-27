@@ -101,27 +101,30 @@ pub enum TypeSpecifier<'c> {
   Struct(Struct<'c>),
   Union(Struct<'c>),
   Enum(EnumSpecifier<'c>),
+  AutoType,
 }
 
 impl<'c> TypeSpecifier<'c> {
   pub fn sort_key(&self) -> u8 {
+    use TypeSpecifier::*;
     match self {
-      TypeSpecifier::Void => 0,
-      TypeSpecifier::Unsigned => 1,
-      TypeSpecifier::Signed => 2,
-      TypeSpecifier::Char => 3,
-      TypeSpecifier::Short => 4,
-      TypeSpecifier::Long => 5,
-      TypeSpecifier::Int => 6,
-      TypeSpecifier::Float => 7,
-      TypeSpecifier::Double => 8,
-      TypeSpecifier::Bool => 9,
-      TypeSpecifier::Complex => 10,
-      TypeSpecifier::Typedef(_) => 11,
-      TypeSpecifier::Nullptr => 12,
-      TypeSpecifier::Struct(_) => 13,
-      TypeSpecifier::Union(_) => 14,
-      TypeSpecifier::Enum(_) => 15,
+      Void => 0,
+      Unsigned => 1,
+      Signed => 2,
+      Char => 3,
+      Short => 4,
+      Long => 5,
+      Int => 6,
+      Float => 7,
+      Double => 8,
+      Bool => 9,
+      Complex => 10,
+      Typedef(_) => 11,
+      Nullptr => 12,
+      Struct(_) => 13,
+      Union(_) => 14,
+      Enum(_) => 15,
+      AutoType => 16,
     }
   }
 
@@ -376,6 +379,7 @@ mod cvt {
         Keyword::Signed => Ok(TypeSpecifier::Signed),
         Keyword::Unsigned => Ok(TypeSpecifier::Unsigned),
         Keyword::Bool => Ok(TypeSpecifier::Bool),
+        Keyword::AutoType => Ok(TypeSpecifier::AutoType),
         _ => Err(()),
       }
     }
@@ -583,23 +587,25 @@ mod fmt {
   }
   impl<'c> Display for TypeSpecifier<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      use TypeSpecifier::*;
       match self {
-        TypeSpecifier::Nullptr => write!(f, "nullptr"),
-        TypeSpecifier::Void => write!(f, "void"),
-        TypeSpecifier::Char => write!(f, "char"),
-        TypeSpecifier::Short => write!(f, "short"),
-        TypeSpecifier::Int => write!(f, "int"),
-        TypeSpecifier::Long => write!(f, "long"),
-        TypeSpecifier::Float => write!(f, "float"),
-        TypeSpecifier::Double => write!(f, "double"),
-        TypeSpecifier::Signed => write!(f, "signed"),
-        TypeSpecifier::Unsigned => write!(f, "unsigned"),
-        TypeSpecifier::Bool => write!(f, "bool"),
-        TypeSpecifier::Complex => write!(f, "complex"),
-        TypeSpecifier::Typedef(name) => write!(f, "{}", name),
-        TypeSpecifier::Struct(s) => write!(f, "struct {}", s),
-        TypeSpecifier::Union(s) => write!(f, "union {}", s),
-        TypeSpecifier::Enum(e) => write!(f, "enum {}", e),
+        Nullptr => write!(f, "nullptr"),
+        Void => write!(f, "void"),
+        Char => write!(f, "char"),
+        Short => write!(f, "short"),
+        Int => write!(f, "int"),
+        Long => write!(f, "long"),
+        Float => write!(f, "float"),
+        Double => write!(f, "double"),
+        Signed => write!(f, "signed"),
+        Unsigned => write!(f, "unsigned"),
+        Bool => write!(f, "bool"),
+        Complex => write!(f, "complex"),
+        Typedef(name) => write!(f, "{}", name),
+        Struct(s) => write!(f, "struct {}", s),
+        Union(s) => write!(f, "union {}", s),
+        Enum(e) => write!(f, "enum {}", e),
+        AutoType => write!(f, "__auto_type"),
       }
     }
   }

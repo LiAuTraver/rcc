@@ -140,7 +140,7 @@ macro_rules! type_alias_expr {
     }
 
     ::rcc_utils::static_assert!(
-      ::std::mem::size_of::<RawExpr>() <= 64,
+      ::std::mem::size_of::<RawExpr>() <= 80, // compoundassign has maximun size now
       "RawExpr size exceeds 64 bytes",
     );
 

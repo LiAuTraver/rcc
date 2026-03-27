@@ -9,6 +9,7 @@ use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
 use ::rcc_shared::{Constant, OpDiag, Operator, OperatorCategory, SourceSpan};
 use ::rcc_utils::{RefEq, StrRef, Unbox, contract_violation};
 use ::std::collections::HashMap;
+use rcc_ast::types::TypeRef;
 
 use super::{
   Argument,
@@ -641,10 +642,7 @@ impl<'c> Emitter<'c> {
 
   fn while_stmt(&mut self, while_stmt: ss::While<'c>) {
     let ss::While {
-      condition,
-      body,
-      // tag, // tag is needed for break and continue, now TODO.
-      ..
+      condition, body, ..
     } = while_stmt;
 
     let now_block_id = self.current_block;
@@ -1116,6 +1114,7 @@ impl<'c> Emitter<'c> {
       operator,
       left,
       right,
+      intermediate_left_type,
       intermediate_result_type,
       ..
     } = compound_assign;
@@ -1163,7 +1162,6 @@ impl<'c> Emitter<'c> {
     self.emit(inst::BitCast::new(operand), ast_type)
   }
 
-  #[inline(always)]
   fn floating_to_boolean_cast(
     &mut self,
     operand: ValueID,
@@ -1184,7 +1182,6 @@ impl<'c> Emitter<'c> {
     self.emit(inst::Zext::new(compared), ast_type)
   }
 
-  #[inline(always)]
   fn integral_to_boolean_cast(
     &mut self,
     operand: ValueID,
@@ -1204,7 +1201,6 @@ impl<'c> Emitter<'c> {
     self.emit(inst::Zext::new(compared), ast_type)
   }
 
-  #[inline(always)]
   fn pointer_to_boolean_cast(
     &mut self,
     operand: ValueID,
@@ -1412,86 +1408,115 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    use inst::{Binary, BinaryOp};
     let lhs_ty = self.visit(left, |lhs| lhs.ast_type);
     let rhs_ty = self.visit(right, |rhs| rhs.ast_type);
 
-    let singedness = lhs_ty.signedness().expect(
-      "arithmetic type always has signedness -- even pointers are considered \
-       unsigned here.",
-    );
-
     match (lhs_ty.is_pointer(), rhs_ty.is_pointer()) {
-      (false, false) => self.emit(
-        Binary::new(
-          BinaryOp::from_op_and_sign(operator, singedness)
-            .expect("semantic analysis should catch this."),
-          left,
-          right,
-        ),
+      (false, false) => self.do_arithmetic_operands(
+        operator,
+        left,
+        right,
         ast_type,
+        lhs_ty
+          .signedness()
+          .expect("arithmetic type always has signedness."),
+        span,
       ),
-      (true, true) => {
-        // ptrtoint cast -> sub -> sdiv.
-        let left =
-          self.emit(inst::PtrToInt::new(left), self.ast().uintptr_type());
-        let right =
-          self.emit(inst::PtrToInt::new(right), self.ast().uintptr_type());
-        let sub = self.emit(
-          Binary::new(BinaryOp::Sub, left, right),
-          self.ast().ptrdiff_type(),
-        );
-        debug_assert!(RefEq::ref_eq(
-          lhs_ty.as_pointer_unchecked().pointee.unqualified_type,
-          rhs_ty.as_pointer_unchecked().pointee.unqualified_type
-        ));
-        debug_assert!(RefEq::ref_eq(ast_type, self.ast().ptrdiff_type()));
-        let size = self.emit(
-          Constant::Integral(Integral::from_uintptr(
-            lhs_ty
-              .as_pointer_unchecked()
-              .pointee
-              .unqualified_type
-              .size(),
-          )),
-          self.ast().uintptr_type(),
-        );
-        self.emit(Binary::new(BinaryOp::SDiv, sub, size), ast_type)
-      },
-      (true, false) => {
-        use ::std::debug_assert_matches;
-        debug_assert_matches!(operator, Operator::Plus | Operator::Minus);
-        debug_assert!(RefEq::ref_eq(ast_type, lhs_ty));
-
-        let operands = vec![
-          left,
-          self.unary_arithmetic(
-            operator,
-            right,
-            self.ast().ptrdiff_type(),
-            span,
-          ),
-        ];
-
-        self.emit(inst::GetElementPtr::new(operands), ast_type)
-      },
-      (false, true) => {
-        debug_assert_eq!(operator, Operator::Plus);
-        debug_assert!(RefEq::ref_eq(ast_type, rhs_ty));
-
-        let operands = vec![
-          right,
-          self.unary_arithmetic(
-            operator,
-            left,
-            self.ast().ptrdiff_type(),
-            span,
-          ),
-        ];
-
-        self.emit(inst::GetElementPtr::new(operands), ast_type)
-      },
+      (true, true) =>
+        self.do_pointer_arithmetic(left, right, ast_type, lhs_ty, rhs_ty),
+      (true, false) => self
+        .do_pointer_integer_arithmetic(operator, left, right, ast_type, span),
+      (false, true) => unreachable!(
+        "Semantic checker swapped the lhs and rhs if the left is not pointer \
+         but the right is -- so this case should never happen."
+      ),
     }
+  }
+
+  /// caller ensure the rhs is an integral.
+  fn do_pointer_integer_arithmetic(
+    &mut self,
+    operator: Operator,
+    pointer_operand: ValueID,
+    integer_operand: ValueID,
+    pointer_type: &'c ast::Type<'c>,
+    span: SourceSpan,
+  ) -> ValueID {
+    use ::std::debug_assert_matches;
+    debug_assert_matches!(operator, Operator::Plus | Operator::Minus);
+
+    let operands = vec![
+      pointer_operand,
+      self.unary_arithmetic(
+        operator,
+        integer_operand,
+        self.ast().ptrdiff_type(),
+        span,
+      ),
+    ];
+
+    self.emit(inst::GetElementPtr::new(operands), pointer_type)
+  }
+
+  /// caller ensures precond.
+  #[inline]
+  fn do_arithmetic_operands(
+    &mut self,
+    operator: Operator,
+    left: ValueID,
+    right: ValueID,
+    ast_type: ast::TypeRef<'c>,
+    signedness: Signedness,
+    span: SourceSpan,
+  ) -> ValueID {
+    use inst::{Binary, BinaryOp};
+    self.emit(
+      Binary::new(
+        BinaryOp::from_op_and_sign(
+          operator,
+          signedness,
+          ast_type.is_floating_point(),
+        ),
+        left,
+        right,
+      ),
+      ast_type,
+    )
+  }
+
+  fn do_pointer_arithmetic(
+    &mut self,
+    left: ValueID,
+    right: ValueID,
+    ast_type: TypeRef<'c>,
+    lhs_ty: TypeRef<'c>,
+    rhs_ty: TypeRef<'c>,
+  ) -> ValueID {
+    use inst::{Binary, BinaryOp};
+    // ptrtoint cast -> sub -> sdiv.
+    let left = self.emit(inst::PtrToInt::new(left), self.ast().uintptr_type());
+    let right =
+      self.emit(inst::PtrToInt::new(right), self.ast().uintptr_type());
+    let sub = self.emit(
+      Binary::new(BinaryOp::Sub, left, right),
+      self.ast().ptrdiff_type(),
+    );
+    debug_assert!(RefEq::ref_eq(
+      lhs_ty.as_pointer_unchecked().pointee.unqualified_type,
+      rhs_ty.as_pointer_unchecked().pointee.unqualified_type
+    ));
+    debug_assert!(RefEq::ref_eq(ast_type, self.ast().ptrdiff_type()));
+    let size = self.emit(
+      Constant::Integral(Integral::from_uintptr(
+        lhs_ty
+          .as_pointer_unchecked()
+          .pointee
+          .unqualified_type
+          .size(),
+      )),
+      self.ast().uintptr_type(),
+    );
+    self.emit(Binary::new(BinaryOp::SDiv, sub, size), ast_type)
   }
 
   fn bitwise(
@@ -1713,8 +1738,8 @@ impl<'c> Emitter<'c> {
     span: SourceSpan,
   ) -> ValueID {
     macro_rules! call {
-      ($method:ident) => {
-        self.$method(operator, operand, ast_type, span)
+      ($method:ident $(, $uglykind:ident)?) => {
+        self.$method(operator, operand, ast_type, span $(, $uglykind)?)
       };
     }
 
@@ -1725,10 +1750,7 @@ impl<'c> Emitter<'c> {
       Not => call!(logical_not),
       Tilde => call!(tilde),
       Plus | Minus => call!(unary_arithmetic),
-      PlusPlus | MinusMinus => match kind {
-        UnaryKind::Prefix => call!(ppmm_pre),
-        UnaryKind::Postfix => call!(ppmm_post),
-      },
+      PlusPlus | MinusMinus => call!(ppmm, kind),
       _ => unreachable!("operator is not unary: {:#?}", operator),
     }
   }
@@ -1848,23 +1870,55 @@ impl<'c> Emitter<'c> {
     }
   }
 
-  fn ppmm_pre(
+  fn ppmm(
     &mut self,
     operator: Operator,
     operand: ValueID,
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
+    kind: UnaryKind,
   ) -> ValueID {
-    todo!()
-  }
+    let pm = operator.ppmm2pm().expect("precond: op is pp or mm");
 
-  fn ppmm_post(
-    &mut self,
-    operator: Operator,
-    operand: ValueID,
-    ast_type: ast::TypeRef<'c>,
-    span: SourceSpan,
-  ) -> ValueID {
-    todo!()
+    let loaded = self.emit(inst::Load::new(operand), ast_type);
+    let valty = self.visit(loaded, |value| value.ast_type);
+    // if ast_type is plain arithemetic type, just add or sub the corresponding integer or floating constant, and store back.
+    // if it's a pointer type, do gep with 1 or -1 using the pointer arithmetic function, and store back.
+    use ast::Type::*;
+    let calculated = match valty {
+      Primitive(p) => {
+        let one = match p {
+          i if i.is_integer() => self.ir().integer_one(i.size_bits() as u8),
+          &f if f.is_floating_point() => self.ir().floating_one(f.into()),
+          _ => unreachable!("not a proper arithematic type"),
+        };
+        self.do_arithmetic_operands(
+          pm,
+          loaded,
+          one,
+          ast_type,
+          ast_type
+            .signedness()
+            .expect("arithematic type always have signedness"),
+          span,
+        )
+      },
+      Pointer(_) => {
+        let one = self
+          .ir()
+          .integer_one(self.ast().ptrdiff_type().size_bits() as u8);
+        self.do_pointer_integer_arithmetic(pm, loaded, one, valty, span)
+      },
+      _ => unreachable!("precond: ast type shall be a scalar."),
+    };
+    _ = self.emit(
+      inst::Store::new(operand, calculated),
+      self.ast().void_type(),
+    );
+    use UnaryKind::*;
+    match kind {
+      Prefix => calculated,
+      Postfix => loaded,
+    }
   }
 }

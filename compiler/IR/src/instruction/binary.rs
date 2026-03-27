@@ -72,25 +72,31 @@ impl BinaryOp {
   pub const fn from_op_and_sign(
     operator: Operator,
     signedness: Signedness,
-  ) -> Option<BinaryOp> {
+    is_floating: bool,
+  ) -> BinaryOp {
     use BinaryOp::*;
     use Operator::*;
     use Signedness::*;
-    match (operator, signedness) {
-      (Plus, _) => Some(Add),
-      (Minus, _) => Some(Sub),
-      (Star, _) => Some(Mul),
-      (Slash, Signed) => Some(SDiv),
-      (Slash, Unsigned) => Some(UDiv),
-      (Percent, Signed) => Some(SRem),
-      (Percent, Unsigned) => Some(URem),
-      (Ampersand, _) => Some(BinaryOp::And),
-      (Pipe, _) => Some(BinaryOp::Or),
-      (Caret, _) => Some(Xor),
-      (LeftShift, _) => Some(Shl),
-      (RightShift, Signed) => Some(AShr),
-      (RightShift, Unsigned) => Some(LShr),
-      _ => None,
+    match (operator, is_floating, signedness) {
+      (Plus, false, ..) => Add,
+      (Plus, true, ..) => FAdd,
+      (Minus, false, ..) => Sub,
+      (Minus, true, ..) => FSub,
+      (Star, false, ..) => Mul,
+      (Star, true, ..) => FMul,
+      (Slash, false, Signed) => SDiv,
+      (Slash, false, Unsigned) => UDiv,
+      (Slash, true, ..) => FDiv,
+      (Percent, false, Signed) => SRem,
+      (Percent, false, Unsigned) => URem,
+      (Percent, true, ..) => FRem,
+      (Ampersand, ..) => BinaryOp::And,
+      (Pipe, ..) => BinaryOp::Or,
+      (Caret, false, ..) => Xor,
+      (LeftShift, false, ..) => Shl,
+      (RightShift, false, Signed) => AShr,
+      (RightShift, false, Unsigned) => LShr,
+      _ => panic!("semantic analysis should catch this."),
     }
   }
 }
