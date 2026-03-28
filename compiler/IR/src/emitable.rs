@@ -489,7 +489,7 @@ mod instruction {
     impl<'c> Emitable<'c, Load> for Emitter<'c> {
       fn emit(&mut self, load: Load, ast_type: ast::TypeRef<'c>) -> ValueID {
         debug_assert!(
-          self.visit(load.addr(), |value| dbg!(value).ir_type.is_pointer()),
+          self.visit(load.addr(), |value| value.ir_type.is_pointer()),
           "Load address must be a pointer"
         );
         self.emit_common_instruction(Memory::Load(load), ast_type)
@@ -547,7 +547,12 @@ mod instruction {
               .is_some_and(|p| {
                 p.size_bits() == self.ast().ptrdiff_type().size_bits()
               }))),
-          "GEP indices must be ptrdiff_t."
+          "GEP indices must be ptrdiff_t. 
+          Sext or trunc the integral type to ptrdiff_t first."
+        );
+        debug_assert!(
+          ast_type.is_pointer(),
+          "GEP returned type shall be a pointer"
         );
         self.emit_common_instruction(gep, ast_type)
       }

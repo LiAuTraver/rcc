@@ -7,7 +7,7 @@ use ::rcc_ast::{
     Type, TypeInfo,
   },
 };
-use ::rcc_shared::{Diag, DiagData::*, Severity, SourceSpan};
+use ::rcc_shared::{Diag, DiagData::*, DiagMeta, Severity, SourceSpan};
 use ::rcc_utils::{IntoWith, RefEq};
 
 use super::expression::{Expression, ImplicitCast};
@@ -121,7 +121,7 @@ impl<'c> Expression<'c> {
       false => {
         let span = self.span();
         Self::new_rvalue(
-          ImplicitCast::new(self.into(), CastType::ToVoid, span).into(),
+          ImplicitCast::new(self.into(), CastType::ToVoid, span),
           context.void_type().into(),
         )
       },
@@ -163,7 +163,7 @@ impl<'c> Expression<'c> {
       let old_unqual_type = self.unqualified_type();
       let span = self.span();
       Self::new_rvalue(
-        ImplicitCast::new(self.into(), CastType::LValueToRValue, span).into(),
+        ImplicitCast::new(self.into(), CastType::LValueToRValue, span),
         old_unqual_type.into(),
       )
     } else {
@@ -196,8 +196,7 @@ impl<'c> Expression<'c> {
       Type::Pointer(Pointer::new(*self.qualified_type())).lookup(context);
     let span = self.span();
     Self::new_rvalue(
-      ImplicitCast::new(self.into(), CastType::FunctionToPointerDecay, span)
-        .into(),
+      ImplicitCast::new(self.into(), CastType::FunctionToPointerDecay, span),
       // The pointer itself is never qualified
       pointer_type.into(),
     )
@@ -224,8 +223,7 @@ impl<'c> Expression<'c> {
     ));
     let span = self.span();
     Self::new_rvalue(
-      ImplicitCast::new(self.into(), CastType::ArrayToPointerDecay, span)
-        .into(),
+      ImplicitCast::new(self.into(), CastType::ArrayToPointerDecay, span),
       // The pointer itself is never qualified
       pointer_type.lookup(context).into(),
     )
@@ -359,23 +357,21 @@ impl<'c> Expression<'c> {
       // the left operand is an atomic, qualified, or unqualified pointer, and the right operand is a null pointer constant or its type is nullptr_t;
       (Type::Pointer(_), Type::Primitive(Primitive::Nullptr)) =>
         Ok(Self::new_rvalue(
-          ImplicitCast::new(self.into(), CastType::NullptrToPointer, span)
-            .into(),
+          ImplicitCast::new(self.into(), CastType::NullptrToPointer, span),
           *target_type,
         )),
 
       // the left operand has atomic, qualified, or unqualified bool, and the right operand is a pointer or its type is nullptr_t.
       (Type::Primitive(Primitive::Bool), Type::Pointer(_)) =>
         Ok(Self::new_rvalue(
-          ImplicitCast::new(self.into(), CastType::PointerToBoolean, span)
-            .into(),
+          ImplicitCast::new(self.into(), CastType::PointerToBoolean, span),
           *target_type,
         )),
       (
         Type::Primitive(Primitive::Bool),
         Type::Primitive(Primitive::Nullptr),
       ) => Ok(Self::new_rvalue(
-        ImplicitCast::new(self.into(), CastType::BitCast, span).into(),
+        ImplicitCast::new(self.into(), CastType::BitCast, span),
         *target_type,
       )),
       _ => Err(
@@ -403,8 +399,7 @@ impl<'c> Expression<'c> {
       Type::Primitive(p) if p.is_integer() =>
         Ok(Self::cast_if_needed(self, &context.i8_bool_type().into())),
       Type::Primitive(p) if p.is_floating_point() => Ok(Self::new_rvalue(
-        ImplicitCast::new(self.into(), CastType::FloatingToIntegral, span)
-          .into(),
+        ImplicitCast::new(self.into(), CastType::FloatingToIntegral, span),
         context.i8_bool_type().into(),
       )),
       Type::Primitive(Primitive::Nullptr) => Err(
@@ -431,8 +426,7 @@ impl<'c> Expression<'c> {
       ),
       // compare with nullptr
       Type::Pointer(_) => Ok(Self::new_rvalue(
-        ImplicitCast::new(self.into(), CastType::PointerToIntegral, span)
-          .into(),
+        ImplicitCast::new(self.into(), CastType::PointerToIntegral, span),
         context.i8_bool_type().into(),
       )),
 
@@ -536,23 +530,35 @@ impl<'c> Expression<'c> {
 /// Heplers.
 impl<'c> Expression<'c> {
   #[must_use]
-  fn get_cast_type(from: &Type, to: &Type) -> CastType {
+  pub fn get_cast_type(from: &Type, to: &Type) -> CastType {
+    Self::try_get_cast_type(from, to).unwrap()
+  }
+
+  /// i forgot the logic of the orig cast_type, so i create new one here for compound assignment op/assignment? im going nuts!
+  pub fn try_get_cast_type(
+    from: &Type,
+    to: &Type,
+  ) -> Result<CastType, DiagMeta<'c>> {
+    use CastType::*;
+    use Type::Primitive as P;
+    // use Type::Pointer as Ptr;
     match (from, to) {
-      (from, to) if RefEq::ref_eq(from, to) => CastType::Noop,
-      (Type::Primitive(from_prim), Type::Primitive(to_prim)) => {
-        if from_prim.is_integer() && to_prim.is_integer() {
-          CastType::IntegralCast
-        } else if from_prim.is_integer() && to_prim.is_floating_point() {
-          CastType::IntegralToFloating
-        } else if from_prim.is_floating_point() && to_prim.is_integer() {
-          CastType::FloatingToIntegral
-        } else if from_prim.is_floating_point() && to_prim.is_floating_point() {
-          CastType::FloatingCast
-        } else {
-          panic!("Invalid cast: {:?} -> {:?}", from_prim, to_prim)
-        }
-      },
-      _ => panic!("Invalid cast: {:?} -> {:?}", from, to),
+      (from, to) if RefEq::ref_eq(from, to) => Ok(Noop),
+      (P(f), P(t)) if f.is_integer() && t.is_integer() => Ok(IntegralCast),
+      (P(f), P(t)) if f.is_integer() && t.is_floating_point() =>
+        Ok(IntegralToFloating),
+      (P(f), P(t)) if f.is_floating_point() && t.is_integer() =>
+        Ok(FloatingToIntegral),
+      (P(f), P(t)) if f.is_floating_point() && t.is_floating_point() =>
+        Ok(FloatingCast),
+      // (P(i), Ptr(_)) if i.is_integer() => Ok(Noop), // attn
+      _ => Err(
+        InvalidConversion(format!(
+          "cannot convert from '{}' to '{}'",
+          from, to
+        ))
+        .into_with(Severity::Error),
+      ),
     }
   }
 
@@ -568,7 +574,7 @@ impl<'c> Expression<'c> {
       _ => {
         let span = self.span();
         Expression::new_rvalue(
-          ImplicitCast::new(self.into(), cast_type, span).into(),
+          ImplicitCast::new(self.into(), cast_type, span),
           *target_type,
         )
       },
@@ -592,7 +598,7 @@ impl<'c> Expression<'c> {
       cast_type => {
         let span = self.span();
         Self::new_rvalue(
-          ImplicitCast::new(self.into(), cast_type, span).into(),
+          ImplicitCast::new(self.into(), cast_type, span),
           promoted_type.lookup(context).into(),
         )
       },

@@ -24,34 +24,34 @@ pub struct Expression<'c> {
 }
 impl<'c> Expression<'c> {
   pub fn new(
-    raw_expr: RawExpr<'c>,
+    variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
     value_category: ValueCategory,
   ) -> Self {
     Self {
-      raw_expr,
+      raw_expr: variant.into(),
       expr_type,
       value_category,
     }
   }
 
   pub fn new_rvalue(
-    raw_expr: RawExpr<'c>,
+    variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
   ) -> Self {
     Self {
-      raw_expr,
+      raw_expr: variant.into(),
       expr_type,
       value_category: RValue,
     }
   }
 
   pub fn new_lvalue(
-    raw_expr: RawExpr<'c>,
+    variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
   ) -> Self {
     Self {
-      raw_expr,
+      raw_expr: variant.into(),
       expr_type,
       value_category: LValue,
     }

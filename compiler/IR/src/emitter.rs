@@ -9,7 +9,6 @@ use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
 use ::rcc_shared::{Constant, OpDiag, Operator, OperatorCategory, SourceSpan};
 use ::rcc_utils::{RefEq, StrRef, Unbox, contract_violation};
 use ::std::collections::HashMap;
-use rcc_ast::types::TypeRef;
 
 use super::{
   Argument,
@@ -17,8 +16,9 @@ use super::{
   emitable::Emitable,
   instruction::{self as inst},
   module::{self, BasicBlock, Module},
-  value::{Value, ValueID, WithActionMut},
+  value::{Value, ValueID},
 };
+
 #[derive(Default, PartialEq, Eq)]
 pub(super) struct ControlFlowContext {
   /// loops w/ switch
@@ -156,7 +156,7 @@ impl<'c> Emitter<'c> {
 
   fn seal_current_block(&mut self) {
     if !self.current_block.is_null() {
-      assert!(
+      debug_assert!(
         !lookup!(self, self.current_block)
           .data
           .as_basicblock_unchecked()
@@ -190,7 +190,7 @@ impl<'c> Emitter<'c> {
     then_block_id: ValueID,
     else_block_id: ValueID,
   ) -> ValueID {
-    lookup_mut!(self, branch_id).with_action_mut(|now| {
+    self.apply(branch_id, |now| {
       let branch = now
         .data
         .as_instruction_mut_unchecked()
@@ -206,7 +206,7 @@ impl<'c> Emitter<'c> {
 
   /// terminator return also handlede here, but no effect.
   fn refill_jump(&mut self, jump_id: ValueID, to_block_id: ValueID) -> ValueID {
-    lookup_mut!(self, jump_id).with_action_mut(|jump| {
+    self.apply(jump_id, |jump| {
       jump
         .data
         .as_instruction_mut_unchecked()
@@ -332,8 +332,8 @@ impl<'c> Emitter<'c> {
       function_id
     };
 
-    assert!(self.locals.is_empty());
-    assert!(self.labels.is_empty());
+    debug_assert!(self.locals.is_empty());
+    debug_assert!(self.labels.is_empty());
 
     self.apply(self.current_block, |val| {
       val.parent = self.current_function;
@@ -454,7 +454,7 @@ impl<'c> Emitter<'c> {
     self.locals.clear();
     self.labels.clear();
 
-    assert!(
+    debug_assert!(
       !lookup!(self, self.current_function)
         .data
         .as_function_unchecked()
@@ -592,7 +592,7 @@ impl<'c> Emitter<'c> {
     let else_block_id = self.new_empty_block();
 
     let should_be_now = self.push_block(then_block_id);
-    assert_eq!(should_be_now, now_block_id);
+    debug_assert_eq!(should_be_now, now_block_id);
 
     self.statement(then_branch);
 
@@ -609,7 +609,7 @@ impl<'c> Emitter<'c> {
 
     // the assertion here is wrong. new controlflow may add many blocks.
     // let shuold_be_then = self.push_block(else_block_id);
-    // assert_eq!(shuold_be_then, then_block_id);
+    // debug_assert_eq!(shuold_be_then, then_block_id);
 
     let _last_block_of_then = self.push_block(else_block_id);
 
@@ -632,7 +632,7 @@ impl<'c> Emitter<'c> {
 
         // ditto
         let _last_block_of_else = self.push_block(immediate_block_id);
-        // assert_eq!(should_be_else, else_block_id);
+        // debug_assert_eq!(should_be_else, else_block_id);
 
         self.refill_jump(then_block_terminator, immediate_block_id);
         self.refill_jump(else_block_terminator, immediate_block_id)
@@ -660,7 +660,7 @@ impl<'c> Emitter<'c> {
       self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
 
     let should_be_now = self.push_block(cond_block_id);
-    assert_eq!(should_be_now, now_block_id);
+    debug_assert_eq!(should_be_now, now_block_id);
 
     let boolean_condition = self.expression(condition);
     let condition = self.contextual_convert_to_i1(boolean_condition);
@@ -671,7 +671,7 @@ impl<'c> Emitter<'c> {
     );
 
     let should_be_cond = self.push_block(body_block_id);
-    assert_eq!(should_be_cond, cond_block_id);
+    debug_assert_eq!(should_be_cond, cond_block_id);
 
     self.statement(body);
 
@@ -716,7 +716,7 @@ impl<'c> Emitter<'c> {
       self.emit(inst::Jump::new(body_block_id), self.ast().void_type());
 
     let _should_be_now = self.push_block(cond_block_id);
-    assert_eq!(_should_be_now, now_block_id);
+    debug_assert_eq!(_should_be_now, now_block_id);
 
     let boolean_condition = self.expression(condition);
     let condition = self.contextual_convert_to_i1(boolean_condition);
@@ -727,7 +727,7 @@ impl<'c> Emitter<'c> {
     );
 
     let _should_be_cond = self.push_block(body_block_id);
-    assert_eq!(_should_be_cond, cond_block_id);
+    debug_assert_eq!(_should_be_cond, cond_block_id);
 
     self.statement(body);
 
@@ -777,7 +777,7 @@ impl<'c> Emitter<'c> {
       self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
 
     let _should_be_now = self.push_block(cond_block_id);
-    assert_eq!(_should_be_now, now_block_id);
+    debug_assert_eq!(_should_be_now, now_block_id);
 
     let boolean_condition = condition
       .map(|cond| self.expression(cond))
@@ -789,7 +789,7 @@ impl<'c> Emitter<'c> {
     );
 
     let _should_be_cond = self.push_block(body_block_id);
-    assert_eq!(_should_be_cond, cond_block_id);
+    debug_assert_eq!(_should_be_cond, cond_block_id);
 
     self.statement(body);
 
@@ -812,7 +812,7 @@ impl<'c> Emitter<'c> {
       self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
 
     let _should_be_inc = self.push_block(immediate_block_id);
-    assert_eq!(_should_be_inc, increment_block_id);
+    debug_assert_eq!(_should_be_inc, increment_block_id);
 
     let _poped = self.ctrlflow_ctx.pop();
     debug_assert!(
@@ -894,7 +894,11 @@ impl<'c> Emitter<'c> {
         unqualified_type, ..
       },
       ..,
-    ) = expression.unbox().fold(self.diag()).take().destructure();
+    ) = expression
+      .unbox()
+      .fold(&self.session().as_ast_session())
+      .take()
+      .destructure();
     use se::RawExpr::*;
     match raw_expr {
       Empty(_) => contract_violation!(
@@ -973,7 +977,7 @@ impl<'c> Emitter<'c> {
     let then_id = self.expression(then_expr);
 
     let _then_block_terminator = {
-      assert!(
+      debug_assert!(
         lookup!(self, self.current_block)
           .data
           .as_basicblock_unchecked()
@@ -989,7 +993,7 @@ impl<'c> Emitter<'c> {
     let else_id = self.expression(else_expr);
 
     let _else_block_terminator = {
-      assert!(
+      debug_assert!(
         lookup!(self, self.current_block)
           .data
           .as_basicblock_unchecked()
@@ -1047,16 +1051,21 @@ impl<'c> Emitter<'c> {
        hand is integer, Sema has already swapped them to make it a pointer \
        subscript."
     );
-    let current_extent = array.unqualified_type().extent();
-    let target_extent = ast_type.extent();
+    // let current_extent = array.unqualified_type().extent();
+    // let target_extent = ast_type.extent();
+    let pointer_ty = array.unqualified_type();
 
     let array_id = self.expression(array);
-    let index_id = self.expression(index);
+    let raw_index_id = self.expression(index);
 
     // assume sema checked that the target extent type is contained within the current extent and the type is valid..
 
-    // TODO: this is wrong.
-    self.emit(inst::GetElementPtr::new(vec![array_id, index_id]), ast_type)
+    let index_id = self.integral_cast(raw_index_id, self.ast().ptrdiff_type());
+
+    self.emit(
+      inst::GetElementPtr::new(vec![array_id, index_id]),
+      pointer_ty,
+    )
   }
 
   fn compound_literal(
@@ -1123,9 +1132,10 @@ impl<'c> Emitter<'c> {
     self.do_cast(operand, cast_type, ast_type)
   }
 
+  // gush. this is the most fluffing part of the whole codegen.
   fn compound_assign(
     &mut self,
-    compound_assign: se::CompoundAssign,
+    compound_assign: se::CompoundAssign<'c>,
     ast_type: ast::TypeRef<'c>,
   ) -> ValueID {
     let se::CompoundAssign {
@@ -1134,9 +1144,48 @@ impl<'c> Emitter<'c> {
       right,
       intermediate_left_type,
       intermediate_result_type,
-      ..
+      span,
     } = compound_assign;
-    todo!()
+    let left_ty = left.unqualified_type();
+    debug_assert!(
+      RefEq::ref_eq(left_ty, ast_type),
+      "precond: the lhs type shall be the whole expr type."
+    );
+    let evaluated_lhs = self.expression(left);
+    debug_assert!(
+      self.visit(evaluated_lhs, |value| value.ir_type.is_pointer()),
+      "The lhs should remains as-is -- an lvalue by the sema."
+    );
+    let rvalued_lhs =
+      self.do_cast(evaluated_lhs, ast::CastType::LValueToRValue, left_ty);
+    let lhs_compute_cast =
+      se::Expression::get_cast_type(left_ty, &intermediate_left_type);
+    let lhs_id =
+      self.do_cast(rvalued_lhs, lhs_compute_cast, &intermediate_left_type);
+
+    let right_ty = right.unqualified_type();
+    let evaluated_rhs = self.expression(right);
+    let rhs_comute_cast =
+      se::Expression::get_cast_type(right_ty, &intermediate_result_type);
+    let rhs_id =
+      self.do_cast(evaluated_rhs, rhs_comute_cast, &intermediate_result_type);
+
+    let assoc_op = operator.associated_operator().expect(
+      "precond: sema ensures the validity of the op is valid compound operator",
+    );
+
+    let bin_id =
+      self.do_binary(assoc_op, lhs_id, rhs_id, &intermediate_result_type, span);
+    let cast_me_back =
+      se::Expression::get_cast_type(&intermediate_result_type, ast_type);
+    let casted_back = self.do_cast(bin_id, cast_me_back, ast_type);
+
+    let _store = self.emit(
+      inst::Store::new(evaluated_lhs, casted_back),
+      self.ast().void_type(),
+    );
+
+    casted_back
   }
 }
 impl<'c> Emitter<'c> {
@@ -1164,14 +1213,14 @@ impl<'c> Emitter<'c> {
       FloatingToBoolean => call!(floating_to_boolean_cast),
       IntegralToPointer => call!(integral_to_pointer_cast),
       PointerToIntegral => call!(pointer_to_integral_cast),
+      ArrayToPointerDecay => call!(array_to_pointer_decay),
       FloatingToIntegral => call!(floating_to_integral_cast),
       IntegralToFloating => call!(integral_to_floating_cast),
-      Noop | ToVoid | ArrayToPointerDecay | FunctionToPointerDecay => operand, //< noop
+      Noop | ToVoid | FunctionToPointerDecay => operand, //< noop
     }
   }
 
-  /// Three `MeowToBoolean` casts acts much like the [`Self::logical_not`].
-  #[inline(always)]
+  #[inline]
   fn nullptr_to_pointer_cast(
     &mut self,
     operand: ValueID,
@@ -1241,7 +1290,7 @@ impl<'c> Emitter<'c> {
     self.emit(inst::Zext::new(compared), ast_type)
   }
 
-  #[inline(always)]
+  #[inline]
   fn lvalue_to_rvalue_cast(
     &mut self,
     operand: ValueID,
@@ -1250,7 +1299,21 @@ impl<'c> Emitter<'c> {
     self.emit(inst::Load::new(operand), ast_type)
   }
 
-  #[inline(always)]
+  fn array_to_pointer_decay(
+    &mut self,
+    operand: ValueID,
+    ast_type: ast::TypeRef<'c>,
+  ) -> ValueID {
+    let zero = self
+      .ir()
+      .integer_zero(self.ast().ptrdiff_type().size_bits() as u8);
+    self.emit(
+      inst::GetElementPtr::new(vec![operand, zero, zero]),
+      ast_type,
+    )
+  }
+
+  #[inline]
   fn bitcast(
     &mut self,
     operand: ValueID,
@@ -1259,7 +1322,7 @@ impl<'c> Emitter<'c> {
     self.emit(inst::BitCast::new(operand), ast_type)
   }
 
-  #[inline(always)]
+  #[inline]
   fn integral_to_pointer_cast(
     &mut self,
     operand: ValueID,
@@ -1268,7 +1331,7 @@ impl<'c> Emitter<'c> {
     self.emit(inst::IntToPtr::new(operand), ast_type)
   }
 
-  #[inline(always)]
+  #[inline]
   fn pointer_to_integral_cast(
     &mut self,
     operand: ValueID,
@@ -1314,6 +1377,7 @@ impl<'c> Emitter<'c> {
   ) -> ValueID {
     use ::std::cmp::Ordering::*;
     use inst::{FPExt, FPTrunc};
+    // floating point no need to use `either` cuz there's no pointer w/ floating point arith.
     let format =
       self.visit(operand, |value| value.ir_type.as_floating_unchecked());
     match Ord::cmp(format, &ast_type.as_primitive_unchecked().floating_format())
@@ -1332,16 +1396,36 @@ impl<'c> Emitter<'c> {
     use ::std::cmp::Ordering::*;
     use Signedness::*;
     use inst::{Sext, Trunc, Zext};
-    let width =
-      self.visit(operand, |value| value.ir_type.as_integer_unchecked());
-    match Ord::cmp(width, &(ast_type.size_bits() as u8)) {
-      Less => match ast_type.signedness() {
-        Some(Signed) => self.emit(Sext::new(operand), ast_type),
-        Some(Unsigned) => self.emit(Zext::new(operand), ast_type),
-        None => unreachable!(),
+    enum Either {
+      Left(Integral),
+      Right(u8),
+    }
+    use Either::*;
+    let either = self.visit(operand, |value| {
+      if let Some(c) = value.data.as_constant() {
+        Left(*c.as_integral_unchecked())
+      } else {
+        Right(*value.ir_type.as_integer_unchecked())
+      }
+    });
+
+    match either {
+      Left(i) => self.emit(
+        Constant::Integral(i.cast(
+          ast_type.size_bits() as u8,
+          ast_type.signedness().expect("never fails"),
+        )),
+        ast_type,
+      ),
+      Right(width) => match Ord::cmp(&width, &(ast_type.size_bits() as u8)) {
+        Less => match ast_type.signedness() {
+          Some(Signed) => self.emit(Sext::new(operand), ast_type),
+          Some(Unsigned) => self.emit(Zext::new(operand), ast_type),
+          None => unreachable!(),
+        },
+        Equal => operand,
+        Greater => self.emit(Trunc::new(operand), ast_type),
       },
-      Equal => operand,
-      Greater => self.emit(Trunc::new(operand), ast_type),
     }
   }
 }
@@ -1400,8 +1484,8 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    assert_eq!(operator, Operator::Assign);
-    assert!(lookup!(self, left).ir_type.is_pointer());
+    debug_assert_eq!(operator, Operator::Assign);
+    debug_assert!(lookup!(self, left).ir_type.is_pointer());
 
     self.emit(inst::Store::new(left, right), self.ast().void_type())
   }
@@ -1511,9 +1595,9 @@ impl<'c> Emitter<'c> {
     &mut self,
     left: ValueID,
     right: ValueID,
-    ast_type: TypeRef<'c>,
-    lhs_ty: TypeRef<'c>,
-    rhs_ty: TypeRef<'c>,
+    ast_type: ast::TypeRef<'c>,
+    lhs_ty: ast::TypeRef<'c>,
+    rhs_ty: ast::TypeRef<'c>,
   ) -> ValueID {
     use inst::{Binary, BinaryOp};
     // ptrtoint cast -> sub -> sdiv.
@@ -1598,7 +1682,7 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    assert_eq!(operator, Operator::Comma);
+    debug_assert_eq!(operator, Operator::Comma);
     right
   }
 }
@@ -1778,7 +1862,8 @@ impl<'c> Emitter<'c> {
     }
   }
 
-  #[inline]
+  /// Addressof is a no-op in IR level(for valid operands), since the operand should have already been loaded to a pointer if it's an lvalue, and if it's not an lvalue, it's already an rvalue and the address-of operator is invalid and should have been rejected by sema.
+  #[inline(always)]
   fn addressof(
     &mut self,
     operator: Operator,
@@ -1786,10 +1871,14 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    assert_eq!(operator, Operator::Ampersand);
+    debug_assert_eq!(operator, Operator::Ampersand);
     operand
   }
 
+  /// Dereference is also a no-op, since it produce an lvalue in AST level.
+  ///
+  /// And that when it needs to convert to rvalue, the [`Self::lvalue_to_rvalue_cast`] will emit the load inst.
+  #[inline(always)]
   fn indirect(
     &mut self,
     operator: Operator,
@@ -1797,9 +1886,9 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    assert_eq!(operator, Operator::Star);
-    assert!(lookup!(self, operand).ir_type.is_pointer());
-    self.emit(inst::Load::new(operand), ast_type)
+    debug_assert_eq!(operator, Operator::Star);
+    debug_assert!(lookup!(self, operand).ir_type.is_pointer());
+    operand
   }
 
   fn logical_not(
@@ -1809,7 +1898,7 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    assert_eq!(operator, Operator::Not);
+    debug_assert_eq!(operator, Operator::Not);
 
     let ir_type = self.visit(operand, |value| value.ir_type);
 
@@ -1847,8 +1936,8 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    assert_eq!(operator, Operator::Tilde);
-    assert!(ast_type.as_primitive().is_some_and(|p| p.is_integer()));
+    debug_assert_eq!(operator, Operator::Tilde);
+    debug_assert!(ast_type.as_primitive().is_some_and(|p| p.is_integer()));
     let bitmask = self.emit(
       Constant::Integral(Integral::bitmask(ast_type.size_bits() as u8)),
       ast_type,
@@ -1868,9 +1957,10 @@ impl<'c> Emitter<'c> {
   ) -> ValueID {
     let is_floating = self.visit(operand, |value| value.ir_type.is_floating());
     match (operator, is_floating) {
-      (Operator::Plus, _) => operand,
+      (Operator::Plus, false) => self.integral_cast(operand, ast_type),
       (Operator::Minus, false) => {
-        let (width, is_constant) = self.visit(operand, |value| {
+        let casted = self.integral_cast(operand, ast_type);
+        let (width, is_constant) = self.visit(casted, |value| {
           (
             value.ast_type.size_bits() as u8,
             value.data.as_constant().map(|c| *c.as_integral_unchecked()),
@@ -1881,12 +1971,15 @@ impl<'c> Emitter<'c> {
           None => {
             let zero = self.ir().integer_zero(width);
             self.emit(
-              inst::Binary::new(inst::BinaryOp::Sub, zero, operand),
+              inst::Binary::new(inst::BinaryOp::Sub, zero, casted),
               ast_type,
             )
           },
         }
       },
+      // no need to anything, the plus one forr integral maybe has a pointer operand(may ext or trunc to ast_type),
+      // float does not have such exception(which means ast_type is same as operand's.)
+      (Operator::Plus, true) => operand,
       (Operator::Minus, true) =>
         self.emit(inst::Unary::new(inst::UnaryOp::FNeg, operand), ast_type),
       _ => unreachable!(),

@@ -101,6 +101,9 @@ pub enum TypeSpecifier<'c> {
   Struct(Struct<'c>),
   Union(Struct<'c>),
   Enum(EnumSpecifier<'c>),
+  /// there's a dedicated class
+  /// [`AutoType`](https://github.com/LiAuTraver/llvm-project/blob/4f9d5a8bc85431b722e6f90744f3683adffc17b4/clang/include/clang/AST/TypeBase.h#L7155)
+  /// in clang's frontend, while im just only holds it as placeholder since the logic i implemented is simple.
   AutoType,
 }
 
@@ -131,13 +134,8 @@ impl<'c> TypeSpecifier<'c> {
   /// builtin type specifier(i.e., keyword types) can combine with each other,
   /// typedef-ed type, struct, union, enum cannot.
   pub fn is_builtin(&self) -> bool {
-    !matches!(
-      self,
-      TypeSpecifier::Typedef(_)
-        | TypeSpecifier::Struct(_)
-        | TypeSpecifier::Union(_)
-        | TypeSpecifier::Enum(_)
-    )
+    use TypeSpecifier::*;
+    !matches!(self, Typedef(_) | Struct(_) | Union(_) | Enum(_))
   }
 }
 /// declaration-specifiers:

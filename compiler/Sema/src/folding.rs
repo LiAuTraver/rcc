@@ -1,5 +1,8 @@
 use ::rcc_adt::{Floating, Integral};
-use ::rcc_ast::types::{CastType, Compatibility, QualifiedType, TypeInfo};
+use ::rcc_ast::{
+  Session,
+  types::{CastType, Compatibility, QualifiedType, TypeInfo},
+};
 use ::rcc_shared::{
   DiagData::*, Diagnosis, Operator, OperatorCategory, SourceSpan,
 };
@@ -65,11 +68,11 @@ pub trait Folding<'c> {
   ///
   /// If [`Diagnosis`] is not required, use [`NoOp`](crate::diagnosis::NoOp) as the dummy parameter.
   #[must_use]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>>;
 }
 
@@ -77,25 +80,25 @@ use FoldingResult::{Failure, Success};
 
 impl<'c> Expression<'c> {
   #[inline(always)]
-  pub fn fold(
+  pub fn fold<D: Diagnosis<'c>>(
     self,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     let (raw_expr, expr_type, value_category) = self.destructure();
-    raw_expr.fold(expr_type, value_category, diag)
+    raw_expr.fold(expr_type, value_category, session)
   }
 }
 impl<'c> Folding<'c> for RawExpr<'c> {
   #[inline]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     ::rcc_utils::static_dispatch!(
       self,
-      |variant| variant.fold(target_type, value_category, diag) =>
+      |variant| variant.fold(target_type, value_category, session) =>
       Empty Constant Unary Binary Call Paren MemberAccess Ternary SizeOf
       CStyleCast ArraySubscript CompoundLiteral Variable ImplicitCast CompoundAssign
     )
@@ -103,44 +106,56 @@ impl<'c> Folding<'c> for RawExpr<'c> {
 }
 impl<'c> Folding<'c> for Empty {
   #[inline(always)]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    Failure(Expression::new(self.into(), target_type, value_category))
+    Failure(Expression::new(self, target_type, value_category))
   }
 }
 
 impl<'c> Folding<'c> for Call<'c> {
   #[inline(always)]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    Failure(Expression::new(self.into(), target_type, value_category))
+    Failure(Expression::new(
+      Call::new(
+        self.callee.fold(session).take(),
+        self
+          .arguments
+          .into_iter()
+          .map(|arg| arg.fold(session).take())
+          .collect(),
+        self.span,
+      ),
+      target_type,
+      value_category,
+    ))
   }
 }
 
 impl<'c> Folding<'c> for MemberAccess<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     _target_type: QualifiedType<'c>,
     _value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     todo!()
   }
 }
 impl<'c> Folding<'c> for CStyleCast<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     _target_type: QualifiedType<'c>,
     _value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     todo!()
   }
@@ -149,22 +164,30 @@ impl<'c> Folding<'c> for CStyleCast<'c> {
 impl<'c> Folding<'c> for ArraySubscript<'c> {
   /// always fails folding in C, unlike C++.
   #[inline(always)]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    Failure(Expression::new(self.into(), target_type, value_category))
+    Failure(Expression::new(
+      ArraySubscript::new(
+        self.array.fold(session).take(),
+        self.index.fold(session).take(),
+        self.span,
+      ),
+      target_type,
+      value_category,
+    ))
   }
 }
 
 impl<'c> Folding<'c> for CompoundLiteral {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     _target_type: QualifiedType<'c>,
     _value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     todo!()
   }
@@ -172,37 +195,36 @@ impl<'c> Folding<'c> for CompoundLiteral {
 
 impl<'c> Folding<'c> for Constant<'c> {
   #[inline(always)]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    Success(Expression::new(self.into(), target_type, value_category))
+    Success(Expression::new(self, target_type, value_category))
   }
 }
 
 impl<'c> Folding<'c> for Unary<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     debug_assert!(
       self.operator.unary(),
       "not an unary operator! should not happen!"
     );
 
-    let folded_operand = match self.operand.fold(diag) {
+    let folded_operand = match self.operand.fold(session) {
       Success(folded) => folded,
       Failure(original) =>
         return Failure(Expression::new(
           Self {
             operand: original.into(),
             ..self
-          }
-          .into(),
+          },
           target_type,
           value_category,
         )),
@@ -215,11 +237,11 @@ impl<'c> Folding<'c> for Unary<'c> {
     );
     match folded_operand.raw_expr().as_constant_unchecked().inner {
       ::rcc_shared::Constant::Integral(operand) =>
-        Integral::handle_unary_op(self.operator, operand, self.span, diag)
+        Integral::handle_unary_op(self.operator, operand, self.span, session)
           .map(Into::into)
           .map(|constant: CL| {
             Expression::new(
-              constant.into_with(self.span),
+              Constant::new(constant, self.span),
               target_type,
               value_category,
             )
@@ -230,14 +252,14 @@ impl<'c> Folding<'c> for Unary<'c> {
             self.operator,
             operand,
             self.span,
-            diag,
+            session,
           )
           .map(Into::into),
           Logical => Floating::handle_unary_order_op(
             self.operator,
             operand,
             self.span,
-            diag,
+            session,
           )
           .map(Into::into),
           _ => contract_violation!(
@@ -246,7 +268,7 @@ impl<'c> Folding<'c> for Unary<'c> {
         }
         .map(|constant: CL| {
           Expression::new(
-            constant.into_with(self.span),
+            Constant::new(constant, self.span),
             target_type,
             value_category,
           )
@@ -257,11 +279,11 @@ impl<'c> Folding<'c> for Unary<'c> {
 }
 
 impl<'c> Folding<'c> for Binary<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     debug_assert!(
       self.operator.binary(),
@@ -270,8 +292,8 @@ impl<'c> Folding<'c> for Binary<'c> {
     // logical && and || are short-circuit evaluated,
     // so    `static const int j = 0 && x;` would pass constant folding,
     // while `static const int j = 0 || x;` would not.
-    let fl = self.left.fold(diag);
-    let fr = self.right.fold(diag);
+    let fl = self.left.fold(session);
+    let fr = self.right.fold(session);
 
     let f = |left, right| {
       Expression::new(
@@ -279,8 +301,7 @@ impl<'c> Folding<'c> for Binary<'c> {
           left,
           right,
           ..self
-        }
-        .into(),
+        },
         target_type,
         value_category,
       )
@@ -306,7 +327,7 @@ impl<'c> Folding<'c> for Binary<'c> {
       (fl, fr) => return Failure(f(fl.take().into(), fr.take().into())),
     };
     if self.operator == Operator::Comma {
-      diag.add_warning(LeftCommaNoEffect, self.span);
+      session.diag().add_warning(LeftCommaNoEffect, self.span);
       return Success(Expression::new(
         folded_rhs.destructure().0,
         target_type,
@@ -352,8 +373,9 @@ impl<'c> Folding<'c> for Binary<'c> {
       (
         ::rcc_shared::Constant::Integral(lhs),
         ::rcc_shared::Constant::Integral(rhs),
-      ) => Integral::handle_binary_op(self.operator, lhs, rhs, self.span, diag)
-        .map(Into::into),
+      ) =>
+        Integral::handle_binary_op(self.operator, lhs, rhs, self.span, session)
+          .map(Into::into),
       (
         ::rcc_shared::Constant::Floating(lhs),
         ::rcc_shared::Constant::Floating(rhs),
@@ -363,7 +385,7 @@ impl<'c> Folding<'c> for Binary<'c> {
           lhs,
           rhs,
           self.span,
-          diag,
+          session,
         )
         .map(Into::into),
         Arithmetic => Floating::handle_binary_arith_op(
@@ -371,7 +393,7 @@ impl<'c> Folding<'c> for Binary<'c> {
           lhs,
           rhs,
           self.span,
-          diag,
+          session,
         )
         .map(Into::into),
         _ => contract_violation!(
@@ -393,7 +415,7 @@ impl<'c> Folding<'c> for Binary<'c> {
     }
     .map(|constant: CL| {
       Expression::new(
-        constant.into_with(self.span),
+        Constant::new(constant, self.span),
         target_type,
         value_category,
       )
@@ -401,11 +423,11 @@ impl<'c> Folding<'c> for Binary<'c> {
   }
 }
 impl<'c> Folding<'c> for Ternary<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     debug_assert!(
       self
@@ -416,7 +438,7 @@ impl<'c> Folding<'c> for Ternary<'c> {
         .compatible_with(self.else_expr.qualified_type()),
       "type checker ensures both branches have compatible types!"
     );
-    let fc = self.condition.fold(diag);
+    let fc = self.condition.fold(session);
     match fc {
       Success(folded_condition) => {
         match folded_condition
@@ -425,8 +447,8 @@ impl<'c> Folding<'c> for Ternary<'c> {
           .inner
           .is_zero()
         {
-          true => self.else_expr.fold(diag),
-          false => self.then_expr.expect("?: unimplemented").fold(diag),
+          true => self.else_expr.fold(session),
+          false => self.then_expr.expect("?: unimplemented").fold(session),
         }
       },
       Failure(_) => fc.map(|folded_condition| {
@@ -437,14 +459,13 @@ impl<'c> Folding<'c> for Ternary<'c> {
               self
                 .then_expr
                 .expect("?: unimplemented")
-                .fold(diag)
+                .fold(session)
                 .take()
                 .into(),
             ),
-            else_expr: self.else_expr.fold(diag).take().into(),
+            else_expr: self.else_expr.fold(session).take().into(),
             ..self
-          }
-          .into(),
+          },
           target_type,
           value_category,
         )
@@ -454,11 +475,11 @@ impl<'c> Folding<'c> for Ternary<'c> {
 }
 
 impl<'c> Folding<'c> for SizeOf<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     match self.sizeof {
       SizeOfKind::Type(qualified_type) => if qualified_type.size() > 0 {
@@ -469,62 +490,61 @@ impl<'c> Folding<'c> for SizeOf<'c> {
       .map(Into::into)
       .map(|constant: CL| {
         Expression::new(
-          constant.into_with(self.span),
+          Constant::new(constant, self.span),
           target_type,
           value_category,
         )
       }),
-      SizeOfKind::Expression(expr) => expr.fold(diag),
+      SizeOfKind::Expression(expr) => expr.fold(session),
     }
   }
 }
 
 impl<'c> Folding<'c> for Variable<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
     if self.name.borrow().is_constexpr() {
-      diag.add_error(
+      session.diag().add_error(
         UnsupportedFeature("constexpr variable not implemented".to_string()),
         self.span,
       );
-      Failure(Expression::new(self.into(), target_type, value_category))
+      Failure(Expression::new(self, target_type, value_category))
     } else {
-      Failure(Expression::new(self.into(), target_type, value_category))
+      Failure(Expression::new(self, target_type, value_category))
     }
   }
 }
 
 impl<'c> Folding<'c> for Paren<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     _target_type: QualifiedType<'c>,
     _value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    self.expr.fold(diag)
+    self.expr.fold(session)
   }
 }
 
 impl<'c> Folding<'c> for ImplicitCast<'c> {
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    let folded_expr = match self.expr.fold(diag) {
+    let folded_expr = match self.expr.fold(session) {
       Success(folded) => folded,
       Failure(original) =>
         return Failure(Expression::new(
           Self {
             expr: original.into(),
             ..self
-          }
-          .into(),
+          },
           target_type,
           value_category,
         )),
@@ -548,7 +568,7 @@ impl<'c> Folding<'c> for ImplicitCast<'c> {
             && !target_primitive.is_void()
             && !target_primitive.is_bool()
           {
-            diag.add_warning(
+            session.diag().add_warning(
               CastDown(expr_type.to_string(), target_type.to_string()),
               self.span,
             )
@@ -617,13 +637,13 @@ impl<'c> Folding<'c> for ImplicitCast<'c> {
 impl<'c> Folding<'c> for CompoundAssign<'c> {
   /// should always fail, but anyways
   #[inline(always)]
-  fn fold(
+  fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
     value_category: ValueCategory,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Expression<'c>> {
-    Failure(Expression::new(self.into(), target_type, value_category))
+    Failure(Expression::new(self, target_type, value_category))
   }
 }
 mod private {
@@ -633,33 +653,33 @@ mod private {
   impl Sealed for Floating {}
 }
 trait IntegralExt: private::Sealed {
-  fn handle_binary_op<'c>(
+  fn handle_binary_op<'c, D: Diagnosis<'c>>(
     op: Operator,
     lhs: Self,
     rhs: Self,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Self>
   where
     Self: Sized;
 
-  fn handle_unary_op<'c>(
+  fn handle_unary_op<'c, D: Diagnosis<'c>>(
     operator: Operator,
     operand: Self,
     _span: SourceSpan,
-    _diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Self>
   where
     Self: Sized;
 }
 
 impl IntegralExt for Integral {
-  fn handle_binary_op<'c>(
+  fn handle_binary_op<'c, D: Diagnosis<'c>>(
     op: Operator,
     lhs: Self,
     rhs: Self,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Self> {
     debug_assert!(op.binary());
     debug_assert_eq!(lhs.width(), rhs.width());
@@ -669,7 +689,7 @@ impl IntegralExt for Integral {
       ($func:ident, $op:expr) => {{
         let (result, overflow) = lhs.$func(rhs);
         if overflow {
-          diag.add_warning(
+          session.diag().add_warning(
             ArithmeticBinOpOverflow((lhs.into(), rhs.into(), $op).into()),
             span,
           );
@@ -682,7 +702,7 @@ impl IntegralExt for Integral {
         match lhs.$func(rhs) {
           Some(result) => Success(result),
           None => {
-            diag.add_error(DivideByZero, span);
+            session.diag().add_error(DivideByZero, span);
             Failure(
               Integral::new(0, lhs.width() as u8, lhs.signedness()).into(),
             )
@@ -692,7 +712,7 @@ impl IntegralExt for Integral {
     }
     macro_rules! logical_misuse_warn {
     ($op_sym:tt, $op_variant:ident, $suggest:ident) => {{
-        diag.add_warning(
+        session.diag().add_warning(
             LogicalOpMisuse($op_variant, $suggest.into()),
             span,
         );
@@ -728,11 +748,11 @@ impl IntegralExt for Integral {
     }
   }
 
-  fn handle_unary_op<'c>(
+  fn handle_unary_op<'c, D: Diagnosis<'c>>(
     operator: Operator,
     operand: Self,
     _span: SourceSpan,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Self> {
     debug_assert!(operator.unary());
     use Operator::*;
@@ -749,48 +769,48 @@ impl IntegralExt for Integral {
 }
 
 trait FloatingExt: private::Sealed {
-  fn handle_binary_arith_op<'c>(
+  fn handle_binary_arith_op<'c, D: Diagnosis<'c>>(
     op: Operator,
     lhs: Floating,
     rhs: Floating,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Self>
   where
     Self: Sized;
 
-  fn handle_binary_order_op<'c>(
+  fn handle_binary_order_op<'c, D: Diagnosis<'c>>(
     op: Operator,
     lhs: Floating,
     rhs: Floating,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Integral>;
 
-  fn handle_unary_arith_op<'c>(
+  fn handle_unary_arith_op<'c, D: Diagnosis<'c>>(
     operator: Operator,
     operand: Self,
     _span: SourceSpan,
-    _diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Self>
   where
     Self: Sized;
 
-  fn handle_unary_order_op<'c>(
+  fn handle_unary_order_op<'c, D: Diagnosis<'c>>(
     operator: Operator,
     operand: Self,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Integral>;
 }
 
 impl FloatingExt for Floating {
-  fn handle_binary_arith_op<'c>(
+  fn handle_binary_arith_op<'c, D: Diagnosis<'c>>(
     op: Operator,
     lhs: Floating,
     rhs: Floating,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Self> {
     use Operator::*;
     debug_assert!(
@@ -801,7 +821,7 @@ impl FloatingExt for Floating {
       ($op:tt) => {{
         let res = lhs $op rhs;
         if lhs.is_finite() && rhs.is_finite() && res.is_infinite() {
-          diag.add_warning(
+          session.diag().add_warning(
             ArithmeticBinOpOverflow((lhs.into(), rhs.into(), op).into()),
             span,
           );
@@ -822,12 +842,12 @@ impl FloatingExt for Floating {
     }
   }
 
-  fn handle_binary_order_op<'c>(
+  fn handle_binary_order_op<'c, D: Diagnosis<'c>>(
     op: Operator,
     lhs: Floating,
     rhs: Floating,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Integral> {
     use OperatorCategory::*;
     debug_assert!(
@@ -836,7 +856,7 @@ impl FloatingExt for Floating {
     );
     macro_rules! logical_misuse_warn {
     ($op_sym:tt, $op_variant:ident, $suggest:ident) => {{
-        diag.add_warning(
+        session.diag().add_warning(
             LogicalOpMisuse($op_variant, $suggest.into()),
             span,
         );
@@ -861,11 +881,11 @@ impl FloatingExt for Floating {
     }
   }
 
-  fn handle_unary_arith_op<'c>(
+  fn handle_unary_arith_op<'c, D: Diagnosis<'c>>(
     operator: Operator,
     operand: Self,
     _span: SourceSpan,
-    _diag: &impl Diagnosis<'c>,
+    _session: &Session<'c, D>,
   ) -> FoldingResult<Self> {
     debug_assert!(operator.unary());
     use Operator::*;
@@ -881,17 +901,17 @@ impl FloatingExt for Floating {
     }
   }
 
-  fn handle_unary_order_op<'c>(
+  fn handle_unary_order_op<'c, D: Diagnosis<'c>>(
     operator: Operator,
     operand: Self,
     span: SourceSpan,
-    diag: &impl Diagnosis<'c>,
+    session: &Session<'c, D>,
   ) -> FoldingResult<Integral> {
     debug_assert!(operator.unary());
     use Operator::*;
     match operator {
       Not => {
-        diag.add_warning(LogicalOpMisuse(Not, None), span);
+        session.diag().add_warning(LogicalOpMisuse(Not, None), span);
         Success(Integral::from_bool(operand.is_zero()))
       },
       And | Or | Less | LessEqual | Greater | GreaterEqual | EqualEqual

@@ -56,6 +56,10 @@ impl<'c, D: Diagnosis<'c>> Session<'c, D> {
       ir_context,
     }
   }
+
+  pub fn as_ast_session(&self) -> ::rcc_ast::Session<'c, D> {
+    ::rcc_ast::Session::new(self.diagnosis, self.manager, self.ast_context)
+  }
 }
 impl<'c, D: Diagnosis<'c>> Session<'c, D> {
   pub fn ast(&self) -> &'c ASTContext<'c> {
