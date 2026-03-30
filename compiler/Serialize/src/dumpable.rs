@@ -776,16 +776,11 @@ impl<'c> Dumpable<'c> for Initializer<'_> {
     is_last: bool,
     palette: &Palette,
   ) {
-    dumper.print_indent(prefix, is_last);
-    dumper.write("Initializer", &palette.node);
+    // dumper.print_indent(prefix, is_last);
+    // dumper.write("Initializer", &palette.node);
     match self {
-      Self::Scalar(expression) => {
-        dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-        expression.span().dump(dumper, prefix, is_last, palette);
-        dumper.newline();
-        let subprefix = dumper.child_prefix(prefix, is_last);
-        expression.dump(dumper, &subprefix, true, palette)
-      },
+      Self::Scalar(expression) =>
+        expression.dump(dumper, prefix, is_last, palette),
       Self::Aggregate(_) => todo!(),
     }
   }

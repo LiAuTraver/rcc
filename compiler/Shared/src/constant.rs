@@ -12,7 +12,7 @@ use super::{DiagData, DiagMeta, Severity};
 /// it's not needed since the type system can represent the type of the constant -- an indiscriminated union would be sufficient.
 ///
 /// discrepancy: string literals are not constant values in C `char[N]`
-/// (but in C++, it is, though. verified by clangd's AST: `const char[N]`.)
+/// (but in C++, it is, though.)
 ///
 /// TODO: named constants `constexpr` and constant integral
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
