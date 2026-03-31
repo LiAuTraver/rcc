@@ -310,18 +310,18 @@ impl<'c> Folding<'c> for Binary<'c> {
     let (folded_lhs, folded_rhs) = match (fl, fr) {
       (Success(left), Success(right)) => (left, right),
       (Success(left), Failure(_))
-        if self.operator == Operator::And
+        if self.operator == Operator::LogicalAnd
           && left.raw_expr().as_constant_unchecked().is_zero() =>
         return Success(left),
 
-      (Success(left), Failure(right)) if self.operator == Operator::And =>
+      (Success(left), Failure(right)) if self.operator == Operator::LogicalAnd =>
         return Failure(f(left.into(), right.into())),
 
       (Success(left), Failure(_))
-        if self.operator == Operator::Or
+        if self.operator == Operator::LogicalOr
           && left.raw_expr().as_constant_unchecked().is_not_zero() =>
         return Success(left),
-      (Success(left), Failure(right)) if self.operator == Operator::Or =>
+      (Success(left), Failure(right)) if self.operator == Operator::LogicalOr =>
         return Failure(f(left.into(), right.into())),
 
       (fl, fr) => return Failure(f(fl.take().into(), fr.take().into())),
@@ -756,8 +756,8 @@ impl IntegralExt for Integral {
       Slash => div_zero!(checked_div),
       Percent => div_zero!(checked_rem),
 
-      And => logical_misuse_warn!(&&, And, Ampersand),
-      Or => logical_misuse_warn!(||, Or, Pipe),
+      LogicalAnd => logical_misuse_warn!(&&, LogicalAnd, Ampersand),
+      LogicalOr => logical_misuse_warn!(||, LogicalOr, Pipe),
 
       Less => Success(Self::from_bool(lhs < rhs)),
       LessEqual => Success(Self::from_bool(lhs <= rhs)),
@@ -893,8 +893,8 @@ impl FloatingExt for Floating {
     }
     use Operator::*;
     match op {
-      And => logical_misuse_warn!(&&, And, Ampersand),
-      Or => logical_misuse_warn!(||, Or, Pipe),
+      LogicalAnd => logical_misuse_warn!(&&, LogicalAnd, Ampersand),
+      LogicalOr => logical_misuse_warn!(||, LogicalOr, Pipe),
 
       Less => Success(Integral::from_bool(lhs < rhs)),
       LessEqual => Success(Integral::from_bool(lhs <= rhs)),
@@ -942,7 +942,7 @@ impl FloatingExt for Floating {
         session.diag().add_warning(LogicalOpMisuse(Not, None), span);
         Success(Integral::from_bool(operand.is_zero()))
       },
-      And | Or | Less | LessEqual | Greater | GreaterEqual | EqualEqual
+      LogicalAnd | LogicalOr | Less | LessEqual | Greater | GreaterEqual | EqualEqual
       | NotEqual | Star | Ampersand | PlusPlus | MinusMinus =>
         contract_violation!(
           "unary operator not applicable to floating! should be handled \

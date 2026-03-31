@@ -245,12 +245,12 @@ impl<'c> Lexer<'c> {
       '&' => self.lex_compound_operator(
         start,
         Ampersand,
-        &[("&&", And), ("&=", AmpersandAssign)],
+        &[("&&", LogicalAnd), ("&=", AmpersandAssign)],
       ),
       '|' => self.lex_compound_operator(
         start,
         Pipe,
-        &[("||", Or), ("|=", PipeAssign)],
+        &[("||", LogicalOr), ("|=", PipeAssign)],
       ),
       '^' => self.lex_compound_operator(start, Caret, &[("^=", CaretAssign)]),
       ':' => self.lex_compound_operator(

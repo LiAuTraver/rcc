@@ -83,9 +83,9 @@ pub enum Operator {
   #[strum(serialize = ">=")]
   GreaterEqual,
   #[strum(serialize = "&&")]
-  And,
+  LogicalAnd,
   #[strum(serialize = "||")]
-  Or,
+  LogicalOr,
   #[strum(serialize = "<<")]
   LeftShift,
   #[strum(serialize = ">>")]
@@ -187,8 +187,8 @@ impl Operator {
         | Ampersand
         | Caret
         | Pipe
-        | And
-        | Or
+        | LogicalAnd
+        | LogicalOr
         | Dot
         | Arrow
         // special cases
@@ -277,9 +277,9 @@ impl Operator {
       // bitwise OR
       Pipe => Some((0x18, 0x19)),
       // logical AND
-      And => Some((0x10, 0x11)),
+      LogicalAnd => Some((0x10, 0x11)),
       // logical OR
-      Or => Some((0x08, 0x09)),
+      LogicalOr => Some((0x08, 0x09)),
 
       // Question n' Elvis
       Question | Elvis => Some((0x07, 0x06)),
@@ -317,7 +317,7 @@ use Category::*;
 impl Operator {
   pub const fn category(&self) -> Category {
     match self {
-      And | Or | Not => Logical,
+      LogicalAnd | LogicalOr | Not => Logical,
 
       LeftShift | RightShift => BitShift,
 

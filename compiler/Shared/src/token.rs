@@ -83,8 +83,8 @@ impl<'c> Token<'c> {
   pub fn transform_alternative(self) -> Self {
     match self.literal {
       Literal::Keyword(ref keyword) => match keyword {
-        And => Self::operator(Operator::And, self.location),
-        Or => Self::operator(Operator::Or, self.location),
+        And => Self::operator(Operator::LogicalAnd, self.location),
+        Or => Self::operator(Operator::LogicalOr, self.location),
         Not => Self::operator(Operator::Not, self.location),
         Xor => Self::operator(Operator::Caret, self.location),
         Bitand => Self::operator(Operator::Ampersand, self.location),

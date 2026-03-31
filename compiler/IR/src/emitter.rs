@@ -1436,8 +1436,10 @@ impl<'c> Emitter<'c> {
     } = binary;
 
     match operator {
-      Operator::And => self.logical_and(operator, left, right, ast_type, span),
-      Operator::Or => self.logical_or(operator, left, right, ast_type, span),
+      Operator::LogicalAnd =>
+        self.logical_and(operator, left, right, ast_type, span),
+      Operator::LogicalOr =>
+        self.logical_or(operator, left, right, ast_type, span),
       _ => {
         let left = self.expression(left);
         let right = self.expression(right);
@@ -1511,7 +1513,7 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     _span: SourceSpan,
   ) -> ValueID {
-    debug_assert_eq!(operator, Operator::And);
+    debug_assert_eq!(operator, Operator::LogicalAnd);
     let left_side_id = self.expression(left);
     let lhs = self.contextual_convert_to_i1(left_side_id);
 
@@ -1558,7 +1560,7 @@ impl<'c> Emitter<'c> {
     ast_type: ast::TypeRef<'c>,
     _span: SourceSpan,
   ) -> ValueID {
-    debug_assert_eq!(operator, Operator::Or);
+    debug_assert_eq!(operator, Operator::LogicalOr);
 
     let left_side_id = self.expression(left);
     let lhs = self.contextual_convert_to_i1(left_side_id);
