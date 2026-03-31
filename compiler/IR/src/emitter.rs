@@ -835,12 +835,10 @@ impl<'c> Emitter<'c> {
       .ctrlflow_ctx
       .last()
       .map(|ctrl| ctrl.break_target)
-      .unwrap_or_else(|| {
-        panic!(
-          "break statement not within a loop or switch. this should have been \
-           caught in semantic checks."
-        )
-      });
+      .expect(
+        "break statement not within a loop or switch. this should have been \
+         caught in semantic checks.",
+      );
 
     let now_block_id = self.current_block;
 
@@ -860,12 +858,10 @@ impl<'c> Emitter<'c> {
       .iter()
       .rev()
       .find_map(|ctrl| ctrl.continue_target)
-      .unwrap_or_else(|| {
-        panic!(
-          "continue statement not within a loop or switch. this should have \
-           been caught in semantic checks."
-        )
-      });
+      .expect(
+        "continue statement not within a loop or switch. this should have \
+         been caught in semantic checks.",
+      );
 
     let now_block_id = self.current_block;
 
@@ -2089,11 +2085,11 @@ impl<'c> Emitter<'c> {
     let pm = operator.ppmm2pm().expect("precond: op is pp or mm");
 
     let loaded = self.emit(inst::Load::new(operand), ast_type);
-    let valty = self.visit(loaded, |value| value.ast_type);
+    // let ast_type = self.visit(loaded, |value| value.ast_type);
     // if ast_type is plain arithemetic type, just add or sub the corresponding integer or floating constant, and store back.
     // if it's a pointer type, do gep with 1 or -1 using the pointer arithmetic function, and store back.
     use ast::Type::*;
-    let calculated = match valty {
+    let calculated = match ast_type {
       Primitive(p) => {
         let one = match p {
           i if i.is_integer() => self.ir().integer_one(i.size_bits() as u8),
@@ -2115,7 +2111,7 @@ impl<'c> Emitter<'c> {
         let one = self
           .ir()
           .integer_one(self.ast().ptrdiff_type().size_bits() as u8);
-        self.do_pointer_integer_arithmetic(pm, loaded, one, valty, span)
+        self.do_pointer_integer_arithmetic(pm, loaded, one, ast_type, span)
       },
       _ => unreachable!("precond: ast type shall be a scalar."),
     };
