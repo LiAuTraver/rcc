@@ -1,10 +1,10 @@
 #![allow(unused)]
 
 use ::rcc_adt::Integral;
+use ::rcc_ast::Constant;
 use ::rcc_ir::{
   Module, Value, ValueData, ValueID, instruction as inst, module,
 };
-use ::rcc_shared::Constant;
 
 use crate::{Palette, Printable, pre, printer::Printer, quoted, suff};
 

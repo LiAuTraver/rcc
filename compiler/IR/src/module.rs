@@ -1,4 +1,4 @@
-use ::rcc_shared::Constant;
+use ::rcc_ast::Constant;
 use ::rcc_utils::StrRef;
 
 use super::value::ValueID;

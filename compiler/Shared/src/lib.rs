@@ -1,15 +1,16 @@
 #![feature(adt_const_params)]
 
 mod arena;
-mod constant;
 mod diagnosis;
 mod keyword;
+mod number;
 mod operator;
 mod source_info;
 mod storage;
 mod token;
 
 pub use fwd::*;
+
 mod fwd {
   pub use ::bumpalo::{
     self, Bump,
@@ -22,12 +23,12 @@ mod fwd {
 
 pub use self::{
   arena::Arena,
-  constant::{Constant, ConstantRef, ConstantRefMut},
   diagnosis::{
     Data as DiagData, Diag, Diagnosis, Meta as DiagMeta, NoOp as NoOpDiag,
     Operational as OpDiag, Severity,
   },
   keyword::Keyword,
+  number::Number,
   operator::{Category as OperatorCategory, Operator},
   source_info::{
     Coordinate, Display as SourceDisplay, File as SourceFile,

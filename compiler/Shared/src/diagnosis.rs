@@ -55,7 +55,7 @@ mod data {
   use ::rcc_utils::{DisplayWith, IntoWith, StrRef, static_assert};
 
   use crate::{
-    Constant, Keyword, Literal, Operator, SourceManager, SourceSpan, Storage,
+    Keyword, Literal, Number, Operator, SourceManager, SourceSpan, Storage,
   };
   /// Custom message. would be printed as-is.
   type CustomMessage = String;
@@ -223,7 +223,7 @@ mod data {
     #[error("Discarding qualifiers '{0}' during conversion is not allowed")]
     DiscardingQualifiers(String),
     #[error("Case label expression '{0}' is not an integer")]
-    NonIntegerInCaseStmt(Constant<'c>),
+    NonIntegerInCaseStmt(String),
     #[error("Character '{0}' too long for it's corresponding type")]
     CharacterTooLong(String),
     #[error("{0}")]
@@ -267,11 +267,11 @@ mod data {
     #[error(
     "Applying unary operator '{}' may cause overflow on constant '{}'", &.0.1, &.0.0
   )]
-    ArithmeticUnaryOpOverflow(Box<(Constant<'c>, Operator)>),
+    ArithmeticUnaryOpOverflow(Box<(Number, Operator)>),
     #[error(
     "Arithmetic overflow in operation '{}' between '{}' and '{}'", &.0.2, &.0.0, &.0.1
   )]
-    ArithmeticBinOpOverflow(Box<(Constant<'c>, Constant<'c>, Operator)>),
+    ArithmeticBinOpOverflow(Box<(Number, Number, Operator)>),
     #[error(
     "'{}' is used in a logical operation, {}", &.0, if let Some(suggest) = &.1 {
       format!(
@@ -289,7 +289,7 @@ mod data {
     #[error("Possible data loss in implicit cast from '{0}' to '{1}'")]
     CastDown(QualTyStr, QualTyStr),
     #[error("Operation '{}' between '{}' and '{}' results in NaN", &.0.2, &.0.0, &.0.1)]
-    NotANumber(Box<(Constant<'c>, Constant<'c>, Operator)>),
+    NotANumber(Box<(String, String, Operator)>),
     #[error("Division by zero")]
     DivideByZero,
     #[error(

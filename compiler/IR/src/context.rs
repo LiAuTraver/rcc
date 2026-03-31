@@ -1,6 +1,6 @@
 use ::rcc_adt::{FloatFormat, Floating, Integral};
-use ::rcc_ast::{Context as ASTContext, types as ast};
-use ::rcc_shared::{Arena, Constant, Diagnosis, SourceManager};
+use ::rcc_ast::{Constant, Context as ASTContext, types as ast};
+use ::rcc_shared::{Arena, Diagnosis, SourceManager};
 
 use super::{
   Type, TypeRef, Value, ValueID,

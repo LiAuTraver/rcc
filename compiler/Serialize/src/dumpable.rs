@@ -592,10 +592,10 @@ impl<'c> Dumpable<'c> for Expression<'_> {
       CompoundAssign(ca) => {
         header!("CompoundAssign", ca, "");
         dumper.write_fmt(format_args!(" '{}'", ca.operator), &palette.operator);
-        dumper.write(" interm_lhs_ty=", &palette.skeleton);
+        dumper.write(" CLHSTy=", &palette.skeleton);
         dumper
           .write(quoted!("'", ca.intermediate_left_type, "'"), &palette.meta);
-        dumper.write(" interm_res_ty=", &palette.skeleton);
+        dumper.write(" CResTy=", &palette.skeleton);
         dumper.write(
           quoted!("'", ca.intermediate_result_type, "'"),
           &palette.meta,

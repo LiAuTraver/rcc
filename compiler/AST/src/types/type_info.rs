@@ -1,11 +1,11 @@
 use ::rcc_adt::{Floating, Integral};
-use ::rcc_shared::Constant;
 
 use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer,
   Primitive::{self, *},
   QualifiedType, Record, Type, Union,
 };
+use crate::Constant;
 
 pub const trait TypeInfo<'c> {
   #[must_use]

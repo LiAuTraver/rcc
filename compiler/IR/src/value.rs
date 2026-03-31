@@ -1,5 +1,4 @@
-use ::rcc_ast::types as ast;
-use ::rcc_shared::Constant;
+use ::rcc_ast::{Constant, types as ast};
 use ::slotmap::{Key, new_key_type};
 use ::std::cell::{Ref, RefMut};
 

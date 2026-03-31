@@ -1,12 +1,11 @@
 use ::rcc_adt::{FloatFormat, Floating, Integral, Signedness};
-use ::rcc_shared::Constant;
 use ::rcc_utils::{RefEq, ensure_is_pod};
 
 use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, Record, TypeInfo,
   Union,
 };
-use crate::context::Context;
+use crate::{Constant, context::Context};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type<'c> {

@@ -1,8 +1,8 @@
 use ::rcc_ast::{Session, SessionRef};
 use ::rcc_shared::{
-  Constant as NumberConstant, Coordinate,
+  Coordinate,
   DiagData::*,
-  Diagnosis, Keyword, OpDiag,
+  Diagnosis, Keyword, Number, OpDiag,
   Operator::{self, *},
   SourceSpan, Token,
 };
@@ -430,7 +430,7 @@ impl<'c> Lexer<'c> {
       let s = self.slice(head, self.cursor);
       match is_floating {
         true =>
-          if NumberConstant::FLOATING_SUFFIXES.contains(&s) {
+          if Number::FLOATING_SUFFIXES.contains(&s) {
             Some(s)
           } else {
             self.diag().add_error(
@@ -443,7 +443,7 @@ impl<'c> Lexer<'c> {
             None
           },
         false =>
-          if NumberConstant::INTEGER_SUFFIXES.contains(&s) {
+          if Number::INTEGER_SUFFIXES.contains(&s) {
             Some(s)
           } else {
             self.diag().add_error(
@@ -461,7 +461,7 @@ impl<'c> Lexer<'c> {
     };
 
     let (constant, error) =
-      NumberConstant::parse(&num[offset..], base, suffix, is_floating);
+      Number::parse(&num[offset..], base, suffix, is_floating);
     if let Some(e) = error {
       self.diag().add_diag(e.into_with(self.span(start)));
     }

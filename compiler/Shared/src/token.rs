@@ -2,16 +2,15 @@ use ::rcc_utils::{SmallString, StrRef, ensure_is_pod, interconvert};
 use ::std::{fmt::Debug, str::FromStr};
 
 use super::{
-  Constant,
   Keyword::{self, *},
-  Operator, SourceSpan,
+  Number, Operator, SourceSpan,
 };
 /// strictly speaking this isn't counted as cyclic dependency,
 /// the [`Constant`] type looks similiar so used in here too.
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Literal<'c> {
-  Number(Constant<'c>),
+  Number(Number),
   Identifier(StrRef<'c>),
   String(StrRef<'c>),
   Keyword(Keyword),
@@ -31,7 +30,7 @@ ensure_is_pod!(Token);
 impl<'c> Token<'c> {
   pub fn character(character: char, location: SourceSpan) -> Self {
     Self {
-      literal: Literal::Number(Constant::Integral((character as i32).into())),
+      literal: Literal::Number(Number::Integral((character as i32).into())),
       location,
     }
   }
@@ -43,7 +42,7 @@ impl<'c> Token<'c> {
     }
   }
 
-  pub fn number(number: Constant<'c>, location: SourceSpan) -> Self {
+  pub fn number(number: Number, location: SourceSpan) -> Self {
     Self {
       literal: Literal::Number(number),
       location,
@@ -156,7 +155,7 @@ impl Keyword {
 
 interconvert!(Keyword, Literal<'c>);
 interconvert!(Operator, Literal<'c>);
-interconvert!(Constant, Literal,'c, Number);
+interconvert!(Number, Literal<'c>);
 
 mod cmp {
   use super::{Keyword, Literal, Operator};
@@ -227,7 +226,7 @@ mod cmp {
 mod fmt {
   use ::std::fmt::Display;
 
-  use super::{Literal, Token};
+  use super::{Literal, Number, Token};
 
   impl<'c> Display for Token<'c> {
     #[inline]
@@ -244,6 +243,12 @@ mod fmt {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       ::rcc_utils::static_dispatch!(self, |variant| variant.fmt(f) => Operator Number String Identifier Keyword)
+    }
+  }
+
+  impl Display for Number {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      ::rcc_utils::static_dispatch!(self, |variant| variant.fmt(f) => Integral Floating)
     }
   }
 }

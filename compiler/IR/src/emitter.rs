@@ -1,10 +1,10 @@
 use ::rcc_adt::{Integral, Signedness};
 use ::rcc_ast::{
-  SymbolPtr, UnaryKind,
+  Constant, SymbolPtr, UnaryKind,
   types::{self as ast, TypeInfo},
 };
 use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
-use ::rcc_shared::{Constant, OpDiag, Operator, OperatorCategory, SourceSpan};
+use ::rcc_shared::{OpDiag, Operator, OperatorCategory, SourceSpan};
 use ::rcc_utils::{RefEq, StrRef, Unbox, contract_violation};
 use ::std::collections::HashMap;
 

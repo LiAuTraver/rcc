@@ -236,7 +236,7 @@ impl<'c> Folding<'c> for Unary<'c> {
       "only implemented for constant var of constant eval"
     );
     match folded_operand.raw_expr().as_constant_unchecked().inner {
-      ::rcc_shared::Constant::Integral(operand) =>
+      ::rcc_ast::Constant::Integral(operand) =>
         Integral::handle_unary_op(self.operator, operand, self.span, session)
           .map(Into::into)
           .map(|constant: CL| {
@@ -246,7 +246,7 @@ impl<'c> Folding<'c> for Unary<'c> {
               value_category,
             )
           }),
-      ::rcc_shared::Constant::Floating(operand) =>
+      ::rcc_ast::Constant::Floating(operand) =>
         match self.operator.category() {
           Arithmetic => Floating::handle_unary_arith_op(
             self.operator,
@@ -371,14 +371,14 @@ impl<'c> Folding<'c> for Binary<'c> {
     use OperatorCategory::*;
     match (lhs, rhs) {
       (
-        ::rcc_shared::Constant::Integral(lhs),
-        ::rcc_shared::Constant::Integral(rhs),
+        ::rcc_ast::Constant::Integral(lhs),
+        ::rcc_ast::Constant::Integral(rhs),
       ) =>
         Integral::handle_binary_op(self.operator, lhs, rhs, self.span, session)
           .map(Into::into),
       (
-        ::rcc_shared::Constant::Floating(lhs),
-        ::rcc_shared::Constant::Floating(rhs),
+        ::rcc_ast::Constant::Floating(lhs),
+        ::rcc_ast::Constant::Floating(rhs),
       ) => match self.operator.category() {
         Logical | Relational => Floating::handle_binary_order_op(
           self.operator,
@@ -400,14 +400,10 @@ impl<'c> Folding<'c> for Binary<'c> {
           "not a binary operator or bin-op but cannot be applied to floating!"
         ),
       },
-      (
-        ::rcc_shared::Constant::String(_),
-        ::rcc_shared::Constant::String(_),
-      ) => contract_violation!("can we reach here?"),
-      (
-        ::rcc_shared::Constant::Nullptr(),
-        ::rcc_shared::Constant::Nullptr(),
-      ) => contract_violation!("can we reach here?"),
+      (::rcc_ast::Constant::String(_), ::rcc_ast::Constant::String(_)) =>
+        contract_violation!("can we reach here?"),
+      (::rcc_ast::Constant::Nullptr(), ::rcc_ast::Constant::Nullptr()) =>
+        contract_violation!("can we reach here?"),
       _ => contract_violation!(
         "type checker ensures both sides have the same types! or \
          unimplemented type"
@@ -501,6 +497,7 @@ impl<'c> Folding<'c> for SizeOf<'c> {
 }
 
 impl<'c> Folding<'c> for Variable<'c> {
+  /// TODO: address constant shall be handled here also.
   fn fold<D: Diagnosis<'c>>(
     self,
     target_type: QualifiedType<'c>,
@@ -509,6 +506,13 @@ impl<'c> Folding<'c> for Variable<'c> {
   ) -> FoldingResult<Expression<'c>> {
     use ::rcc_ast::types::Qualifiers;
     use ::rcc_shared::Storage::*;
+
+    // if target_type.is_functionproto()
+    //   && self.symbol.borrow().is_address_constant()
+    // {
+    //   return Success(Expression::new(self, target_type, value_category));
+    // }
+
     let storage = self.symbol.borrow().storage_class;
     match storage {
       Static

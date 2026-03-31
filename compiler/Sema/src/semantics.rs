@@ -2289,7 +2289,7 @@ impl<'c> Sema<'c> {
             constant.inner.clone()
           } else {
             self.add_error(
-              NonIntegerInCaseStmt(constant.inner.clone()),
+              NonIntegerInCaseStmt(constant.inner.to_string()),
               expr.span(),
             );
             Integral::default().into()

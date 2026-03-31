@@ -144,6 +144,18 @@ impl<'c> Symbol<'c> {
     self.storage_class.is_constexpr()
   }
 
+  /// you also need to check upstrewam....
+  pub fn is_eligible_of_address_constant(&self) -> bool {
+    // 1. a function designator is an address constant
+    // 2. a variable with static storage duration is an address constant
+
+    self.qualified_type.is_functionproto()
+      || matches!(
+        self.storage_class,
+        Storage::Static | Storage::Extern | Storage::Constexpr
+      )
+  }
+
   pub fn new(
     qualified_type: QualifiedType<'c>,
     storage_class: Storage,

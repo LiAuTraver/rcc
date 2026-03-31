@@ -244,7 +244,7 @@ impl<'c> Expression<'c> {
   ///   or an integer constant cast to pointer type, or implicitly using an expression of array or function type.
   pub fn is_address_constant(&self) -> bool {
     match self.raw_expr() {
-      RawExpr::Constant(c) => c.is_nullptr() || c.is_address(),
+      RawExpr::Constant(c) => c.is_nullptr(),
       RawExpr::Unary(unary) if self.unqualified_type().is_pointer() =>
         unary.operand.is_lvalue()
           || matches!(unary.operand.unqualified_type(), Type::FunctionProto(_))

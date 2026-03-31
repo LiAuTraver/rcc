@@ -1,5 +1,7 @@
-use ::rcc_ast::types::{self as ast, TypeInfo};
-use ::rcc_shared::Constant;
+use ::rcc_ast::{
+  Constant,
+  types::{self as ast, TypeInfo},
+};
 use ::rcc_utils::RefEq;
 
 use super::{
@@ -155,10 +157,10 @@ mod instruction {
     use super::*;
     impl<'c> Emitable<'c, ICmp> for Emitter<'c> {
       fn emit(&mut self, icmp: ICmp, ast_type: ast::TypeRef<'c>) -> ValueID {
-        debug_assert!(
-          RefEq::ref_eq(ast_type, self.ast().i1_bool_type()),
-          "ICmp inst must have boolean as return type."
-        );
+        // debug_assert!(
+        //   RefEq::ref_eq(ast_type, self.ast().i1_bool_type()),
+        //   "ICmp inst must have boolean as return type."
+        // );
         debug_assert!(
           self.visit(icmp.lhs(), |value| value.ir_type.is_integer()
             || value.ir_type.is_pointer()),
@@ -170,24 +172,22 @@ mod instruction {
           "ICmp rhs must be an integer"
         );
 
-        let cmp = self.emit_common_instruction(Cmp::from(icmp), {
-          let this = &self;
-          this.ast().i1_bool_type()
-        });
-        if !RefEq::ref_eq(ast_type, self.ast().converted_bool()) {
+        let cmp = self
+          .emit_common_instruction(Cmp::from(icmp), self.ast().i1_bool_type());
+        if RefEq::ref_eq(ast_type, self.ast().i1_bool_type()) {
           cmp
         } else {
-          self.emit(Zext::new(cmp), self.ast().converted_bool())
+          self.emit(Zext::new(cmp), ast_type)
         }
       }
     }
 
     impl<'c> Emitable<'c, FCmp> for Emitter<'c> {
       fn emit(&mut self, fcmp: FCmp, ast_type: ast::TypeRef<'c>) -> ValueID {
-        debug_assert!(
-          RefEq::ref_eq(ast_type, self.ast().i1_bool_type()),
-          "FCmp inst must have boolean as return type."
-        );
+        // debug_assert!(
+        //   RefEq::ref_eq(ast_type, self.ast().i1_bool_type()),
+        //   "FCmp inst must have boolean as return type."
+        // );
         debug_assert!(
           self.visit(fcmp.lhs(), |value| value.ir_type.is_floating()),
           "FCmp lhs must be a floating-point type"
@@ -200,10 +200,10 @@ mod instruction {
           let this = &self;
           this.ast().i1_bool_type()
         });
-        if !RefEq::ref_eq(ast_type, self.ast().converted_bool()) {
+        if RefEq::ref_eq(ast_type, self.ast().converted_bool()) {
           cmp
         } else {
-          self.emit(Zext::new(cmp), self.ast().converted_bool())
+          self.emit(Zext::new(cmp), ast_type)
         }
       }
     }

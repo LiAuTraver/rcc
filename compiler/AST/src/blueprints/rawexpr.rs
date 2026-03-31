@@ -2,8 +2,10 @@
 //! [this article](https://blog.ezyang.com/2013/05/the-ast-typing-problem/),
 //! I probably used the Parametric Polymorphism to "tie the knot" of recursion.
 
-use ::rcc_shared::{Constant, Operator, SourceSpan};
+use ::rcc_shared::{Operator, SourceSpan};
 use ::rcc_utils::{IntoWith, StrRef};
+
+use crate::Constant;
 
 #[macro_export]
 macro_rules! type_alias_expr {
@@ -36,7 +38,7 @@ macro_rules! type_alias_expr {
     }
     /// exists to avoid name clash with `Constant` in this module; this is a design mistake
     pub type Empty =  $crate::blueprints::Placeholder;
-    pub type ConstantLiteral<'c> = ::rcc_shared::Constant<'c>;
+    pub type ConstantLiteral<'c> = $crate::Constant<'c>;
     /// type or expression
     pub type SizeOfKind<'c> = $crate::blueprints::RawSizeOfKind<$exprty, $typety>;
     pub type Constant<'c> = $crate::blueprints::RawConstant<'c>;
@@ -223,9 +225,9 @@ pub struct RawCompoundLiteral {
 }
 
 impl<'c> RawConstant<'c> {
-  pub fn new(constant: Constant<'c>, span: SourceSpan) -> Self {
+  pub fn new(constant: impl Into<Constant<'c>>, span: SourceSpan) -> Self {
     Self {
-      inner: constant,
+      inner: constant.into(),
       span,
     }
   }
@@ -242,6 +244,16 @@ impl<'c> ::std::ops::Deref for RawConstant<'c> {
 impl<'c> IntoWith<SourceSpan, RawConstant<'c>> for Constant<'c> {
   fn into_with(self, span: SourceSpan) -> RawConstant<'c> {
     RawConstant::new(self, span)
+  }
+}
+
+use ::rcc_shared::Number;
+impl<'c> IntoWith<SourceSpan, RawConstant<'c>> for Number {
+  fn into_with(self, span: SourceSpan) -> RawConstant<'c> {
+    match self {
+      Self::Integral(integral) => RawConstant::new(integral, span),
+      Self::Floating(floating) => RawConstant::new(floating, span),
+    }
   }
 }
 

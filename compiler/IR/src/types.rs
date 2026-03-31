@@ -37,7 +37,7 @@ impl<'ir> TypeInfo<'ir> for Type<'ir> {
     matches!(self, Self::Pointer() | Self::Integer(_))
   }
 
-  fn default_value(&self) -> ::rcc_shared::Constant<'ir> {
+  fn default_value(&self) -> ::rcc_ast::Constant<'ir> {
     todo!()
   }
 
