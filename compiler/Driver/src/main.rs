@@ -20,8 +20,8 @@ fn main() {
   println!("Args: {:?}", args);
 
   let (kind, filename) = match args.as_slice() {
-    [_] => ("all", "test.c"),
-    [_, kind] => (kind.as_str(), "test.c"),
+    [_] => ("all", "./tests/test.c"),
+    [_, kind] => (kind.as_str(), "./tests/test.c"),
     [_, kind, filename] => (kind.as_str(), filename.as_str()),
     _ => {
       eprintln!("Usage: rcc [all|lex|parse|analyze] <filename>");

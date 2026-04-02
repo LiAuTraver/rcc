@@ -45,6 +45,13 @@ mod data {
       Diag::new(span, self.severity, self.data)
     }
   }
+  impl<'c> Add<SourceSpan> for Meta<'c> {
+    type Output = Diag<'c>;
+
+    fn add(self, rhs: SourceSpan) -> Self::Output {
+      self.into_with(rhs)
+    }
+  }
   #[derive(Debug, Clone, Copy, ::strum_macros::Display)]
   pub enum Severity {
     Hint,
@@ -53,6 +60,7 @@ mod data {
     Error,
   }
   use ::rcc_utils::{DisplayWith, IntoWith, StrRef, static_assert};
+  use ::std::ops::Add;
 
   use crate::{
     Keyword, Literal, Number, Operator, SourceManager, SourceSpan, Storage,
@@ -320,6 +328,13 @@ mod data {
     #[inline]
     fn into_with(self, severity: Severity) -> Meta<'c> {
       Meta::new(severity, self)
+    }
+  }
+  impl<'c> Add<Severity> for Data<'c> {
+    type Output = Meta<'c>;
+
+    fn add(self, rhs: Severity) -> Self::Output {
+      self.into_with(rhs)
     }
   }
 

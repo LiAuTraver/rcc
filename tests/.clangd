@@ -1,0 +1,8 @@
+InlayHints:
+  BlockEnd: true
+Hover:
+  ShowAKA: true
+CompileFlags:
+  Add:
+    - -std=c23
+    - -Xclang

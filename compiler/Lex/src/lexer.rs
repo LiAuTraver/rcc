@@ -6,7 +6,7 @@ use ::rcc_shared::{
   Operator::{self, *},
   SourceSpan, Token,
 };
-use ::rcc_utils::{IntoWith, SmallString};
+use ::rcc_utils::SmallString;
 use ::std::{
   iter::Peekable,
   str::{Chars, FromStr},
@@ -463,7 +463,7 @@ impl<'c> Lexer<'c> {
     let (constant, error) =
       Number::parse(&num[offset..], base, suffix, is_floating);
     if let Some(e) = error {
-      self.diag().add_diag(e.into_with(self.span(start)));
+      self.diag().add_diag(e + self.span(start));
     }
 
     Token::number(constant, self.span(start))

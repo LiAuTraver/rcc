@@ -520,18 +520,24 @@ impl<'c> Print<'c, inst::Call> for Value<'c> {
       ValueData::Function(function) => {
         printer.write(suff!(" " => self.ir_type), &palette.meta);
         printer.write(quoted!("@", function.name, "("), &palette.skeleton);
-        variant.args().iter().for_each(|&arg_id| {
-          let arg = &*lookup!(printer, arg_id);
-          printer.write(suff!(" " => arg.ir_type), &palette.meta);
-          printer.write(
-            arg.data.as_constant().map_or_else(
-              || format!("%{}", printer.get_id(arg_id)),
-              |constant| format!("{}", constant),
-            ),
-            &palette.skeleton,
-          );
-          printer.write(", ", &palette.skeleton);
-        });
+        variant
+          .args()
+          .iter()
+          .enumerate()
+          .for_each(|(index, &arg_id)| {
+            let arg = &*lookup!(printer, arg_id);
+            printer.write(suff!(" " => arg.ir_type), &palette.meta);
+            printer.write(
+              arg.data.as_constant().map_or_else(
+                || format!("%{}", printer.get_id(arg_id)),
+                |constant| format!("{}", constant),
+              ),
+              &palette.skeleton,
+            );
+            if index != variant.args().len() {
+              printer.write(", ", &palette.skeleton);
+            }
+          });
         printer.write(")", &palette.skeleton);
       },
       ValueData::BasicBlock(_) => unreachable!(),

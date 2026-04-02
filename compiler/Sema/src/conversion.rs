@@ -8,7 +8,7 @@ use ::rcc_ast::{
   },
 };
 use ::rcc_shared::{Diag, DiagData::*, DiagMeta, Severity, SourceSpan};
-use ::rcc_utils::{IntoWith, RefEq};
+use ::rcc_utils::RefEq;
 
 use super::expression::{ExprRef, Expression, ImplicitCast};
 
@@ -104,9 +104,8 @@ impl<'c> Expression<'c> {
         InvalidConversion(format!(
           "type {} is not contexaully convertible to int",
           self.qualified_type()
-        ))
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        )) + Severity::Error
+          + self.span(),
       ),
     }
   }
@@ -274,9 +273,8 @@ impl<'c> Expression<'c> {
       Err(
         InvalidConversion(
           "pointer conversion only applies to integer types".to_string(),
-        )
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        ) + Severity::Error
+          + self.span(),
       )
     } else {
       Ok(Self::uintptr_conversion_unchecked(self, context))
@@ -301,9 +299,8 @@ impl<'c> Expression<'c> {
       Err(
         InvalidConversion(
           "pointer conversion only applies to integer types".to_string(),
-        )
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        ) + Severity::Error
+          + self.span(),
       )
     } else {
       Ok(Self::ptrdiff_conversion_unchecked(self, context))
@@ -346,9 +343,8 @@ impl<'c> Expression<'c> {
           Err(
             DiscardingQualifiers(
               (rhs.pointee.qualifiers - lhs.pointee.qualifiers).to_string(),
-            )
-            .into_with(Severity::Error)
-            .into_with(span),
+            ) + Severity::Error
+              + span,
           )?
         }
 
@@ -370,9 +366,8 @@ impl<'c> Expression<'c> {
             IncompatiblePointerTypes(
               target_type.to_string(),
               self.qualified_type().to_string(),
-            )
-            .into_with(Severity::Error)
-            .into_with(span),
+            ) + Severity::Error
+              + span,
           )
         }
       },
@@ -412,9 +407,8 @@ impl<'c> Expression<'c> {
           "cannot convert from '{}' to '{}'",
           self.unqualified_type(),
           target_type.unqualified_type
-        ))
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        )) + Severity::Error
+          + self.span(),
       ),
     }
   }
@@ -446,24 +440,21 @@ impl<'c> Expression<'c> {
       Type::Primitive(Primitive::Nullptr) => Err(
         InvalidConversion(
           "cannot cast an object of type nullptr to integral.".to_string(),
-        )
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        ) + Severity::Error
+          + self.span(),
       ),
       Type::Primitive(Primitive::Void) => Err(
         InvalidConversion(
           "cannot convert void to int in conditional conversion".to_string(),
-        )
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        ) + Severity::Error
+          + self.span(),
       ),
       Type::Primitive(_) => Err(
         InvalidConversion(format!(
           "cannot convert '{}' to int in conditional conversion",
           self.unqualified_type()
-        ))
-        .into_with(Severity::Error)
-        .into_with(self.span()),
+        )) + Severity::Error
+          + self.span(),
       ),
       // compare with nullptr
       Type::Pointer(_) => Ok(Self::new_rvalue(
@@ -510,12 +501,11 @@ impl<'c> Expression<'c> {
             InvalidConversion(
               "usual arithmetic conversion only applies to arithmetic types"
                 .to_string(),
-            )
-            .into_with(Severity::Error)
-            .into_with(SourceSpan {
-              end: rhs.span().end,
-              ..lhs_span
-            }),
+            ) + Severity::Error
+              + SourceSpan {
+                end: rhs.span().end,
+                ..lhs_span
+              },
           )?
         },
       };
@@ -539,9 +529,8 @@ impl<'c> Expression<'c> {
         InvalidConversion(
           "usual arithmetic conversion only applies to arithmetic types"
             .to_string(),
-        )
-        .into_with(Severity::Error)
-        .into_with(promoted.span()),
+        ) + Severity::Error
+          + promoted.span(),
       ),
     }
   }
@@ -599,8 +588,7 @@ impl<'c> Expression<'c> {
         InvalidConversion(format!(
           "cannot convert from '{}' to '{}'",
           from, to
-        ))
-        .into_with(Severity::Error),
+        )) + Severity::Error,
       ),
     }
   }

@@ -1,4 +1,4 @@
-use ::rcc_utils::{IntoWith, StrRef};
+use ::rcc_utils::StrRef;
 use ::std::{cell::RefCell, collections::HashSet};
 
 use crate::types::{
@@ -43,6 +43,8 @@ pub struct Context<'c> {
   converted_bool: TypeRef<'c>, //  `int` according to C standard.
 
   unnamed_str: StrRef<'c>,
+
+  langopts: u8,
 }
 
 impl<'c> Context<'c> {
@@ -211,6 +213,11 @@ impl<'c> Context<'c> {
   pub fn converted_bool(&self) -> TypeRef<'c> {
     self.converted_bool
   }
+
+  #[must_use]
+  pub fn langopts(&self) -> u8 {
+    self.langopts
+  }
 }
 impl<'c> Context<'c> {
   pub fn new(arena: &'c Arena) -> Self {
@@ -245,6 +252,7 @@ impl<'c> Context<'c> {
       fake_bool_type: arena.alloc(Primitive::__IRBit.into()),
 
       unnamed_str: arena.alloc_str("<unnamed>"),
+      langopts: 23,
     };
     {
       let mut refmut = this.ast_type_interner.borrow_mut();
@@ -288,12 +296,12 @@ impl<'c> Context<'c> {
     if proto.is_variadic {
       Err(
         MainFunctionProtoMismatch("main function cannot be variadic")
-          .into_with(Severity::Error),
+          + Severity::Error,
       )
     } else if function_specifier.contains(FunctionSpecifier::Inline) {
       Err(
         MainFunctionProtoMismatch("main function cannot be inline")
-          .into_with(Severity::Error),
+          + Severity::Error,
       )
     } else if !proto.compatible_with(
       self
@@ -323,8 +331,7 @@ impl<'c> Context<'c> {
         MainFunctionProtoMismatch(
           "main function must have either no parameters or two parameters \
            (int argc, char** argv)",
-        )
-        .into_with(Severity::Error),
+        ) + Severity::Error,
       )
     } else {
       Ok(())

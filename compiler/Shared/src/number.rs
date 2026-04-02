@@ -43,8 +43,6 @@ impl Number {
     suffix: Option<&str>,
     is_floating: bool,
   ) -> (Self, Option<DiagMeta<'c>>) {
-    use ::rcc_utils::IntoWith;
-
     macro_rules! int_conv {
       ($t:ty, $signess:ident) => {
         match <$t>::from_str_radix(num, base) {
@@ -57,8 +55,7 @@ impl Number {
             )
             .into(),
             Some(
-              DiagData::InvalidNumberFormat(e.to_string())
-                .into_with(Severity::Error),
+              DiagData::InvalidNumberFormat(e.to_string()) + Severity::Error,
             ),
           ),
         }
@@ -72,8 +69,7 @@ impl Number {
             Floating::new(<$t>::default().to_bits(), FloatFormat::$format)
               .into(),
             Some(
-              DiagData::InvalidNumberFormat(e.to_string())
-                .into_with(Severity::Error),
+              DiagData::InvalidNumberFormat(e.to_string()) + Severity::Error,
             ),
           ),
         }
@@ -110,8 +106,7 @@ impl Number {
             DiagData::InvalidNumberFormat(format!(
               "unsupported integer literal suffix: {}",
               suf
-            ))
-            .into_with(Severity::Error),
+            )) + Severity::Error,
           ),
         ),
       },
@@ -125,8 +120,7 @@ impl Number {
             DiagData::InvalidNumberFormat(format!(
               "unsupported floating literal suffix: {}",
               suf
-            ))
-            .into_with(Severity::Error),
+            )) + Severity::Error,
           ),
         ),
       },

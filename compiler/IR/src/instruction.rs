@@ -553,8 +553,6 @@ mod cmp {
   #[derive(Debug)]
   pub struct FCmp {
     predicate: FCmpPredicate,
-    // pub lhs: ValueID,
-    // pub rhs: ValueID,
     operand: [ValueID; 2],
   }
 
@@ -676,8 +674,6 @@ mod misc {
   /// - The size of [`Call::args`] must match the parameter count of the parameter counts in [`super::types::Function`].
   #[derive(Debug)]
   pub struct Call {
-    // pub callee: ValueID,
-    // pub args: Vec<ValueID>,
     operands: Vec<ValueID>, // [callee, arg1, arg2, ...]
   }
 

@@ -13,8 +13,7 @@ use ::rcc_shared::{
   Diagnosis, OpDiag, Operator, OperatorCategory, Severity, SourceSpan, Storage,
 };
 use ::rcc_utils::{
-  IntoWith, RefEq, StrRef, contract_assert, contract_violation,
-  not_implemented_feature,
+  RefEq, StrRef, contract_assert, contract_violation, not_implemented_feature,
 };
 use ::std::collections::{HashMap, HashSet};
 
@@ -176,9 +175,7 @@ impl<'c> Sema<'c> {
                           se::Constant::Integral(integral) =>
                             integral.to_builtin(),
                           se::Constant::Nullptr() => 0,
-                          se::Constant::Floating(_) => unreachable!(),
-                          se::Constant::String(_) => unreachable!(),
-                          se::Constant::Address(_) => unreachable!(),
+                          _ => unreachable!(),
                         },
                       )
                     } else {
@@ -540,7 +537,7 @@ impl<'c> Sema<'c> {
         function_specifier,
       )
       .unwrap_or_else(|e| {
-        self.add_diag(e.into_with(span));
+        self.add_diag(e + span);
       });
     }
     use VarDeclKind::*;
@@ -564,9 +561,8 @@ impl<'c> Sema<'c> {
             name,
             previous_decl.qualified_type().to_string(),
             qualified_type.to_string(),
-          )
-          .into_with(Severity::Error)
-          .into_with(span),
+          ) + Severity::Error
+            + span,
         )?;
       }
 
@@ -576,11 +572,7 @@ impl<'c> Sema<'c> {
 
       if matches!(declkind, Definition) && previous_decl.definition().is_some()
       {
-        Err(
-          FunctionAlreadyDefined(name.to_string())
-            .into_with(Severity::Error)
-            .into_with(span),
-        )?;
+        Err(FunctionAlreadyDefined(name.to_string()) + Severity::Error + span)?;
       }
     }
 
@@ -757,8 +749,8 @@ impl<'c> Sema<'c> {
       if initializer.is_none() {
         Err(
           DeducedTypeWithNoInitializer(name.to_string())
-            .into_with(Severity::Error)
-            .into_with(span),
+            + Severity::Error
+            + span,
         )?
       }
       let qualified_type =
@@ -829,9 +821,8 @@ impl<'c> Sema<'c> {
             name,
             prev_decl_ref.qualified_type().to_string(),
             vardef.declaration.qualified_type().to_string(),
-          )
-          .into_with(Severity::Error)
-          .into_with(span),
+          ) + Severity::Error
+            + span,
         )?
       }
       let prev_declkind = prev_decl_ref.declkind();
@@ -841,8 +832,8 @@ impl<'c> Sema<'c> {
       match (&prev_declkind, &new_declkind) {
         (VDK::Definition, VDK::Definition) => Err(
           VariableAlreadyDefined(vardef.declaration.name().to_string())
-            .into_with(Severity::Error)
-            .into_with(span),
+            + Severity::Error
+            + span,
         )?,
         (VDK::Definition, VDK::Declaration)
         | (VDK::Definition, VDK::Tentative) => {
@@ -855,7 +846,7 @@ impl<'c> Sema<'c> {
             &vardef.declaration.storage_class(),
           )
           .unwrap_or_else(|error| {
-            self.add_diag(error.into_with(span));
+            self.add_diag(error + span);
             prev_decl_ref.storage_class()
           });
 
@@ -1129,16 +1120,13 @@ impl<'c> Sema<'c> {
       Type::FunctionProto(proto) => proto,
       Type::Pointer(ptr) => match ptr.pointee.unqualified_type {
         Type::FunctionProto(proto) => proto,
-        _ => Err(
-          InvalidCallee(ptr.pointee.to_string())
-            .into_with(Severity::Error)
-            .into_with(span),
-        )?,
+        _ =>
+          Err(InvalidCallee(ptr.pointee.to_string()) + Severity::Error + span)?,
       },
       _ => Err(
         InvalidCallee(analyzed_callee.qualified_type().to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       )?,
     };
 
@@ -1198,9 +1186,7 @@ impl<'c> Sema<'c> {
     variable: pe::Variable<'c>,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     let declaration = self.environment.find(variable.name).ok_or(
-      UndefinedVariable(variable.name)
-        .into_with(Severity::Error)
-        .into_with(variable.span),
+      UndefinedVariable(variable.name) + Severity::Error + variable.span,
     )?;
     if declaration.is_typedef() {
       contract_violation!(
@@ -1373,9 +1359,8 @@ impl<'c> Sema<'c> {
               IncompatiblePointerTypes(
                 then_expr.qualified_type().to_string(),
                 else_expr.qualified_type().to_string(),
-              )
-              .into_with(Severity::Error)
-              .into_with(span),
+              ) + Severity::Error
+                + span,
             ),
           },
         _ => todo!(),
@@ -1426,16 +1411,9 @@ impl<'c> Sema<'c> {
       (Type::Primitive(p), Type::Pointer(_)) if p.is_integer() =>
         Ok(doit(rhs, lhs)),
 
-      (Type::Pointer(_), t) | (t, Type::Pointer(_)) => Err(
-        NonIntegerSubscript(t.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
-      ),
-      _ => Err(
-        DerefNonPtr(lhs.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
-      ),
+      (Type::Pointer(_), t) | (t, Type::Pointer(_)) =>
+        Err(NonIntegerSubscript(t.to_string()) + Severity::Error + span),
+      _ => Err(DerefNonPtr(lhs.to_string()) + Severity::Error + span),
     }
   }
 
@@ -1462,8 +1440,8 @@ impl<'c> Sema<'c> {
     if !operand.unqualified_type().is_arithmetic() {
       Err(
         NonArithmeticInUnaryOp(operator, operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       )
     } else {
       let converted_operand =
@@ -1499,16 +1477,12 @@ impl<'c> Sema<'c> {
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     if !operand.is_modifiable_lvalue() {
-      Err(
-        ExprNotAssignable(operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
-      )
+      Err(ExprNotAssignable(operand.to_string()) + Severity::Error + span)
     } else if !operand.qualified_type().is_scalar() {
       Err(
         NonArithmeticInUnaryOp(operator, operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       )
     } else {
       let operand_type = *operand.qualified_type();
@@ -1539,8 +1513,8 @@ impl<'c> Sema<'c> {
     if !operand.unqualified_type().is_integer() {
       Err(
         NonIntegerInBitwiseUnaryOp(operator, operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       )
     } else {
       let converted_operand =
@@ -1595,17 +1569,11 @@ impl<'c> Sema<'c> {
     assert_eq!(operator, Operator::Ampersand);
     if !operand.is_lvalue() {
       Err(
-        AddressofOperandNotLvalue(operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+        AddressofOperandNotLvalue(operand.to_string()) + Severity::Error + span,
       )
     } else if matches!(operand.raw_expr(), se::RawExpr::Variable(variable) if variable.declaration.storage_class().is_register())
     {
-      Err(
-        AddressofOperandRegVar(operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
-      )
+      Err(AddressofOperandRegVar(operand.to_string()) + Severity::Error + span)
     } else {
       let pointee = *operand.qualified_type();
       Ok(se::Expression::new_rvalue(
@@ -1636,22 +1604,14 @@ impl<'c> Sema<'c> {
       .decay(self.context());
 
     if !operand.unqualified_type().is_pointer() {
-      Err(
-        DerefNonPtr(operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
-      )?
+      Err(DerefNonPtr(operand.to_string()) + Severity::Error + span)?
     }
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
     if RefEq::ref_eq(pointee_type.unqualified_type, self.context().void_type())
     {
-      Err(
-        DerefVoidPtr(operand.to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
-      )
+      Err(DerefVoidPtr(operand.to_string()) + Severity::Error + span)
     } else {
       // If the operand points to a function, the result is a function designator; -- which means the we don't need to perform decay here
       // if it points to an object, the result is an lvalue designating the object.
@@ -1718,7 +1678,7 @@ impl<'c> Sema<'c> {
             &intermediate_result_type,
             &expr_type,
           )
-          .map_err(|meta| meta.into_with(span))?;
+          .map_err(|meta| meta + span)?;
 
           debug_assert!(
             !intermediate_left.is_lvalue(),
@@ -1825,8 +1785,8 @@ impl<'c> Sema<'c> {
 
       (l, r) => Err(
         InvalidComparison(l.to_string(), r.to_string(), operator)
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       ),
     }
   }
@@ -1879,8 +1839,8 @@ impl<'c> Sema<'c> {
               left.qualified_type().to_string(),
               right.qualified_type().to_string(),
             )
-            .into_with(Severity::Error) // should be warning
-            .into_with(span),
+            +(Severity::Error) // should be warning
+            +span,
           )
         }
       },
@@ -1893,8 +1853,8 @@ impl<'c> Sema<'c> {
         ptr_with_nullptr(right, left),
       (l, r) => Err(
         InvalidComparison(l.to_string(), r.to_string(), operator)
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       ),
     }
   }
@@ -1919,8 +1879,8 @@ impl<'c> Sema<'c> {
       // todo: enum constant..
       _ => Err(
         NonArithmeticInBinaryOp(left.to_string(), right.to_string(), operator)
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       ),
     }
   }
@@ -2001,9 +1961,8 @@ impl<'c> Sema<'c> {
             IncompatiblePointerTypes(
               left.qualified_type().to_string(),
               right.qualified_type().to_string(),
-            )
-            .into_with(Severity::Error)
-            .into_with(span),
+            ) + Severity::Error
+              + span,
           ),
         },
       // int + ptr => ptr
@@ -2051,9 +2010,8 @@ impl<'c> Sema<'c> {
           left.qualified_type().to_string(),
           right.qualified_type().to_string(),
           operator,
-        )
-        .into_with(Severity::Error)
-        .into_with(span),
+        ) + Severity::Error
+          + span,
       ),
     }
   }
@@ -2117,8 +2075,8 @@ impl<'c> Sema<'c> {
     {
       Err(
         NonIntegerInBitshiftOp(left.to_string(), right.to_string(), operator)
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       )?
     }
 
@@ -2281,14 +2239,14 @@ impl<'c> Sema<'c> {
         Ok(ss::Return::new(None, span)),
       (None, _) => Err(
         ReturnTypeMismatch("non-void function must return a value".to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       ),
 
       (Some(_), Type::Primitive(Primitive::Void)) => Err(
         ReturnTypeMismatch("void function cannot return a value".to_string())
-          .into_with(Severity::Error)
-          .into_with(span),
+          + Severity::Error
+          + span,
       ),
 
       (Some(analyzed_expr), _) => {
@@ -2575,11 +2533,7 @@ impl<'c> Sema<'c> {
             self.statement_or_default(*statement),
             span,
           )),
-          false => Err(
-            DuplicateLabel(name)
-              .into_with(Severity::Error)
-              .into_with(span),
-          ),
+          false => Err(DuplicateLabel(name) + Severity::Error + span),
         }
       },
     }
@@ -2599,11 +2553,7 @@ impl<'c> Sema<'c> {
 
   fn breakstmt(&self, break_stmt: ps::Break) -> Result<ss::Break, Diag<'c>> {
     match self.environment.is_global() {
-      true => Err(
-        TopLevelBreak
-          .into_with(Severity::Error)
-          .into_with(break_stmt.span),
-      ),
+      true => Err(TopLevelBreak + Severity::Error + break_stmt.span),
       false => match self
         .scope_context
         .iter()
@@ -2611,11 +2561,7 @@ impl<'c> Sema<'c> {
         .find(|ctx| matches!(ctx, ScopeContext::Loop | ScopeContext::Switch))
       {
         Some(_) => Ok(ss::Break::new(break_stmt.span)),
-        None => Err(
-          BreakNotWithinLoop
-            .into_with(Severity::Error)
-            .into_with(break_stmt.span),
-        ),
+        None => Err(BreakNotWithinLoop + Severity::Error + break_stmt.span),
       },
     }
   }
@@ -2625,11 +2571,7 @@ impl<'c> Sema<'c> {
     continue_stmt: ps::Continue,
   ) -> Result<ss::Continue, Diag<'c>> {
     match self.environment.is_global() {
-      true => Err(
-        TopLevelContinue
-          .into_with(Severity::Error)
-          .into_with(continue_stmt.span),
-      ),
+      true => Err(TopLevelContinue + Severity::Error + continue_stmt.span),
       false => match self
         .scope_context
         .iter()
@@ -2637,11 +2579,8 @@ impl<'c> Sema<'c> {
         .find(|ctx| matches!(ctx, ScopeContext::Loop))
       {
         Some(_) => Ok(ss::Continue::new(continue_stmt.span)),
-        None => Err(
-          ContinueNotWithinLoop
-            .into_with(Severity::Error)
-            .into_with(continue_stmt.span),
-        ),
+        None =>
+          Err(ContinueNotWithinLoop + Severity::Error + continue_stmt.span),
       },
     }
   }

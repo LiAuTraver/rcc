@@ -168,6 +168,7 @@ impl<'c> UnqualExt<'c> for Constant<'c> {
       ),
       Self::Nullptr() => Context::nullptr_type(context),
       Self::Address(_) => Context::voidptr_type(context),
+      _ => todo!(),
     }
   }
 }

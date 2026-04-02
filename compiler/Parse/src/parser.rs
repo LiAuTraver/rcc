@@ -1,7 +1,7 @@
 use ::rcc_adt::Integral;
 use ::rcc_ast::{
   Session, SessionRef, UnitScope,
-  types::{FunctionSpecifier, Qualifiers},
+  types::{FunctionSpecifier, Qualifiers, TypeInfo},
 };
 use ::rcc_shared::{
   DiagData::{self, *},
@@ -244,11 +244,25 @@ impl<'c> Parser<'c> {
 }
 /// meta parse
 impl<'c> Parser<'c> {
+  #[inline]
   fn parse_type_specifier(&self) -> Option<TypeSpecifier<'c>> {
-    match self.peek_lit() {
+    self.parse_type_specifier_with_offset(0)
+  }
+
+  fn parse_type_specifier_with_offset(
+    &self,
+    offset: usize,
+  ) -> Option<TypeSpecifier<'c>> {
+    match self.peek_lit_with_offset(offset) {
       Literal::Keyword(Keyword::Struct) => todo!(),
       Literal::Keyword(Keyword::Union) => todo!(),
       Literal::Keyword(Keyword::Enum) => todo!(),
+      Literal::Keyword(Keyword::Auto) =>
+        if self.ast().langopts() >= 23 {
+          Some(TypeSpecifier::AutoType)
+        } else {
+          None
+        },
       Literal::Keyword(keyword) => TypeSpecifier::try_from(keyword).ok(),
       Literal::Identifier(ident) =>
         if self.typedefs.contains(ident) {
@@ -313,8 +327,11 @@ impl<'c> Parser<'c> {
         } else {
           qualifiers |= qualifier;
         }
-      } else if self.peek_lit().is_storage_class() {
-        let storage_class = Storage::from(self.peek_lit());
+      } else if let Ok(storage_class) = Storage::try_from(self.peek_lit())
+        && (!matches!(storage_class, Storage::Automatic)
+          || (self.ast().langopts() >= 23
+            && self.parse_type_specifier_with_offset(1).is_some()))
+      {
         match storage {
           Some(ref existing_storage) if existing_storage == storage_class => {
             self.add_warning(
@@ -1134,9 +1151,17 @@ impl<'c> Parser<'c> {
           ),
           bool_constant @ (Keyword::True | Keyword::False) =>
             Expression::Constant(
-              ConstantLiteral::Integral(
-                (bool_constant == Keyword::True).into(),
-              )
+              ConstantLiteral::Integral(if self.ast().langopts() >= 17 {
+                Integral::from_unsigned(
+                  bool_constant == Keyword::True,
+                  self.ast().i8_bool_type().size_bits() as u8,
+                )
+              } else {
+                Integral::from_signed(
+                  bool_constant == Keyword::True,
+                  self.ast().int_type().size_bits() as u8,
+                )
+              })
               .into_with(self.eloc(location)),
             ),
           Keyword::Nullptr => Expression::Constant(
@@ -1220,7 +1245,7 @@ impl<'c> Parser<'c> {
   /// such as in the case of right-associative operators -- which would be tricky to implement
   /// using precedence climbing. Both methods reduce the complexity of recursive descent parsing.
   ///
-  /// rustc also uses Pratt parsing for its expression parser; the relavent part see
+  /// rust analyzer also uses Pratt parsing for its expression parser; the relavent part see
   /// [here](https://github.com/rust-lang/rust-analyzer/blob/3cf298f9a92cb4fd0999859821b578bd361d5da2/crates/parser/src/grammar/expressions.rs#L246)
   /// (it's far more complicated than this one, tho).
   ///

@@ -1,5 +1,3 @@
-use ::rcc_utils::IntoWith;
-
 use super::{DiagData, DiagMeta, Keyword, Literal, Severity};
 
 /// storage-class-specifier
@@ -48,26 +46,30 @@ pub enum Storage {
 
 use Storage::*;
 
-impl From<&Keyword> for Storage {
-  fn from(kw: &Keyword) -> Self {
+impl TryFrom<&Keyword> for Storage {
+  type Error = ();
+
+  fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
     match kw {
-      Keyword::Auto => Automatic,
-      Keyword::Register => Register,
-      Keyword::Extern => Extern,
-      Keyword::Static => Static,
-      Keyword::Typedef => Typedef,
-      Keyword::ThreadLocal => ThreadLocal,
-      Keyword::Constexpr => Constexpr,
-      _ => panic!("cannot convert {:?} to Storage", kw),
+      Keyword::Auto => Ok(Automatic),
+      Keyword::Register => Ok(Register),
+      Keyword::Extern => Ok(Extern),
+      Keyword::Static => Ok(Static),
+      Keyword::Typedef => Ok(Typedef),
+      Keyword::ThreadLocal => Ok(ThreadLocal),
+      Keyword::Constexpr => Ok(Constexpr),
+      _ => Err(()),
     }
   }
 }
 
-impl<'c> From<&Literal<'c>> for Storage {
-  fn from(literal: &Literal) -> Self {
+impl<'c> TryFrom<&Literal<'c>> for Storage {
+  type Error = ();
+
+  fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
     match literal {
-      Literal::Keyword(kw) => Storage::from(kw),
-      _ => panic!("cannot convert {:?} to Storage", literal),
+      Literal::Keyword(kw) => Storage::try_from(kw),
+      _ => Err(()),
     }
   }
 }
@@ -81,17 +83,12 @@ impl Storage {
       (lhs, rhs) if lhs == rhs => Ok(*lhs),
       (Constexpr, _) | (_, Constexpr) => Err(
         DiagData::UnsupportedFeature("Constexpr unimplemented yet".to_string())
-          .into_with(Severity::Error),
+          + Severity::Error,
       ),
-      (Typedef, _) | (_, Typedef) => Err(
-        DiagData::StorageSpecsUnmergeable(*lhs, *rhs)
-          .into_with(Severity::Error),
-      ),
+      (Typedef, _) | (_, Typedef) =>
+        Err(DiagData::StorageSpecsUnmergeable(*lhs, *rhs) + Severity::Error),
       (Extern, other) | (other, Extern) => Ok(*other), // extern is compatible with any other storage class
-      _ => Err(
-        DiagData::StorageSpecsUnmergeable(*lhs, *rhs)
-          .into_with(Severity::Error),
-      ),
+      _ => Err(DiagData::StorageSpecsUnmergeable(*lhs, *rhs) + Severity::Error),
     }
   }
 
