@@ -157,4 +157,27 @@ impl Palette {
         .to_owned(),
     }
   }
+
+  pub fn dimmed() -> Self {
+    let dimmed = ColorSpec::new()
+      .set_fg(Some(Color::White))
+      .set_intense(false)
+      .set_bold(false)
+      .set_italic(true)
+      .to_owned();
+    Self {
+      node: dimmed.clone(),
+      operator: dimmed.clone(),
+      literal: dimmed.clone(),
+      meta: dimmed.clone(),
+      kind: dimmed.clone(),
+      info: dimmed.clone(),
+      dim: dimmed.clone(),
+      skeleton: dimmed.clone(),
+      error: ColorSpec::new()
+        .set_fg(Some(Color::Red))
+        .set_bold(true)
+        .to_owned(),
+    }
+  }
 }

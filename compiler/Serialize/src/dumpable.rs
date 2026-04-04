@@ -838,7 +838,9 @@ impl<'c> Dumpable<'c> for InitializerEntry<'_> {
     is_last: bool,
     palette: &Palette,
   ) {
-    self.designator.dump(dumper, prefix, true, palette);
+    self
+      .designator
+      .dump(dumper, prefix, /* is_implicit */ true, palette);
     self.initializer.dump(dumper, prefix, is_last, palette);
   }
 }
@@ -849,11 +851,17 @@ impl<'c> Dumpable<'c> for Designator<'_> {
     &self,
     dumper: &mut impl Dumper<'c>,
     prefix: &str,
-    implicit: bool,
+    is_implicit: bool,
     palette: &Palette,
   ) {
+    let palette = if is_implicit {
+      &Palette::dimmed()
+    } else {
+      palette
+    };
+
     dumper.print_indent(prefix, false);
-    dumper.write("Designator", &palette.skeleton);
+    dumper.write("Designator", &palette.node);
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
 
     match self {
@@ -864,7 +872,7 @@ impl<'c> Dumpable<'c> for Designator<'_> {
       Self::Field(_) => todo!(),
     }
 
-    if implicit {
+    if is_implicit {
       dumper.write(" implicit", &palette.skeleton);
     }
     dumper.newline();
