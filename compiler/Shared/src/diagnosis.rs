@@ -266,8 +266,10 @@ mod data {
     DesignatorForNonAggregate(QualTyStr),
     #[error("array designator index '{0}' exceeds array bound '{1}'")]
     DesignatorIndexOutOfBound(usize, usize),
-    #[error("array designator index '{0}' cannot be negative")]
-    DesignatorIndexNegative(usize),
+    #[error("array designator index '{0}' is negative")]
+    DesignatorIndexNegative(isize),
+    #[error("Cannot use {} '{}' inside {} ilist", if *.0 {"field designator"} else {"array"}, &.1, if !*.0 {"field designator"} else {"array"})]
+    InvalidDesignator(/* is_array */ bool, String),
     #[error("{0}")]
     Placeholder(CustomMessage),
     #[error("{0}")]
@@ -337,6 +339,8 @@ mod data {
     InvalidEscapeSequence(String),
     #[error("excess elements in array initializer")]
     ExcessElemInInitializer,
+    #[error("unnecessary braces around scalar initializer")]
+    ExcessBraceAroundScalarInitializer,
     #[error("Typedef defines nothing")]
     EmptyTypedef,
     #[error("Empty statement")]

@@ -164,7 +164,8 @@ impl<'c> UnqualExt<'c> for Constant<'c> {
       Self::String(str) => Context::make_array(
         context,
         context.char_type().into(),
-        ArraySize::Constant(str.len()),
+        // '\0'.
+        ArraySize::Constant(str.len().saturating_add(1)),
       ),
       Self::Nullptr() => Context::nullptr_type(context),
       Self::Address(_) => Context::voidptr_type(context),

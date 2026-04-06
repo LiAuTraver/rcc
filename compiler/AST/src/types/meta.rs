@@ -19,7 +19,7 @@ pub enum ArraySize {
   Constant(usize),
   /// unsupported dynamic size, but i kept it here for the `full` type category
   ///
-  /// TODO: if this holds an expression -- it's a cyclic reference of mod `type` and mod `analyzer::expression`. may use `ExpressionId` as a workaround.
+  /// TODO: if this holds an expression -- it's a cyclic reference. may use `ExpressionId` as a workaround.
   Variable(ExpressionId),
   /// unspecified size
   Incomplete,
@@ -88,6 +88,11 @@ impl<'c> Pointer<'c> {
 impl<'c> Array<'c> {
   pub fn new(element_type: QualifiedType<'c>, size: ArraySize) -> Self {
     Self { element_type, size }
+  }
+
+  #[inline]
+  pub fn size_opt(&self) -> Option<usize> {
+    self.size.size_opt()
   }
 }
 impl ArraySize {

@@ -63,7 +63,7 @@ pub struct InitializerList<'c> {
 #[derive(Debug)]
 pub struct InitializerListEntry<'c> {
   pub designators: &'c [Designator<'c>],
-  pub initializer: Initializer<'c>,
+  initializer: Initializer<'c>,
   pub is_implicit: bool,
 }
 
@@ -79,6 +79,10 @@ impl<'c> InitializerListEntry<'c> {
       is_implicit,
     }
   }
+
+  pub fn initializer(&self) -> &Initializer<'c> {
+    &self.initializer
+  }
 }
 
 #[derive(Debug)]
@@ -93,12 +97,6 @@ impl Designator<'_> {
   /// as error node. you can't use [`usize::MAX`] in subscript
   /// since it would require the array has [`usize::MAX`] + 1 length, which is impossible.
   /// Also nobody in SANE would allocate such a huge array...
-  ///
-  /// error node that:
-  ///   1. ignore overrides once there's at least one [`Self::SENTINAL`] in [`Designator`]s.
-  ///   2. during AST Dump, put the index as recovery/invalid.
-  ///   3. which means every calc w.r.t. [`Designator`] shall use [`usize::saturating_add`]-like calc,
-  ///      or checking whether the current operand is [`usize::MAX`].
   #[allow(non_upper_case_globals)]
   pub const npos: usize = usize::MAX;
   // #[allow(non_upper_case_globals)]
@@ -218,6 +216,16 @@ impl<'c> InitializerList<'c> {
   fn span(&self) -> SourceSpan {
     self.span
   }
+
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    self.entries.is_empty()
+  }
+
+  #[inline]
+  pub fn len(&self) -> usize {
+    self.entries.len()
+  }
 }
 
 mod fmt {
@@ -326,7 +334,7 @@ mod fmt {
             Designator::Field(_) => write!(f, ".<field>")?,
           }
         }
-        write!(f, " = {}", entry.initializer)?;
+        write!(f, " = {}", entry.initializer())?;
       }
 
       if !self.entries.is_empty() {

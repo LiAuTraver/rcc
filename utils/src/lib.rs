@@ -7,7 +7,7 @@
 #![feature(const_ops)]
 #![feature(const_type_name)]
 #![feature(const_eval_select)]
-
+#![feature(likely_unlikely)]
 mod macros;
 mod num_traits;
 mod opaque;
@@ -126,4 +126,16 @@ impl<T: [const] PartialEq + [const] Destruct + Debug> const Add<(T, T, &str)>
   fn add(self, (lhs, rhs, msg): (T, T, &str)) {
     const_assert_eq!(lhs, rhs, msg)
   }
+}
+
+/// exists just to avoid polluting unstable feature switches in the rest of the codebase.
+#[inline(always)]
+pub fn likely(b: bool) -> bool {
+  ::std::hint::likely(b)
+}
+
+/// exists just to avoid polluting unstable feature switches in the rest of the codebase.
+#[inline(always)]
+pub fn unlikely(b: bool) -> bool {
+  ::std::hint::unlikely(b)
 }

@@ -789,14 +789,29 @@ impl<'c> Dumpable<'c> for InitializerList<'_> {
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
     self.span.dump(dumper, prefix, is_last, palette);
 
-    if self.entries.is_empty() {
-      dumper.write("zeroinit\n", &palette.info);
-    } else {
-      dumper.newline();
-      let subprefix = dumper.child_prefix(prefix, is_last);
-      self.entries.iter().enumerate().for_each(|(i, entry)| {
-        entry.dump(dumper, &subprefix, i == self.entries.len() - 1, palette)
-      });
+    match self.len() {
+      0 => dumper.write("zeroinit\n", &palette.info),
+      1 => {
+        // if it's only one entry, just flatten it instead of nesting it under an InitializerList node.
+        dumper.newline();
+        // if the designator is implicit, dont show it.
+        let entry = &self.entries[0];
+        let subprefix = dumper.child_prefix(prefix, is_last);
+        if entry.is_implicit {
+          entry
+            .initializer()
+            .dump(dumper, &subprefix, is_last, palette);
+        } else {
+          entry.dump(dumper, &subprefix, is_last, palette);
+        }
+      },
+      _ => {
+        dumper.newline();
+        let subprefix = dumper.child_prefix(prefix, is_last);
+        self.entries.iter().enumerate().for_each(|(i, entry)| {
+          entry.dump(dumper, &subprefix, i == self.entries.len() - 1, palette)
+        });
+      },
     }
   }
 }
@@ -833,7 +848,8 @@ impl<'c> Dumpable<'c> for InitializerListEntry<'_> {
         palette,
       )
     });
-    self.initializer.dump(dumper, &subprefix, true, old);
+
+    self.initializer().dump(dumper, &subprefix, true, old);
   }
 }
 
@@ -856,10 +872,13 @@ impl<'c> Dumpable<'c> for Designator<'_> {
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
 
     match self {
-      Self::Array(index) => {
-        dumper.write("index ", &palette.skeleton);
-        dumper.write(index, &palette.meta)
-      },
+      Self::Array(index) =>
+        if *index == Designator::npos {
+          dumper.write("<invalid index>", &palette.error)
+        } else {
+          dumper.write("index ", &palette.skeleton);
+          dumper.write(index, &palette.meta)
+        },
       Self::Field(_) => todo!(),
     }
 
