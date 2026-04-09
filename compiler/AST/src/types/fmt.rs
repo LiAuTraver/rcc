@@ -33,7 +33,7 @@ impl Display for Array<'_> {
     match &self.size {
       ArraySize::Constant(sz) => write!(f, "{}", sz)?,
       ArraySize::Incomplete => write!(f, "")?,
-      ArraySize::Variable(_id) => todo!(), // ignore for now
+      ArraySize::Variable(_id) => write!(f, "*")?, // ignore for now
     }
     write!(f, "]")
   }
@@ -126,7 +126,7 @@ impl Type<'_> {
         match &arr.size {
           ArraySize::Constant(sz) => write!(f, "{}", sz)?,
           ArraySize::Incomplete => (),
-          ArraySize::Variable(_id) => (), // ignore for now
+          ArraySize::Variable(_id) => write!(f, "*")?, // ignore for now
         }
         write!(f, "]")?;
         arr.element_type.unqualified_type.print_declarator(f)
@@ -154,10 +154,12 @@ impl Type<'_> {
       FunctionProto(func) => {
         write!(f, "(")?;
         if func.is_variadic {
-          if !func.parameter_types.is_empty() {
-            write!(f, ", ")?;
-          }
-          write!(f, "...")?;
+          // this is wrong.
+          // if !func.parameter_types.is_empty() {
+          //   write!(f, ", ")?;
+          // }
+          // write!(f, "...")?;
+          todo!()
         } else if func.parameter_types.is_empty() {
           write!(f, "void")?;
         } else {

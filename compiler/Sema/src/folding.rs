@@ -6,14 +6,14 @@ use ::rcc_ast::{
 use ::rcc_shared::{
   DiagData::*, Diagnosis, Operator, OperatorCategory, SourceSpan,
 };
-use ::rcc_utils::{RefEq, contract_assert, contract_violation};
+use ::rcc_utils::{PtrEq, RefEq, contract_assert, contract_violation};
 
 use super::expression::{
-  ArraySubscript, Binary, CStyleCast, Call, CompoundLiteral, Constant,
-  Constant as CL, Empty, ExprRef, Expression, ImplicitCast, MemberAccess,
-  Paren, RawExpr, SizeOf, SizeOfKind, Ternary, Unary, ValueCategory, Variable,
+  ArraySubscript, Binary, CStyleCast, Call, CompoundAssign, CompoundLiteral,
+  Constant, Constant as CL, Empty, ExprRef, Expression, ImplicitCast,
+  MemberAccess, Paren, RawExpr, SizeOf, SizeOfKind, Ternary, Unary,
+  ValueCategory, Variable,
 };
-use crate::expression::CompoundAssign;
 
 #[derive(Debug)]
 pub enum FoldingResult<T> {
@@ -145,14 +145,14 @@ impl<'c> Folding<'c, Call<'c>> for Expression<'c> {
     session: &Session<'c, D>,
   ) -> FoldingResult<ExprRef<'c>> {
     let callee = call.callee.fold(session).take();
-    let mut changed = !::std::ptr::eq(callee, call.callee);
+    let mut changed = !PtrEq::ptr_eq(callee, call.callee);
     let arguments = call
       .arguments
       .iter()
       .copied()
       .map(|arg| {
         let folded = arg.fold(session).take();
-        changed |= !::std::ptr::eq(folded, arg);
+        changed |= !PtrEq::ptr_eq(folded, arg);
         folded
       })
       .collect::<Vec<_>>();
@@ -204,8 +204,8 @@ impl<'c> Folding<'c, ArraySubscript<'c>> for Expression<'c> {
     let array = array_subscript.array.fold(session).take();
     let index = array_subscript.index.fold(session).take();
 
-    if ::std::ptr::eq(array, array_subscript.array)
-      && ::std::ptr::eq(index, array_subscript.index)
+    if PtrEq::ptr_eq(array, array_subscript.array)
+      && PtrEq::ptr_eq(index, array_subscript.index)
     {
       Failure(expression)
     } else {
@@ -261,7 +261,7 @@ impl<'c> Folding<'c, Unary<'c>> for Expression<'c> {
     let folded_operand = match unary.operand.fold(session) {
       Success(folded) => folded,
       Failure(original) => {
-        if ::std::ptr::eq(original, unary.operand) {
+        if PtrEq::ptr_eq(original, unary.operand) {
           return Failure(expression);
         }
         return Failure({
@@ -356,8 +356,7 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
     let fr = binary.right.fold(session);
 
     let f = |left: ExprRef<'c>, right: ExprRef<'c>| {
-      if ::std::ptr::eq(left, binary.left)
-        && ::std::ptr::eq(right, binary.right)
+      if PtrEq::ptr_eq(left, binary.left) && PtrEq::ptr_eq(right, binary.right)
       {
         expression
       } else {
@@ -546,12 +545,12 @@ impl<'c> Folding<'c, Ternary<'c>> for Expression<'c> {
           .fold(session)
           .take();
         let else_expr = ternary.else_expr.fold(session).take();
-        if ::std::ptr::eq(folded_condition, ternary.condition)
-          && ::std::ptr::eq(
+        if PtrEq::ptr_eq(folded_condition, ternary.condition)
+          && PtrEq::ptr_eq(
             then_expr,
             ternary.then_expr.expect("?: unimplemented"),
           )
-          && ::std::ptr::eq(else_expr, ternary.else_expr)
+          && PtrEq::ptr_eq(else_expr, ternary.else_expr)
         {
           Failure(expression)
         } else {
@@ -671,7 +670,7 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
     let folded_expr = match implicit_cast.expr.fold(session) {
       Success(folded) => folded,
       Failure(original) => {
-        if ::std::ptr::eq(original, implicit_cast.expr) {
+        if PtrEq::ptr_eq(original, implicit_cast.expr) {
           return Failure(expression);
         }
         return Failure({

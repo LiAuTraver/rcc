@@ -4,7 +4,7 @@ use ::rcc_ast::{
   types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeRef},
 };
 use ::rcc_shared::{ArenaVec, CollectIn, Operator, SourceSpan, Storage};
-use ::rcc_utils::StrRef;
+use ::rcc_utils::{PtrEq, StrRef};
 
 use crate::declref::DeclRef;
 
@@ -523,6 +523,8 @@ impl<'c> Expression<'c> {
     todo!()
   }
 }
+
+impl PtrEq for Expression<'_> {}
 
 mod fmt {
   use ::std::fmt::Display;

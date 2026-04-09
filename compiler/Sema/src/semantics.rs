@@ -20,6 +20,7 @@ use ::std::collections::{HashMap, HashSet};
 use super::{declaration as sd, declref, expression as se, statement as ss};
 use crate::initialization::Initialization;
 
+#[derive(Debug)]
 pub(crate) enum ScopeContext {
   Function,
   Loop,
@@ -691,7 +692,9 @@ impl<'c> Sema<'c> {
 
     let _func = self.scope_context.pop();
     self.environment.exit();
-    debug_assert!(matches!(_func, Some(ScopeContext::Function)));
+
+    use ::std::debug_assert_matches;
+    debug_assert_matches!(_func, Some(ScopeContext::Function));
 
     let function_span = self
       .current_function
@@ -1932,7 +1935,7 @@ impl<'c> Sema<'c> {
 
   /// at least one of the operand is pointer, and the operand can only be `+` or `-`.
   ///
-  /// This is specified more detailed in C++ Standard [over.built].
+  /// This is specified more detailed in C++ Standard \[over.built\].
   ///
   /// - left and right are both pointer of type `T`, the operator is `-` -- return type is `ptrdiff_t`.
   /// - left and right are both pointer of type `T`, the operator is `+` -- error.

@@ -1,8 +1,7 @@
-use std::{marker::PhantomData, ptr::NonNull};
-
-use rcc_ast::{Context, VarDeclKind, types::QualifiedType};
-use rcc_shared::Storage;
-use rcc_utils::StrRef;
+use ::rcc_ast::{Context, VarDeclKind, types::QualifiedType};
+use ::rcc_shared::Storage;
+use ::rcc_utils::StrRef;
+use ::std::{marker::PhantomData, ptr::NonNull};
 
 #[derive(Debug)]
 pub struct DeclNode<'c> {

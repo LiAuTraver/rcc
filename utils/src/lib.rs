@@ -93,14 +93,30 @@ pub trait RefEq {
 impl<T: ?Sized> !RefEq for &T {}
 impl<T: ?Sized> !RefEq for &mut T {}
 
+pub trait PtrEq {
+  #[inline(always)]
+  #[must_use]
+  fn ptr_eq(lhs: &Self, rhs: &Self) -> bool {
+    ::std::ptr::eq(lhs, rhs)
+  }
+}
+impl<T: ?Sized> !PtrEq for &T {}
+impl<T: ?Sized> !PtrEq for &mut T {}
+
+/// internal implementation used for [`const_assert`] and [`const_assert_eq`].
+///
+/// # Invoke it directly is wrong.
 #[track_caller]
 #[inline]
-pub const fn static_assert(cond: bool, _: &str) {
+pub const fn _static_assert_impl_(cond: bool, _: &str) {
   assert!(cond, "static assertion failed");
 }
+/// internal implementation used for [`const_assert`] and [`const_assert_eq`].
+///
+/// # Invoke it directly has no additional effect than [`debug_assert`].
 #[track_caller]
 #[inline]
-pub fn debug_assertion(cond: bool, msg: &str) {
+pub fn _debug_assertion_impl_(cond: bool, msg: &str) {
   debug_assert!(cond, "debug assertion failed: {}", msg);
 }
 

@@ -389,15 +389,15 @@ macro_rules! const_assert {
   ($cond:expr) => {
     ::core::intrinsics::const_eval_select(
       ($cond, stringify!($cond)),
-      $crate::static_assert,
-      $crate::debug_assertion,
+      $crate::_static_assert_impl_,
+      $crate::_debug_assertion_impl_,
     )
   };
   ($cond:expr, $msg:expr) => {
     ::core::intrinsics::const_eval_select(
       ($cond, $msg),
-      $crate::static_assert,
-      $crate::debug_assertion,
+      $crate::_static_assert_impl_,
+      $crate::_debug_assertion_impl_,
     )
   };
 }
@@ -410,5 +410,3 @@ macro_rules! const_assert_eq {
     $crate::const_assert!($left == $right, $msg)
   };
 }
-
-mod tests {}

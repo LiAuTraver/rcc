@@ -28,18 +28,26 @@ impl Arena {
     let ptr = self.bump.alloc(val);
 
     if const { ::std::mem::needs_drop::<T>() } {
-      if const { cfg!(debug_assertions) } {
+      #[cfg(debug_assertions)]
+      #[inline(always)]
+      fn _check_threshold(arena: &Arena) {
         static THRESHOLD: usize = 16;
-        *self.counter.borrow_mut() += 1;
-        if *self.counter.borrow() >= THRESHOLD {
+        *arena.counter.borrow_mut() += 1;
+        if *arena.counter.borrow() >= THRESHOLD {
           eprintln!(
             "Error: registered too much needs_drop elems into the bump; \
              perhaps you bumped the wrong type? {}",
-            self.counter.borrow()
+            arena.counter.borrow()
           );
         }
       }
+      #[cfg(not(debug_assertions))]
+      #[inline(always)]
+      fn _check_threshold<T>(_: &T) {}
 
+      _check_threshold(self);
+
+      #[inline]
       unsafe fn drop_fn<T>(ptr: *mut u8) {
         unsafe { ::std::ptr::drop_in_place(ptr as *mut T) };
       }

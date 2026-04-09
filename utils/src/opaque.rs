@@ -14,7 +14,7 @@ use crate::ensure_is_pod;
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Opaque {
-  ptr: *mut c_void,
+  ptr: *mut ::std::ffi::c_void,
   type_name: &'static str,
   // type_id: TypeId, //< T': static makes the struct with lifetime specs unusable here.
 }
@@ -23,14 +23,10 @@ pub struct Opaque {
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Opaque {
-  ptr: *mut c_void,
+  ptr: *mut ::std::ffi::c_void,
 }
 
 ensure_is_pod!(Opaque);
-
-#[cfg(debug_assertions)]
-use ::std::any::type_name;
-use ::std::ffi::c_void;
 
 impl Opaque {
   /// Creates a new opaque handle from a reference to any type.
@@ -40,9 +36,9 @@ impl Opaque {
   #[allow(clippy::unnecessary_cast)]
   pub const fn new<T>(data: &T) -> Self {
     Self {
-      ptr: &raw const *data as *const T as *mut c_void,
+      ptr: &raw const *data as *const T as *mut ::std::ffi::c_void,
       #[cfg(debug_assertions)]
-      type_name: type_name::<T>(),
+      type_name: ::std::any::type_name::<T>(),
       // #[cfg(debug_assertions)]
       // type_id: TypeId::of::<T>(),
     }
@@ -73,15 +69,15 @@ impl Opaque {
         panic!(
           "Type mismatch in Opaque handle!\nStored: {}\nRequested: {}",
           this.type_id_name(),
-          type_name::<T>()
+          ::std::any::type_name::<T>()
         );
       }
       #[allow(clippy::extra_unused_type_parameters)]
-      const fn static_assertion<T>(_this: Opaque) -> ! {
+      const fn static_assertion<T>(_: Opaque) -> ! {
         panic!("type mismatch!")
       }
 
-      if self.type_name != type_name::<T>() {
+      if self.type_name != ::std::any::type_name::<T>() {
         use ::core::intrinsics::const_eval_select;
 
         const_eval_select((self,), static_assertion::<T>, do_panic::<T>)

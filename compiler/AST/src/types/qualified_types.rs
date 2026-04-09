@@ -27,11 +27,14 @@ ensure_is_pod!(QualifiedType);
   }
 }
 #[allow(non_upper_case_globals)]
-const Pad: &str = " ";
+#[allow(clippy::redundant_static_lifetimes)]
+const Pad: &'static str = " ";
 impl Qualifiers {
   #[allow(non_upper_case_globals)]
   pub(crate) const MetaStaticStr: [&'static str; 4] =
     ["const", "volatile", "restrict", "_Atomic"];
+  /// [`Self::Restrict`] requires pointer while [`Self::Atomic`] requires integer
+  /// Shall never reach `[0x0C, 0x10)`.
   #[allow(non_upper_case_globals)]
   pub const StaticStr: [&'static str; 16] = [
     css!(),                                                      // 0x00
