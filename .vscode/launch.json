@@ -27,21 +27,10 @@
         "rust"
       ],
     },
-    // {
-    //   "type": "lldb-dap",
-    //   "request": "launch",
-    //   // lldb-dap is more friendly as for debug console
-    //   "name": "lldb-dap debug rcc",
-    //   "cwd": "${workspaceFolder}",
-    //   "program": "${workspaceFolder}/target/debug/rcc.exe",
-    //   "preLaunchTask": "rust: cargo build",
-    //   "console": "internalConsole",
-    //   "stopOnEntry": false,
-    // },
     {
       "type": "lldb-dap",
       "request": "launch",
-      "name": "cargo run -p rcc",
+      "name": "lldb-dap debug rcc",
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}\\target\\debug\\rcc.exe",
       "env": [

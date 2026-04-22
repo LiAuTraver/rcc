@@ -97,7 +97,6 @@ impl Designator<'_> {
   /// Also nobody in SANE would allocate such a huge array...
   #[allow(non_upper_case_globals)]
   pub const npos: usize = usize::MAX;
-  // #[allow(non_upper_case_globals)]
   // pub const nofield...
 }
 

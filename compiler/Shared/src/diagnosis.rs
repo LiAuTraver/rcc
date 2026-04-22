@@ -429,10 +429,11 @@ pub trait Diagnosis<'c> {
   fn add_error(&self, error: Data<'c>, span: SourceSpan);
   fn add_warning(&self, warning: Data<'c>, span: SourceSpan);
   fn add_diag(&self, diag: Diag<'c>) {
+    use Severity::*;
     match diag.metadata.severity {
-      Severity::Error => self.add_error(diag.metadata.data, diag.span),
-      Severity::Warning => self.add_warning(diag.metadata.data, diag.span),
-      Severity::Info | Severity::Hint => {}, // ignore info for now
+      Error => self.add_error(diag.metadata.data, diag.span),
+      Warning => self.add_warning(diag.metadata.data, diag.span),
+      Info | Hint => {}, // ignore info for now
     }
   }
 }

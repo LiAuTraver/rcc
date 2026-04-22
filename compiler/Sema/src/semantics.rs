@@ -190,7 +190,6 @@ impl<'c> Sema<'c> {
                     if value.is_integer_constant() {
                       ArraySize::Constant(
                         value
-                          .raw_expr()
                           .as_constant_unchecked()
                           .as_integral_unchecked()
                           .to_builtin(),
@@ -1571,7 +1570,7 @@ impl<'c> Sema<'c> {
       Err(
         AddressofOperandNotLvalue(operand.to_string()) + Severity::Error + span,
       )
-    } else if matches!(operand.raw_expr(), se::RawExpr::Variable(variable) if variable.declaration.storage_class().is_register())
+    } else if matches!(&**operand, se::RawExpr::Variable(variable) if variable.storage_class().is_register())
     {
       Err(AddressofOperandRegVar(operand.to_string()) + Severity::Error + span)
     } else {
@@ -1663,7 +1662,7 @@ impl<'c> Sema<'c> {
           left: intermediate_left,
           right,
           ..
-        } = intermediate.raw_expr().as_binary_unchecked();
+        } = intermediate.as_binary_unchecked();
 
         let intermediate_left_type = *intermediate_left.qualified_type();
 
@@ -2487,7 +2486,7 @@ impl<'c> Sema<'c> {
     Ok(ss::Case::new(
       self.context(),
       analyzed_value.fold(self.session).transform(|expr| {
-        if let se::RawExpr::Constant(constant) = expr.raw_expr() {
+        if let se::RawExpr::Constant(constant) = &**expr {
           if constant.is_integral() {
             constant.clone()
           } else {

@@ -4,15 +4,4 @@
       "path": ".."
     }
   ],
-  "settings": {
-    "animations.Install-Method": "Custom CSS and JS",
-    "C_Cpp.clang_format_path": "clang-format",
-    "C_Cpp.clang_format_sortIncludes": true,
-    "[Log]": {
-      "editor.fontSize": 16,
-    },
-    "[log]": {
-      "editor.fontSize": 16,
-    },
-  }
 }

@@ -925,7 +925,6 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
   fn string_literal_len(expr: se::ExprRef<'c>) -> Option<usize> {
     expr
-      .raw_expr()
       .as_constant()
       .and_then(|constant| constant.as_string())
       .map(|&string| string.len())
@@ -1016,7 +1015,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
       expr
         .fold(self.session)
         .inspect_error(|&e| {
-          if !e.raw_expr().is_empty() {
+          if !e.is_empty() {
             // empty is error node currently
             self.add_error(
               ExprNotConstant(format!(
@@ -1062,7 +1061,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           None?
         }
 
-        match expr.raw_expr() {
+        match &**expr {
           se::RawExpr::Constant(se::Constant::Integral(integral)) => {
             if integral.is_negative() {
               self.add_error(

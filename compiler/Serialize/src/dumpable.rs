@@ -474,7 +474,7 @@ impl<'c> Dumpable<'c> for Expression<'_> {
 
     let subprefix = dumper.child_prefix(prefix, is_last);
 
-    match self.raw_expr() {
+    match &**self {
       Empty(_) => {
         dumper.write("Recovery", &palette.error);
         dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
@@ -503,10 +503,8 @@ impl<'c> Dumpable<'c> for Expression<'_> {
 
       Variable(variable) => {
         header!("Variable", variable);
-        dumper.write_fmt(
-          format_args!(" '{}'\n", variable.declaration),
-          &palette.literal,
-        )
+        dumper
+          .write_fmt(format_args!(" '{}'\n", (&**variable)), &palette.literal)
       },
 
       Unary(unary) => {

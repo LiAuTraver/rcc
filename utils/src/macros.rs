@@ -291,6 +291,7 @@ macro_rules! ensure_is_pod {
     );
   };
 }
+/// manually roll out the pesudo-`vtable` for enums.
 #[macro_export]
 macro_rules! static_dispatch {
     (

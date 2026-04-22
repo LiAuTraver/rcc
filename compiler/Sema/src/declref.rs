@@ -45,11 +45,12 @@ impl<'c> DeclRef<'c> {
   // fn as_ptr(self) -> *mut DeclNode<'c> {
   //   self.ptr.as_ptr()
   // }
-
+  #[inline]
   fn as_decl(self) -> &'c DeclNode<'c> {
     unsafe { self.ptr.as_ref() }
   }
 
+  #[inline]
   fn as_decl_mut(self) -> &'c mut DeclNode<'c> {
     unsafe { &mut *self.ptr.as_ptr() }
   }
@@ -99,13 +100,13 @@ impl<'c> DeclRef<'c> {
     self.storage_class().is_constexpr()
   }
 
-  pub fn is_address_constant(self) -> bool {
-    self.qualified_type().is_functionproto()
-      || matches!(
-        self.storage_class(),
-        Storage::Static | Storage::Extern | Storage::Constexpr
-      )
-  }
+  // pub fn is_address_constant(self) -> bool {
+  //   self.qualified_type().is_functionproto()
+  //     || matches!(
+  //       self.storage_class(),
+  //       Storage::Static | Storage::Extern // | Storage::Constexpr //< not an addr constant
+  //     )
+  // }
 
   /// tecnically speaking a node is created and shall never change except for the `definition` pointer,
   /// but here in my sema i didnt merge first then create node, but backpatching them, so here it serves as a workaround.

@@ -277,6 +277,14 @@ pub struct Expression<'c> {
   span: SourceSpan,
 }
 
+impl<'c> ::std::ops::Deref for Expression<'c> {
+  type Target = RawExpr<'c>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.raw_expr
+  }
+}
+
 ::rcc_utils::ensure_is_pod!(RawExpr<'_>);
 ::rcc_utils::ensure_is_pod!(Expression<'_>);
 
@@ -348,13 +356,17 @@ impl<'c> Expression<'c> {
     &self.expr_type
   }
 
-  pub fn raw_expr(&self) -> &RawExpr<'c> {
-    &self.raw_expr
-  }
-
   pub fn value_category(&self) -> ValueCategory {
     self.value_category
   }
+
+  // pub fn storage(&self) -> Option<Storage> {
+  //   if !self.is_lvalue() {
+  //     None?
+  //   } else {
+  //     use Storage::*;
+  //   }
+  // }
 }
 
 impl<'c> Expression<'c> {
@@ -400,7 +412,15 @@ impl<'c> ::core::default::Default for Expression<'c> {
 
 #[derive(Debug, Clone)]
 pub struct Variable<'c> {
-  pub declaration: DeclRef<'c>,
+  declaration: DeclRef<'c>,
+}
+
+impl<'c> ::std::ops::Deref for Variable<'c> {
+  type Target = DeclRef<'c>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.declaration
+  }
 }
 
 impl<'c> Variable<'c> {
@@ -468,7 +488,7 @@ impl<'c> Expression<'c> {
   ///           operators in an integer constant expression shall only convert arithmetic types to integer types,
   ///           except as part of an operand to the typeof operators, sizeof operator, or alignof operator.
   pub fn is_integer_constant(&self) -> bool {
-    match self.raw_expr() {
+    match &self.raw_expr {
       RawExpr::Constant(c) => c.is_integral() || c.is_char_array(),
       RawExpr::Variable(variable) =>
         Self::is_named_integer_constant_unchecked(variable),
@@ -479,7 +499,7 @@ impl<'c> Expression<'c> {
 
   // todo: enum constant
   fn is_named_integer_constant(&self) -> bool {
-    match self.raw_expr() {
+    match &self.raw_expr {
       RawExpr::Variable(variable) =>
         Self::is_named_integer_constant_unchecked(variable),
       _ => false,
@@ -499,16 +519,26 @@ impl<'c> Expression<'c> {
     self.is_named_integer_constant() // this is incorrect, but ill leave it for now
   }
 
-  /// 6.6.11: An address constant is a null pointer, a pointer to an lvalue designating an object of static storage
-  /// duration, or a pointer to a function designator.
+  /// 6.6p11: An address constant is
+  /// - a null pointer,
+  /// - a pointer to an lvalue designating an object of static storage duration,
+  /// - or a pointer to a function designator;
+  ///
+  /// it shall be created explicitly using
+  /// - the unary `&` operator
+  /// - or an integer constant cast to pointer type,
+  /// - or implicitly using an expression of array or function type.
   pub fn is_address_constant(&self) -> bool {
-    match self.raw_expr() {
+    match &**self {
       RawExpr::Constant(c) => c.is_nullptr(),
       RawExpr::Unary(unary) if self.unqualified_type().is_pointer() =>
-        unary.operand.is_lvalue()
-          || matches!(unary.operand.unqualified_type(), Type::FunctionProto(_))
-          || matches!(unary.operand.raw_expr(),
-          RawExpr::Variable(var) if var.declaration.storage_class().is_static()),
+        (unary.operand.unqualified_type().is_functionproto())
+          || (unary.operand.is_lvalue()
+            && match &**unary.operand {
+              RawExpr::Variable(v) =>
+                matches!(v.storage_class(), Storage::Static | Storage::Extern),
+              _ => todo!(),
+            }),
       _ => false,
     }
   }

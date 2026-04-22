@@ -91,25 +91,12 @@ fn retype_or_reuse<'c, D: Diagnosis<'c>>(
   } else {
     Expression::new(
       session.ast(),
-      expression.raw_expr().clone(),
+      (**expression).clone(),
       target_type,
       value_category,
       expression.span(),
     )
   }
-}
-
-#[inline(always)]
-fn fold_overload<'c, D, V>(
-  expression: ExprRef<'c>,
-  variant: &V,
-  session: &Session<'c, D>,
-) -> FoldingResult<ExprRef<'c>>
-where
-  D: Diagnosis<'c>,
-  Expression<'c>: Folding<'c, V>,
-{
-  <Expression<'c> as Folding<'c, V>>::fold(expression, variant, session)
 }
 
 impl<'c> Expression<'c> {
@@ -119,8 +106,8 @@ impl<'c> Expression<'c> {
     session: &Session<'c, D>,
   ) -> FoldingResult<ExprRef<'c>> {
     ::rcc_utils::static_dispatch!(
-      RawExpr: self.raw_expr(),
-      |variant| fold_overload(self, variant, session) =>
+      RawExpr: &**self,
+      |variant| <Self as Folding<'c, _>>::fold(self, variant, session) =>
       Empty Constant Unary Binary Call Paren MemberAccess Ternary SizeOf
       CStyleCast ArraySubscript CompoundLiteral Variable ImplicitCast CompoundAssign
     )
@@ -162,7 +149,7 @@ impl<'c> Folding<'c, Call<'c>> for Expression<'c> {
     } else {
       Failure({
         let raw_expr = Call::new(session.ast(), callee, arguments);
-        Expression::new(
+        Self::new(
           session.ast(),
           raw_expr,
           *expression.qualified_type(),
@@ -211,7 +198,7 @@ impl<'c> Folding<'c, ArraySubscript<'c>> for Expression<'c> {
     } else {
       Failure({
         let raw_expr = ArraySubscript::new(array, index);
-        Expression::new(
+        Self::new(
           session.ast(),
           raw_expr,
           *expression.qualified_type(),
@@ -269,7 +256,7 @@ impl<'c> Folding<'c, Unary<'c>> for Expression<'c> {
             operand: original,
             ..unary.clone()
           };
-          Expression::new(
+          Self::new(
             session.ast(),
             raw_expr,
             *expression.qualified_type(),
@@ -282,11 +269,11 @@ impl<'c> Folding<'c, Unary<'c>> for Expression<'c> {
     use OperatorCategory::*;
 
     contract_assert!(
-      folded_operand.raw_expr().is_constant(),
+      folded_operand.is_constant(),
       "only implemented for constant var of constant eval"
     );
-    match folded_operand.raw_expr().as_constant_unchecked().clone() {
-      ::rcc_ast::Constant::Integral(operand) => Integral::handle_unary_op(
+    match folded_operand.as_constant_unchecked().clone() {
+      Constant::Integral(operand) => Integral::handle_unary_op(
         unary.operator,
         operand,
         expression.span(),
@@ -294,7 +281,7 @@ impl<'c> Folding<'c, Unary<'c>> for Expression<'c> {
       )
       .map(Into::into)
       .map(|constant: CL| {
-        Expression::new(
+        Self::new(
           session.ast(),
           constant,
           target_type,
@@ -302,8 +289,7 @@ impl<'c> Folding<'c, Unary<'c>> for Expression<'c> {
           expression.span(),
         )
       }),
-      ::rcc_ast::Constant::Floating(operand) => match unary.operator.category()
-      {
+      Constant::Floating(operand) => match unary.operator.category() {
         Arithmetic => Floating::handle_unary_arith_op(
           unary.operator,
           operand,
@@ -323,7 +309,7 @@ impl<'c> Folding<'c, Unary<'c>> for Expression<'c> {
         ),
       }
       .map(|constant: CL| {
-        Expression::new(
+        Self::new(
           session.ast(),
           constant,
           target_type,
@@ -366,7 +352,7 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
             right,
             ..binary.clone()
           };
-          Expression::new(
+          Self::new(
             session.ast(),
             raw_expr,
             *expression.qualified_type(),
@@ -376,33 +362,28 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
         }
       }
     };
+    use Operator::{Comma, LogicalAnd, LogicalOr};
 
     let (folded_lhs, folded_rhs) = match (fl, fr) {
       (Success(left), Success(right)) => (left, right),
       (Success(left), Failure(_))
-        if binary.operator == Operator::LogicalAnd
-          && left.raw_expr().as_constant_unchecked().clone().is_zero() =>
+        if binary.operator == LogicalAnd
+          && left.as_constant_unchecked().clone().is_zero() =>
         return Success(left),
 
-      (Success(left), Failure(right))
-        if binary.operator == Operator::LogicalAnd =>
+      (Success(left), Failure(right)) if binary.operator == LogicalAnd =>
         return Failure(f(left, right)),
 
       (Success(left), Failure(_))
-        if binary.operator == Operator::LogicalOr
-          && left
-            .raw_expr()
-            .as_constant_unchecked()
-            .clone()
-            .is_not_zero() =>
+        if binary.operator == LogicalOr
+          && left.as_constant_unchecked().clone().is_not_zero() =>
         return Success(left),
-      (Success(left), Failure(right))
-        if binary.operator == Operator::LogicalOr =>
+      (Success(left), Failure(right)) if binary.operator == LogicalOr =>
         return Failure(f(left, right)),
 
       (fl, fr) => return Failure(f(fl.take(), fr.take())),
     };
-    if binary.operator == Operator::Comma {
+    if binary.operator == Comma {
       session
         .diag()
         .add_warning(LeftCommaNoEffect, expression.span());
@@ -414,8 +395,7 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
       ));
     }
     assert!(
-      folded_lhs.raw_expr().is_constant()
-        && folded_rhs.raw_expr().is_constant(),
+      folded_lhs.is_constant() && folded_rhs.is_constant(),
       "only implemented for constant var of constant eval"
     );
     assert!(
@@ -429,8 +409,6 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
       folded_rhs.qualified_type(),
       binary.operator
     );
-    let lhs_expr = folded_lhs.raw_expr();
-    let rhs_expr = folded_rhs.raw_expr();
     let lhs_type = folded_lhs.qualified_type();
     let rhs_type = folded_rhs.qualified_type();
     let lhs_value_category = folded_lhs.value_category();
@@ -448,27 +426,13 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
       Assignment is handled at start of this function."
     );
 
-    let lhs = lhs_expr.as_constant_unchecked().clone();
-    let rhs = rhs_expr.as_constant_unchecked().clone();
+    let lhs = folded_lhs.as_constant_unchecked().clone();
+    let rhs = folded_rhs.as_constant_unchecked().clone();
 
     use OperatorCategory::*;
     match (lhs, rhs) {
-      (
-        ::rcc_ast::Constant::Integral(lhs),
-        ::rcc_ast::Constant::Integral(rhs),
-      ) => Integral::handle_binary_op(
-        binary.operator,
-        lhs,
-        rhs,
-        expression.span(),
-        session,
-      )
-      .map(Into::into),
-      (
-        ::rcc_ast::Constant::Floating(lhs),
-        ::rcc_ast::Constant::Floating(rhs),
-      ) => match binary.operator.category() {
-        Logical | Relational => Floating::handle_binary_order_op(
+      (Constant::Integral(lhs), Constant::Integral(rhs)) =>
+        Integral::handle_binary_op(
           binary.operator,
           lhs,
           rhs,
@@ -476,21 +440,32 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
           session,
         )
         .map(Into::into),
-        Arithmetic => Floating::handle_binary_arith_op(
-          binary.operator,
-          lhs,
-          rhs,
-          expression.span(),
-          session,
-        )
-        .map(Into::into),
-        _ => contract_violation!(
-          "not a binary operator or bin-op but cannot be applied to floating!"
-        ),
-      },
-      (::rcc_ast::Constant::String(_), ::rcc_ast::Constant::String(_)) =>
+      (Constant::Floating(lhs), Constant::Floating(rhs)) =>
+        match binary.operator.category() {
+          Logical | Relational => Floating::handle_binary_order_op(
+            binary.operator,
+            lhs,
+            rhs,
+            expression.span(),
+            session,
+          )
+          .map(Into::into),
+          Arithmetic => Floating::handle_binary_arith_op(
+            binary.operator,
+            lhs,
+            rhs,
+            expression.span(),
+            session,
+          )
+          .map(Into::into),
+          _ => contract_violation!(
+            "not a binary operator or bin-op but cannot be applied to \
+             floating!"
+          ),
+        },
+      (Constant::String(_), Constant::String(_)) =>
         contract_violation!("can we reach here?"),
-      (::rcc_ast::Constant::Nullptr(), ::rcc_ast::Constant::Nullptr()) =>
+      (Constant::Nullptr(), Constant::Nullptr()) =>
         contract_violation!("can we reach here?"),
       _ => contract_violation!(
         "type checker ensures both sides have the same types! or \
@@ -498,7 +473,7 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
       ),
     }
     .map(|constant: CL| {
-      Expression::new(
+      Self::new(
         session.ast(),
         constant,
         target_type,
@@ -528,12 +503,7 @@ impl<'c> Folding<'c, Ternary<'c>> for Expression<'c> {
     let fc = ternary.condition.fold(session);
     match fc {
       Success(folded_condition) => {
-        match folded_condition
-          .raw_expr()
-          .as_constant_unchecked()
-          .clone()
-          .is_zero()
-        {
+        match folded_condition.as_constant_unchecked().clone().is_zero() {
           true => ternary.else_expr.fold(session),
           false => ternary.then_expr.expect("?: unimplemented").fold(session),
         }
@@ -554,7 +524,7 @@ impl<'c> Folding<'c, Ternary<'c>> for Expression<'c> {
         {
           Failure(expression)
         } else {
-          Failure(Expression::new(
+          Failure(Self::new(
             session.ast(),
             Ternary {
               condition: folded_condition,
@@ -587,7 +557,7 @@ impl<'c> Folding<'c, SizeOf<'c>> for Expression<'c> {
       }
       .map(Into::into)
       .map(|constant: CL| {
-        Expression::new(
+        Self::new(
           session.ast(),
           constant,
           target_type,
@@ -613,14 +583,12 @@ impl<'c> Folding<'c, Variable<'c>> for Expression<'c> {
     // if target_type.is_functionproto()
     //   && self.declaration.is_eligible_of_address_constant()
     // {
-    //   return Success(Expression::new(self, target_type, value_category));
+    //   return Success(Self::new(self, target_type, value_category));
     // }
 
-    let declaration = variable.declaration;
-    let storage = declaration.storage_class();
-    match storage {
+    match variable.storage_class() {
       Static
-        if declaration
+        if variable
           .qualified_type()
           .qualifiers
           .contains(Qualifiers::Const) =>
@@ -649,6 +617,7 @@ impl<'c> Folding<'c, Variable<'c>> for Expression<'c> {
 }
 
 impl<'c> Folding<'c, Paren<'c>> for Expression<'c> {
+  #[inline(always)]
   fn fold<D: Diagnosis<'c>>(
     _expression: ExprRef<'c>,
     paren: &Paren<'c>,
@@ -673,26 +642,23 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
         if PtrEq::ptr_eq(original, implicit_cast.expr) {
           return Failure(expression);
         }
-        return Failure({
-          let raw_expr = ImplicitCast {
-            expr: original,
-            ..implicit_cast.clone()
-          };
-          Expression::new(
-            session.ast(),
-            raw_expr,
-            *expression.qualified_type(),
-            expression.value_category(),
-            expression.span(),
-          )
-        });
+        let raw_expr = ImplicitCast {
+          expr: original,
+          ..implicit_cast.clone()
+        };
+        return Failure(Self::new(
+          session.ast(),
+          raw_expr,
+          *expression.qualified_type(),
+          expression.value_category(),
+          expression.span(),
+        ));
       },
     };
-    let raw_expr = folded_expr.raw_expr();
     let expr_type = *folded_expr.qualified_type();
 
-    let alloc_constant = |constant: ::rcc_ast::Constant<'c>| -> ExprRef<'c> {
-      Expression::new(
+    let alloc_constant = |constant| -> ExprRef<'c> {
+      Self::new(
         session.ast(),
         constant,
         target_type,
@@ -723,7 +689,7 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
         target_type,
         value_category,
       )),
-      IntegralCast => match raw_expr {
+      IntegralCast => match &**folded_expr {
         RawExpr::Constant(c) => {
           let target_primitive =
             target_type.unqualified_type.as_primitive_unchecked();
@@ -752,11 +718,11 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
               .into(),
           ))
         },
-        _ => contract_violation!("unreachable: {:?}", raw_expr),
+        _ => contract_violation!("unreachable: {:?}", &**folded_expr),
       },
       // integral are promoted previously.
       IntegralToFloating => Success(alloc_constant(
-        raw_expr.as_constant_unchecked().clone().to_floating(
+        folded_expr.as_constant_unchecked().clone().to_floating(
           target_type
             .unqualified_type
             .as_primitive_unchecked()
@@ -764,10 +730,10 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
         ),
       )),
       IntegralToBoolean | FloatingToBoolean => Success(alloc_constant(
-        raw_expr.as_constant_unchecked().clone().to_boolean(),
+        folded_expr.as_constant_unchecked().clone().to_boolean(),
       )),
       FloatingCast => {
-        let floating = raw_expr
+        let floating = folded_expr
           .as_constant_unchecked()
           .clone()
           .as_floating_unchecked()
@@ -780,7 +746,7 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
         Success(alloc_constant(floating.into()))
       },
       FloatingToIntegral => {
-        let integral = raw_expr.as_constant_unchecked().clone().to_integral(
+        let integral = folded_expr.as_constant_unchecked().clone().to_integral(
           target_type.as_primitive_unchecked().integer_width(),
           target_type
             .as_primitive_unchecked()

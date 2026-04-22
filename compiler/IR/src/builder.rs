@@ -457,7 +457,7 @@ impl<'c> Builder<'c> {
 
     let initializer = match variable.initializer {
       Some(sd::Initializer::Scalar(expr)) => Some(module::Initializer::Scalar(
-        expr.raw_expr().as_constant_unchecked().clone(),
+        expr.as_constant_unchecked().clone(),
       )),
       Some(sd::Initializer::List(_)) => todo!(),
       None => None,
@@ -865,7 +865,7 @@ impl<'c> Builder<'c> {
     let unqualified_type = expression.unqualified_type();
     let span = expression.span();
     use se::RawExpr::*;
-    match expression.raw_expr() {
+    match &**expression {
       Empty(_) => contract_violation!(
         "empty expr is used in sema for error recovery. shouldnt reach here."
       ),
@@ -1054,7 +1054,7 @@ impl<'c> Builder<'c> {
     _ast_type: ast::TypeRef<'c>,
     _span: SourceSpan,
   ) -> ValueID {
-    let declaration = variable.declaration.canonical_decl();
+    let declaration = variable.canonical_decl();
     let name = declaration.name();
     if let Some(&vid) = self.locals.get(&declaration) {
       vid
