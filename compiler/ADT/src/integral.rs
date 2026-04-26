@@ -95,7 +95,7 @@ impl Integral {
   pub const WIDTH_BOOL: u8 = 1;
   pub const WIDTH_CHAR: u8 = 8;
   pub const WIDTH_INT: u8 = 32;
-  // long and long long are both 64-bit in my implementation here(ref linux x86-64 version.)
+  // linux x86-64
   pub const WIDTH_LONG: u8 = 64;
   pub const WIDTH_LONG_LONG: u8 = 64;
   pub const WIDTH_SHORT: u8 = 16;

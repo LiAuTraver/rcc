@@ -1,9 +1,7 @@
+pub use ::rcc_ast::Constant as Data;
 use ::rcc_utils::StrRef;
 
-use crate::{
-    ConstantData as Data,
-    global::{Function, Variable},
-};
+use crate::global::{Function, Variable};
 #[derive(Debug)]
 pub enum Global<'ir> {
   Function(Function<'ir>),

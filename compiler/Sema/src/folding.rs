@@ -25,8 +25,8 @@ impl<T> FoldingResult<T> {
   #[inline]
   fn map<U>(self, f: impl FnOnce(T) -> U) -> FoldingResult<U> {
     match self {
-      Self::Success(v) => FoldingResult::Success(f(v)),
-      Self::Failure(v) => FoldingResult::Failure(f(v)),
+      Success(v) => Success(f(v)),
+      Failure(v) => Failure(f(v)),
     }
   }
 
@@ -35,7 +35,7 @@ impl<T> FoldingResult<T> {
   where
     F: FnOnce(&T),
   {
-    if let Self::Failure(v) = &self {
+    if let Failure(v) = &self {
       f(v)
     }
     self
@@ -45,17 +45,18 @@ impl<T> FoldingResult<T> {
   #[inline]
   pub fn take(self) -> T {
     match self {
-      Self::Failure(v) | Self::Success(v) => v,
+      Failure(v) | Success(v) => v,
     }
   }
 
   #[inline]
   pub fn transform<U>(self, f: impl FnOnce(T) -> U) -> U {
     match self {
-      Self::Success(v) | Self::Failure(v) => f(v),
+      Success(v) | Failure(v) => f(v),
     }
   }
 }
+use FoldingResult::{Failure, Success};
 
 /// Folding trait for constant expression evaluation
 pub trait Folding<'c, VariantTy> {
@@ -74,8 +75,6 @@ pub trait Folding<'c, VariantTy> {
     session: &Session<'c, D>,
   ) -> FoldingResult<ExprRef<'c>>;
 }
-
-use FoldingResult::{Failure, Success};
 
 #[inline]
 fn retype_or_reuse<'c, D: Diagnosis<'c>>(

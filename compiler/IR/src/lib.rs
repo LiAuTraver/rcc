@@ -2,17 +2,18 @@
 mod builder;
 mod constant;
 mod context;
+mod datalayout;
 mod emitable;
 mod global;
 pub mod instruction;
 mod types;
 mod value;
 
-use ::rcc_ast::Constant as ConstantData;
-
 pub use self::{
   builder::Builder,
-  constant::{Constant as IRConstant, Global as GlobalValue},
+  constant::{
+    Constant as IRConstant, Data as ConstantData, Global as GlobalValue,
+  },
   context::{Context, Session},
   global::{
     BasicBlock, Function as IRFunction, Initializer as IRStaticInitializer,

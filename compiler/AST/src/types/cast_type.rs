@@ -1,6 +1,17 @@
-//! Revised v1: removed custom conversion.
+//! Revise v1: added some docs.
+//! Revise v2: removed custom conversion.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ::strum_macros::Display)]
+#[derive(
+  Debug,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  ::strum_macros::Display,
+  ::strum_macros::AsRefStr,
+  ::strum_macros::EnumString,
+  ::strum_macros::IntoStaticStr,
+)]
 pub enum CastType {
   /// don't use this for implicit casts - in that case no cast is needed;
   /// only used for explicit casts like `(int)x` where `x` is already `int`

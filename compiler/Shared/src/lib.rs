@@ -8,6 +8,7 @@ mod operator;
 mod source_info;
 mod storage;
 mod token;
+mod triple;
 
 pub use fwd::*;
 
@@ -38,4 +39,5 @@ pub use self::{
   },
   storage::Storage,
   token::{Literal, Token},
+  triple::Triple,
 };

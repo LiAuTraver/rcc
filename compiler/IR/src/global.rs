@@ -1,10 +1,12 @@
 use ::rcc_ast::Constant;
+use ::rcc_shared::FileId;
 use ::rcc_utils::StrRef;
 
 use super::ValueID;
 
 #[derive(Debug, Default)]
 pub struct Module {
+  pub file_index: FileId,
   /// global function and variable entry. Shall be either [`Function`] or [`Variable`], or [`Constant`].
   pub globals: Vec<ValueID>,
 }

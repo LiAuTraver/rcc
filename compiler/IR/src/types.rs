@@ -51,6 +51,10 @@ impl<'ir> TypeInfo<'ir> for Type<'ir> {
       Array(array) => 1 + array.element_type.extent(),
     }
   }
+
+  fn alignment(&self) -> usize {
+    todo!()
+  }
 }
 
 pub type TypeRef<'ir> = &'ir Type<'ir>;

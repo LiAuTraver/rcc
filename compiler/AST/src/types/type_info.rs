@@ -16,6 +16,8 @@ pub const trait TypeInfo<'c> {
   fn default_value(&self) -> Constant<'c>;
   #[must_use]
   fn extent(&self) -> usize;
+  #[must_use]
+  fn alignment(&self) -> usize;
   #[inline(always)]
   #[must_use]
   fn is_complete(&self) -> bool {
@@ -47,6 +49,11 @@ impl<'c> TypeInfo<'c> for QualifiedType<'c> {
   #[inline(always)]
   fn extent(&self) -> usize {
     self.unqualified_type.extent()
+  }
+
+  #[inline(always)]
+  fn alignment(&self) -> usize {
+    self.unqualified_type.alignment()
   }
 }
 impl<'c> TypeInfo<'c> for Type<'c> {
@@ -85,6 +92,17 @@ impl<'c> TypeInfo<'c> for Type<'c> {
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }
+
+  #[inline]
+  fn alignment(&self) -> usize {
+    let align = ::rcc_utils::static_dispatch!(
+      self,
+      |variant| variant.alignment() =>
+      Primitive Array Pointer FunctionProto Enum Record Union
+    );
+    debug_assert!(self.size() % align == 0, "invalid alignment!");
+    align
+  }
 }
 impl<'c> const TypeInfo<'c> for Primitive {
   /// integral size should be aligned with method `Primitive::integer_width()`.
@@ -107,7 +125,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
       ULongLong => 8,
       Float => 4,
       Double => 8,
-      LongDouble => 8,
+      LongDouble => 16,
       ComplexFloat => 8,
       ComplexDouble => 16,
       ComplexLongDouble => 16,
@@ -147,6 +165,11 @@ impl<'c> const TypeInfo<'c> for Primitive {
       _ => 1,
     }
   }
+
+  fn alignment(&self) -> usize {
+    // System V AMD64 ABI
+    self.size()
+  }
 }
 
 impl<'c> TypeInfo<'c> for Array<'c> {
@@ -168,10 +191,13 @@ impl<'c> TypeInfo<'c> for Array<'c> {
     panic!("default value for non-scalar type should not be requested");
   }
 
-  // dont inline this...
-  // #[inline(never)]
   fn extent(&self) -> usize {
     self.element_type.extent() + 1
+  }
+
+  fn alignment(&self) -> usize {
+    // stack is always kept 16-byte aligned on Linux x86_64.
+    Ord::max(self.element_type.alignment(), 16)
   }
 }
 
@@ -196,6 +222,10 @@ impl<'c> TypeInfo<'c> for Record<'c> {
 
   fn extent(&self) -> usize {
     1
+  }
+
+  fn alignment(&self) -> usize {
+    todo!()
   }
 }
 
@@ -223,11 +253,15 @@ impl<'c> TypeInfo<'c> for Union<'c> {
   fn extent(&self) -> usize {
     1
   }
+
+  fn alignment(&self) -> usize {
+    todo!()
+  }
 }
 impl<'c> const TypeInfo<'c> for Pointer<'c> {
   #[inline(always)]
   fn size(&self) -> usize {
-    ULongLong.size() // x86_64 LLP64 Windows
+    ULongLong.size()
   }
 
   #[inline(always)]
@@ -243,6 +277,11 @@ impl<'c> const TypeInfo<'c> for Pointer<'c> {
   #[inline(always)]
   fn extent(&self) -> usize {
     1
+  }
+
+  #[inline(always)]
+  fn alignment(&self) -> usize {
+    ULongLong.size()
   }
 }
 
@@ -272,6 +311,12 @@ impl<'c> TypeInfo<'c> for FunctionProto<'c> {
   fn extent(&self) -> usize {
     0
   }
+
+  /// not meaningful either.
+  #[inline(always)]
+  fn alignment(&self) -> usize {
+    1
+  }
 }
 impl<'c> TypeInfo<'c> for Enum<'c> {
   #[inline(always)]
@@ -292,5 +337,10 @@ impl<'c> TypeInfo<'c> for Enum<'c> {
   #[inline(always)]
   fn extent(&self) -> usize {
     1
+  }
+
+  #[inline(always)]
+  fn alignment(&self) -> usize {
+    self.underlying_type.alignment()
   }
 }

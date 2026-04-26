@@ -34,39 +34,6 @@ pub enum RawExpr<'c> {
   ImplicitCast(ImplicitCast<'c>),
   CompoundAssign(CompoundAssign<'c>),
 }
-
-::rcc_utils::interconvert!(Empty, RawExpr<'c>);
-::rcc_utils::interconvert!(Constant, RawExpr, 'c);
-::rcc_utils::interconvert!(Unary, RawExpr, 'c);
-::rcc_utils::interconvert!(Binary, RawExpr, 'c);
-::rcc_utils::interconvert!(Call, RawExpr, 'c);
-::rcc_utils::interconvert!(Paren, RawExpr, 'c);
-::rcc_utils::interconvert!(MemberAccess, RawExpr, 'c);
-::rcc_utils::interconvert!(Ternary, RawExpr, 'c);
-::rcc_utils::interconvert!(SizeOf, RawExpr, 'c);
-::rcc_utils::interconvert!(CStyleCast, RawExpr, 'c);
-::rcc_utils::interconvert!(ArraySubscript, RawExpr, 'c);
-::rcc_utils::interconvert!(CompoundLiteral, RawExpr<'c>);
-::rcc_utils::interconvert!(Variable, RawExpr, 'c);
-::rcc_utils::interconvert!(ImplicitCast, RawExpr, 'c);
-::rcc_utils::interconvert!(CompoundAssign, RawExpr, 'c);
-
-::rcc_utils::make_trio_for!(Empty, RawExpr<'c>);
-::rcc_utils::make_trio_for!(Constant, RawExpr, 'c);
-::rcc_utils::make_trio_for!(Unary, RawExpr, 'c);
-::rcc_utils::make_trio_for!(Binary, RawExpr, 'c);
-::rcc_utils::make_trio_for!(Call, RawExpr, 'c);
-::rcc_utils::make_trio_for!(Paren, RawExpr, 'c);
-::rcc_utils::make_trio_for!(MemberAccess, RawExpr, 'c);
-::rcc_utils::make_trio_for!(Ternary, RawExpr, 'c);
-::rcc_utils::make_trio_for!(SizeOf, RawExpr, 'c);
-::rcc_utils::make_trio_for!(CStyleCast, RawExpr, 'c);
-::rcc_utils::make_trio_for!(ArraySubscript, RawExpr, 'c);
-::rcc_utils::make_trio_for!(CompoundLiteral, RawExpr<'c>);
-::rcc_utils::make_trio_for!(Variable, RawExpr, 'c);
-::rcc_utils::make_trio_for!(ImplicitCast, RawExpr, 'c);
-::rcc_utils::make_trio_for!(CompoundAssign, RawExpr, 'c);
-
 #[derive(Debug, Clone)]
 pub struct Unary<'c> {
   pub operator: Operator,
@@ -555,6 +522,42 @@ impl<'c> Expression<'c> {
 }
 
 impl PtrEq for Expression<'_> {}
+mod cvt {
+  use ::rcc_utils::{interconvert, make_trio_for};
+
+  use super::*;
+  interconvert!(Empty, RawExpr<'c>);
+  interconvert!(Constant, RawExpr, 'c);
+  interconvert!(Unary, RawExpr, 'c);
+  interconvert!(Binary, RawExpr, 'c);
+  interconvert!(Call, RawExpr, 'c);
+  interconvert!(Paren, RawExpr, 'c);
+  interconvert!(MemberAccess, RawExpr, 'c);
+  interconvert!(Ternary, RawExpr, 'c);
+  interconvert!(SizeOf, RawExpr, 'c);
+  interconvert!(CStyleCast, RawExpr, 'c);
+  interconvert!(ArraySubscript, RawExpr, 'c);
+  interconvert!(CompoundLiteral, RawExpr<'c>);
+  interconvert!(Variable, RawExpr, 'c);
+  interconvert!(ImplicitCast, RawExpr, 'c);
+  interconvert!(CompoundAssign, RawExpr, 'c);
+
+  make_trio_for!(Empty, RawExpr<'c>);
+  make_trio_for!(Constant, RawExpr, 'c);
+  make_trio_for!(Unary, RawExpr, 'c);
+  make_trio_for!(Binary, RawExpr, 'c);
+  make_trio_for!(Call, RawExpr, 'c);
+  make_trio_for!(Paren, RawExpr, 'c);
+  make_trio_for!(MemberAccess, RawExpr, 'c);
+  make_trio_for!(Ternary, RawExpr, 'c);
+  make_trio_for!(SizeOf, RawExpr, 'c);
+  make_trio_for!(CStyleCast, RawExpr, 'c);
+  make_trio_for!(ArraySubscript, RawExpr, 'c);
+  make_trio_for!(CompoundLiteral, RawExpr<'c>);
+  make_trio_for!(Variable, RawExpr, 'c);
+  make_trio_for!(ImplicitCast, RawExpr, 'c);
+  make_trio_for!(CompoundAssign, RawExpr, 'c);
+}
 
 mod fmt {
   use ::std::fmt::Display;
