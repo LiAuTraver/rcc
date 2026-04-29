@@ -1,4 +1,4 @@
-use ::rcc_adt::{FloatFormat, Floating, Integral, Signedness};
+use ::rcc_adt::{FloatFormat, Floating, Integral, Signedness, SizeBit};
 
 use crate::{DiagData, DiagMeta, Severity};
 
@@ -50,7 +50,7 @@ impl Number {
           Err(e) => (
             Integral::new(
               <$t>::default(),
-              <$t>::BITS as u8,
+              SizeBit::new(<$t>::BITS),
               Signedness::$signess,
             )
             .into(),

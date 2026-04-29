@@ -1,5 +1,5 @@
-use ::rcc_adt::{FloatFormat, Floating, Integral};
-use ::rcc_ast::{Context as ASTContext, types as ast};
+use ::rcc_adt::{FloatFormat, Floating, Integral, SizeBit};
+use ::rcc_ast::{Context as ASTContext, TargetInfo, types as ast};
 use ::rcc_shared::{Arena, Diagnosis, SourceManager};
 
 use super::{
@@ -7,6 +7,7 @@ use super::{
   instruction::User,
   types::{Array, Function},
 };
+use crate::DataLayout;
 
 #[derive(Debug)]
 pub struct Context<'c> {
@@ -29,6 +30,9 @@ pub struct Context<'c> {
   common_floating_zero: [ValueID; 2],
   /// currently only for ir stage. use it in previous stage could cause unprecedented catastrophe. see the git stash.
   constant_interner: RefCell<BiHashMap<ValueID, ConstantData<'c>>>,
+
+  ast_target_info: &'c TargetInfo,
+  ir_data_layout: DataLayout,
 
   ast_arena: &'c Arena,
 }
@@ -125,8 +129,8 @@ impl<'c> Context<'c> {
     }
   }
 
-  pub fn integer_zero(&self, width: u8) -> ValueID {
-    let index = match width {
+  pub fn integer_zero(&self, width: SizeBit) -> ValueID {
+    let index = match width.get() {
       1 => 0,
       8 => 1,
       16 => 2,
@@ -138,8 +142,8 @@ impl<'c> Context<'c> {
     self.common_integer_zero[index]
   }
 
-  pub fn integer_one(&self, width: u8) -> ValueID {
-    let index = match width {
+  pub fn integer_one(&self, width: SizeBit) -> ValueID {
+    let index = match width.get() {
       1 => 0,
       8 => 1,
       16 => 2,
@@ -149,6 +153,10 @@ impl<'c> Context<'c> {
       _ => panic!("intern other integer constant on the fly"),
     };
     self.common_integer_one[index]
+  }
+
+  pub fn data_layout(&self) -> &DataLayout {
+    &self.ir_data_layout
   }
 }
 impl<'c> Context<'c> {
@@ -197,8 +205,8 @@ impl<'c> Context<'c> {
     .ok()
   }
 
-  pub fn make_integer(&self, bits: u8) -> TypeRef<'c> {
-    match bits {
+  pub fn make_integer(&self, bits: SizeBit) -> TypeRef<'c> {
+    match bits.get() {
       1 => self.common_integer_types[0],
       8 => self.common_integer_types[1],
       16 => self.common_integer_types[2],
@@ -320,7 +328,7 @@ impl<'c> Context<'c> {
         Nullptr => self.pointer_type,
         integer @ (__IRBit | Bool | Char | SChar | Short | Int | Long
         | LongLong | UChar | UShort | UInt | ULong | ULongLong) =>
-          self.make_integer(integer.size_bits() as u8),
+          self.make_integer(integer.size_bits(self.ast_target_info)),
         placeholder @ (LongDouble | ComplexFloat | ComplexDouble
         | ComplexLongDouble) => todo!("{placeholder:#?} not implemented"),
       },
@@ -364,14 +372,16 @@ impl<'c> Context<'c> {
       float64_type: ast_arena.alloc(Type::Floating(FloatFormat::IEEE64)),
       pointer_type: ast_arena.alloc(Type::Pointer()),
       common_integer_types: [
-        ast_arena.alloc(1.into()),
-        ast_arena.alloc(8.into()),
-        ast_arena.alloc(16.into()),
-        ast_arena.alloc(32.into()),
-        ast_arena.alloc(64.into()),
-        ast_arena.alloc(128.into()),
+        ast_arena.alloc(SizeBit::U1.into()),
+        ast_arena.alloc(SizeBit::U8.into()),
+        ast_arena.alloc(SizeBit::U16.into()),
+        ast_arena.alloc(SizeBit::U32.into()),
+        ast_arena.alloc(SizeBit::U64.into()),
+        ast_arena.alloc(SizeBit::U128.into()),
       ],
       ast_arena,
+      ast_target_info: ast_context,
+      ir_data_layout: DataLayout::new(ast_context.triple()),
       constant_interner: Default::default(),
       ir_arena: Default::default(),
       ir_def_use: Default::default(),
@@ -454,7 +464,13 @@ impl<'c> Context<'c> {
         ast_context.uint_type(),
         ast_context.ulong_long_type(),
       ];
-      let widths = [1, 8, 16, 32, 64];
+      let widths = [
+        SizeBit::new(1),
+        SizeBit::new(8),
+        SizeBit::new(16),
+        SizeBit::new(32),
+        SizeBit::new(64),
+      ];
       ast_types.iter().zip(widths).enumerate().for_each(
         |(index, (ast_type, width))| {
           this.common_integer_one[index] = ir_arena_ref.insert(Value::new(

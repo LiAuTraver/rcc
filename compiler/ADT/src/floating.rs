@@ -3,6 +3,8 @@ use ::rcc_utils::{
   underlying_type_of,
 };
 
+use crate::SizeBit;
+
 type Underlying = u128;
 use ::rcc_utils::ToU128 as ToUnderlying;
 type SignedUnderlying = signed_type_of!(u128);
@@ -21,10 +23,11 @@ pub enum Format {
 
 use Format::*;
 impl Format {
-  pub const fn size_bits(&self) -> usize {
+  #[inline]
+  pub const fn size_bits(&self) -> SizeBit {
     match self {
-      IEEE32 => 32,
-      IEEE64 => 64,
+      IEEE32 => SizeBit::U32,
+      IEEE64 => SizeBit::U64,
     }
   }
 }
@@ -39,7 +42,7 @@ impl Format {
 /// That being said, I didn't reference
 /// [LLVM's APFloat](https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/ADT/APFloat.h) at all,
 /// which is a far more comprehensive and complex implementation.
-#[derive(Debug, Copy, Hash)]
+#[derive(Copy, Hash)]
 #[derive_const(Clone, PartialEq, Eq)]
 pub struct Floating {
   // i dont thinks its need ed to use the u128 jere, just a tagger union would be fine.
@@ -54,10 +57,11 @@ impl Floating {
   pub const IEEE32_ZERO: Floating = Floating::from(0.0f32);
   pub const IEEE64_ONE: Floating = Floating::from(1.0f64);
   pub const IEEE64_ZERO: Floating = Floating::from(0.0f64);
-  pub const MAX_SUPPORTED_SIZE_BITS: u8 = self::__MAX_ZU;
+  pub const MAX_SUPPORTED_SIZE_BITS: SizeBit = SizeBit::new(self::__MAX_ZU);
 }
 
 impl Floating {
+  #[inline]
   pub const fn new<T: [const] ToUnderlying>(bits: T, format: Format) -> Self {
     Self {
       bits: bits.to_u128(),
@@ -65,10 +69,12 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn format(&self) -> Format {
     self.format
   }
 
+  #[inline]
   pub const fn zero(format: Format) -> Self {
     match format {
       IEEE32 => Floating::from(0.0f32),
@@ -76,6 +82,7 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn one(format: Format) -> Self {
     match format {
       IEEE32 => Floating::from(1.0f32),
@@ -85,6 +92,7 @@ impl Floating {
 }
 
 impl Floating {
+  #[inline]
   pub const fn is_zero(&self) -> bool {
     match self.format {
       // pos zero: 0x00000000, neg zero: 0x80000000
@@ -94,6 +102,7 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn is_infinite(&self) -> bool {
     match self.format {
       // Exponent all 1s, Fraction all 0s
@@ -105,6 +114,7 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn is_nan(&self) -> bool {
     match self.format {
       // Exponent all 1s, Fraction non-zero
@@ -116,6 +126,7 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn is_finite(&self) -> bool {
     match self.format {
       // Exponent is NOT all 1s
@@ -127,6 +138,7 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn cast(self, format: Format) -> Self {
     match (self.format, format) {
       (IEEE32, IEEE64) => Floating::from(f32::from_bits(
@@ -139,6 +151,7 @@ impl Floating {
     }
   }
 
+  #[inline]
   pub const fn abs(self) -> Self {
     match self.format {
       IEEE32 => Floating::from(
@@ -152,18 +165,21 @@ impl Floating {
 }
 
 impl const From<f32> for Floating {
+  #[inline]
   fn from(val: f32) -> Self {
     Floating::new(val.to_bits() as Underlying, IEEE32)
   }
 }
 
 impl const From<f64> for Floating {
+  #[inline]
   fn from(val: f64) -> Self {
     Floating::new(val.to_bits() as Underlying, IEEE64)
   }
 }
 
 impl ::std::default::Default for Floating {
+  #[inline]
   fn default() -> Self {
     Self {
       bits: f64::default().to_bits() as Underlying,
@@ -225,6 +241,7 @@ mod ops {
   impl const Neg for Floating {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self::Output {
       match self.format {
         IEEE32 => {
@@ -249,6 +266,7 @@ mod ops {
   }
 
   impl const PartialOrd for Floating {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
       const_pre
         + (
@@ -284,30 +302,29 @@ impl Floating {
   #[inline]
   pub const fn to_integral(
     self,
-    width: u8,
+    width: SizeBit,
     signedness: Signedness,
   ) -> Integral {
-    debug_assert!(width > 0 && width <= Self::MAX_SUPPORTED_SIZE_BITS);
+    const_pre + (width.get() > 0, width <= Self::MAX_SUPPORTED_SIZE_BITS);
+    use Signedness::*;
     match (self.format, signedness) {
-      // Float to signed
-      (IEEE32, Signedness::Signed) => {
+      (IEEE32, Signed) => {
         let f = f32::from_bits(self.bits.to());
         // Clamp to target range to avoid UB
         let clamped = clamp_float_to_signed(f, width);
         Integral::from_signed(clamped, width)
       },
-      (IEEE64, Signedness::Signed) => {
+      (IEEE64, Signed) => {
         let f = f64::from_bits(self.bits.to());
         let clamped = clamp_float_to_signed(f, width);
         Integral::from_signed(clamped, width)
       },
-      // Float to unsigned
-      (IEEE32, Signedness::Unsigned) => {
+      (IEEE32, Unsigned) => {
         let f = f32::from_bits(self.bits.to());
         let clamped = clamp_float_to_unsigned(f, width);
         Integral::from_unsigned(clamped, width)
       },
-      (IEEE64, Signedness::Unsigned) => {
+      (IEEE64, Unsigned) => {
         let f = f64::from_bits(self.bits.to());
         let clamped = clamp_float_to_unsigned(f, width);
         Integral::from_unsigned(clamped, width)
@@ -317,25 +334,45 @@ impl Floating {
 }
 
 /// Clamp a float to the range of a signed integer with given width.
+#[inline]
 const fn clamp_float_to_signed<F: [const] ToSignedUnderlying + BuiltinFloat>(
   f: F,
-  width: u8,
+  width: SizeBit,
 ) -> SignedUnderlying {
   f.to_i128().clamp(
-    -((1 as SignedUnderlying) << (width - 1)),
-    ((1 as SignedUnderlying) << (width - 1)) - 1,
+    -((1 as SignedUnderlying) << (width.get() - 1)),
+    ((1 as SignedUnderlying) << (width.get() - 1)) - 1,
   )
 }
 
 /// Clamp a float to the range of an unsigned integer with given width.
+#[inline]
 const fn clamp_float_to_unsigned<F: [const] ToUnderlying + BuiltinFloat>(
   f: F,
-  width: u8,
+  width: SizeBit,
 ) -> Underlying {
-  f.to_u128().clamp(0, ((1 as Underlying) << width) - 1)
+  f.to_u128().clamp(0, ((1 as Underlying) << width.get()) - 1)
 }
 mod fmt {
   use super::*;
+
+  impl ::std::fmt::Debug for Floating {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      match self.format {
+        IEEE32 => write!(
+          f,
+          "{}f32",
+          f32::from_bits(self.bits as underlying_type_of!(f32))
+        ),
+        IEEE64 => write!(
+          f,
+          "{}f64",
+          f64::from_bits(self.bits as underlying_type_of!(f64))
+        ),
+      }
+    }
+  }
+
   macro_rules! impl_fmt {
     ($trait:ident, $method:ident) => {
       impl ::std::fmt::$trait for Floating {

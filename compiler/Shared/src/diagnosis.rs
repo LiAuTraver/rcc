@@ -12,13 +12,13 @@ mod data {
   //! A [`Data`] can be easily converted into a [`Meta`] with a given [`Severity`], like
   //! ```rust
   //! use ::rcc_utils::IntoWith;
-  //! use ::rcc_shared::{DiagData, DiagMeta, Severity};
+  //! use ::rcc_shared::{DiagData as Data, DiagMeta as Meta, Severity};
   //! let data = Data::MissingIdentifier("after type specifier".to_string());
   //! let meta: Meta = data.into_with(Severity::Error);
   //! let diag = meta.into_with(Default::default()); // default span
   //! ```
   //!
-  //! TODO: 1. make [`Data`] smaller. 2. consider alternatives of [`Dummy`] trait for testing.
+  //! TODO: make [`Data`] smaller.
 
   /// Diagnostic message with [`SourceSpan`].
   ///

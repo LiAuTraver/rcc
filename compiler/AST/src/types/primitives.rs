@@ -73,9 +73,14 @@ use super::{
   CastType::{self, *},
   TypeInfo,
 };
+use crate::TargetInfo;
 impl Primitive {
   #[must_use]
-  pub fn common_type(lhs: &Self, rhs: &Self) -> (Self, CastType, CastType) {
+  pub fn common_type(
+    lhs: &Self,
+    rhs: &Self,
+    target_info: &TargetInfo,
+  ) -> (Self, CastType, CastType) {
     // If both operands have the same type, then no further conversion is needed.
     // first: _Decimal types ignored
     // also, complex types ignored
@@ -93,7 +98,7 @@ impl Primitive {
       (true, false) => (*lhs, Noop, IntegralToFloating),
       (false, true) => (*rhs, IntegralToFloating, Noop),
       (true, true) => Self::common_floating_rank(*lhs, *rhs),
-      (false, false) => Self::common_integer_rank(*lhs, *rhs),
+      (false, false) => Self::common_integer_rank(*lhs, *rhs, target_info),
     }
   }
 
@@ -108,7 +113,11 @@ impl Primitive {
   }
 
   #[must_use]
-  fn common_integer_rank(lhs: Self, rhs: Self) -> (Self, CastType, CastType) {
+  fn common_integer_rank(
+    lhs: Self,
+    rhs: Self,
+    target_info: &TargetInfo,
+  ) -> (Self, CastType, CastType) {
     assert!(lhs.is_integer() && rhs.is_integer());
 
     let (lhs, _) = lhs.integer_promotion();
@@ -127,12 +136,13 @@ impl Primitive {
     fn signed_and_unsigned(
       lhs: Primitive,
       rhs: Primitive,
+      target_info: &TargetInfo,
     ) -> (Primitive, CastType, CastType) {
       debug_assert!(!lhs.is_unsigned());
       debug_assert!(rhs.is_unsigned());
       if lhs.integer_rank() >= rhs.integer_rank() {
         (lhs, Noop, IntegralCast)
-      } else if rhs.size() > lhs.size() {
+      } else if rhs.size(target_info) > lhs.size(target_info) {
         (rhs, IntegralCast, Noop)
       } else {
         // if the signed type cannot represent all values of the unsigned type, return the unsigned version of the signed type
@@ -144,9 +154,9 @@ impl Primitive {
     }
 
     if lhs.is_unsigned() {
-      signed_and_unsigned(rhs, lhs)
+      signed_and_unsigned(rhs, lhs, target_info)
     } else {
-      signed_and_unsigned(lhs, rhs)
+      signed_and_unsigned(lhs, rhs, target_info)
     }
   }
 

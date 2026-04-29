@@ -1,4 +1,4 @@
-use ::rcc_adt::{Integral, Signedness};
+use ::rcc_adt::{Integral, Signedness, SizeBit};
 use ::rcc_ast::{
   UnaryKind,
   types::{self as ast, TypeInfo},
@@ -16,6 +16,7 @@ use super::{
   instruction as inst,
   value::{self, Value, ValueID},
 };
+use crate::DataLayout;
 
 #[derive(Default, PartialEq, Eq)]
 pub(super) struct ControlFlowContext {
@@ -47,7 +48,7 @@ pub struct Builder<'c> {
   pub(super) locals: HashMap<sd::DeclRef<'c>, ValueID>,
   /// function name → ValueID for call resolution
   pub(super) globals: HashMap<sd::DeclRef<'c>, ValueID>,
-  pub(super) module: Module,
+  pub(super) module: Module<'c>,
 }
 impl<'a> ::std::ops::Deref for Builder<'a> {
   type Target = Session<'a, OpDiag<'a>>;
@@ -78,11 +79,15 @@ impl<'c> Builder<'c> {
   pub fn new(session: SessionRef<'c, OpDiag<'c>>) -> Self {
     Self {
       session,
+      module: Module::new_empty(
+        0,
+        session.ast().triple(),
+        session.ir().data_layout(),
+      ),
       current_block: Default::default(),
       current_function: Default::default(),
       locals: Default::default(),
       globals: Default::default(),
-      module: Default::default(),
       labels: Default::default(),
       ctrlflow_ctx: Default::default(),
     }
@@ -91,6 +96,11 @@ impl<'c> Builder<'c> {
   #[inline(always)]
   pub(super) fn session(&self) -> SessionRef<'c, OpDiag<'c>> {
     self.session
+  }
+
+  #[inline(always)]
+  pub(super) fn data_layout(&self) -> &DataLayout {
+    self.module.data_layout
   }
 
   #[inline(always)]
@@ -142,7 +152,7 @@ impl<'c> Builder<'c> {
         ),
         self.ast().i1_bool_type(),
       ),
-      Integer(1u8) => value_id,
+      Integer(SizeBit::U1) => value_id,
       Integer(width) => self.emit(
         ICmp::new(ICmpPredicate::Ne, value_id, self.ir().integer_zero(*width)),
         self.ast().i1_bool_type(),
@@ -227,7 +237,10 @@ impl<'c> Builder<'c> {
 }
 
 impl<'c> Builder<'c> {
-  pub fn build(mut self, translation_unit: sd::TranslationUnit<'c>) -> Module {
+  pub fn build(
+    mut self,
+    translation_unit: sd::TranslationUnit<'c>,
+  ) -> Module<'c> {
     self.current_block = self.new_empty_block();
 
     let declarations = translation_unit.declarations;
@@ -357,7 +370,7 @@ impl<'c> Builder<'c> {
       // return value storage
       let return_slot_id = self.emit(inst::Alloca::new(), return_type);
       let default_value_id =
-        self.emit(return_type.default_value(), return_type);
+        self.emit(return_type.default_value(self.ast()), return_type);
 
       _ = self.emit(
         inst::Store::new(return_slot_id, default_value_id),
@@ -433,7 +446,7 @@ impl<'c> Builder<'c> {
           inst::Return::new(Some(
             self
               .ir()
-              .integer_zero(self.ast().int_type().size_bits() as u8),
+              .integer_zero(self.ast().int_type().size_bits(self.ast())),
           )),
           self.ast().void_type(),
         );
@@ -1024,8 +1037,8 @@ impl<'c> Builder<'c> {
     match sizeof {
       se::SizeOfKind::Type(qualified_type) => self.emit(
         ConstantData::Integral(Integral::from_unsigned(
-          qualified_type.size(),
-          self.ast().uintptr_type().size() as u8,
+          qualified_type.size(self.ast()).get(),
+          self.ast().uintptr_type().size_bits(self.ast()),
         )),
         ast_type,
       ),
@@ -1316,7 +1329,7 @@ impl<'c> Builder<'c> {
   ) -> ValueID {
     let zero = self
       .ir()
-      .integer_zero(self.ast().ptrdiff_type().size_bits() as u8);
+      .integer_zero(self.ast().ptrdiff_type().size_bits(self.ast()));
     self.emit(
       inst::GetElementPtr::new(vec![operand, zero, zero]),
       ast_type,
@@ -1408,7 +1421,7 @@ impl<'c> Builder<'c> {
     use inst::{Sext, Trunc, Zext};
     enum Either {
       Left(Integral),
-      Right(u8),
+      Right(SizeBit),
     }
     use Either::*;
     let either = self.visit(operand, |value| {
@@ -1422,12 +1435,12 @@ impl<'c> Builder<'c> {
     match either {
       Left(i) => self.emit(
         ConstantData::Integral(i.cast(
-          ast_type.size_bits() as u8,
+          ast_type.size_bits(self.ast()),
           ast_type.signedness().expect("never fails"),
         )),
         ast_type,
       ),
-      Right(width) => match Ord::cmp(&width, &(ast_type.size_bits() as u8)) {
+      Right(width) => match Ord::cmp(&width, &ast_type.size_bits(self.ast())) {
         Less => match ast_type.signedness() {
           Some(Signed) => self.emit(Sext::new(operand), ast_type),
           Some(Unsigned) => self.emit(Zext::new(operand), ast_type),
@@ -1722,12 +1735,14 @@ impl<'c> Builder<'c> {
     ));
     debug_assert!(RefEq::ref_eq(ast_type, self.ast().ptrdiff_type()));
     let size = self.emit(
-      ConstantData::Integral(Integral::from_uintptr(
+      ConstantData::Integral(Integral::from_unsigned(
         lhs_ty
           .as_pointer_unchecked()
           .pointee
           .unqualified_type
-          .size(),
+          .size(self.ast())
+          .to_builtin::<usize>(),
+        self.ast().pointer.size_bits(),
       )),
       self.ast().uintptr_type(),
     );
@@ -1832,14 +1847,14 @@ impl<'c> Builder<'c> {
       self.visit(left, |value| {
         (
           value.ast_type.as_primitive_unchecked().is_integer(),
-          value.ast_type.size_bits(),
+          value.ast_type.size_bits(self.ast()),
           value.ast_type.signedness().unwrap(),
         )
       }),
       self.visit(right, |value| {
         (
           value.ast_type.as_primitive_unchecked().is_integer(),
-          value.ast_type.size_bits(),
+          value.ast_type.size_bits(self.ast()),
           value.ast_type.signedness().unwrap(),
         )
       }),
@@ -2047,7 +2062,7 @@ impl<'c> Builder<'c> {
     debug_assert_eq!(operator, Operator::Tilde);
     debug_assert!(ast_type.as_primitive().is_some_and(|p| p.is_integer()));
     let bitmask = self.emit(
-      ConstantData::Integral(Integral::bitmask(ast_type.size_bits() as u8)),
+      ConstantData::Integral(Integral::bitmask(ast_type.size_bits(self.ast()))),
       ast_type,
     );
     self.emit(
@@ -2070,7 +2085,7 @@ impl<'c> Builder<'c> {
         let casted = self.integral_cast(operand, ast_type);
         let (width, is_constant) = self.visit(casted, |value| {
           (
-            value.ast_type.size_bits() as u8,
+            value.ast_type.size_bits(self.ast()),
             value
               .data
               .as_constant()
@@ -2116,7 +2131,7 @@ impl<'c> Builder<'c> {
     let calculated = match ast_type {
       Primitive(p) => {
         let one = match p {
-          i if i.is_integer() => self.ir().integer_one(i.size_bits() as u8),
+          i if i.is_integer() => self.ir().integer_one(i.size_bits(self.ast())),
           &f if f.is_floating_point() => self.ir().floating_one(f.into()),
           _ => unreachable!("not a proper arithematic type"),
         };
@@ -2134,7 +2149,7 @@ impl<'c> Builder<'c> {
       Pointer(_) => {
         let one = self
           .ir()
-          .integer_one(self.ast().ptrdiff_type().size_bits() as u8);
+          .integer_one(self.ast().ptrdiff_type().size_bits(self.ast()));
         self.do_pointer_integer_arithmetic(pm, loaded, one, ast_type, span)
       },
       _ => unreachable!("precond: ast type shall be a scalar."),

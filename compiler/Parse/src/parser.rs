@@ -1170,12 +1170,12 @@ impl<'c> Parser<'c> {
         CL::Integral(if self.ast().langopts() >= 17 {
           Integral::from_unsigned(
             bool_constant == Keyword::True,
-            self.ast().i8_bool_type().size_bits() as u8,
+            self.ast().i8_bool_type().size_bits(self.ast()),
           )
         } else {
           Integral::from_signed(
             bool_constant == Keyword::True,
-            self.ast().int_type().size_bits() as u8,
+            self.ast().int_type().size_bits(self.ast()),
           )
         }) + self.eloc(location),
       ),

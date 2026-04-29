@@ -75,9 +75,9 @@ pub trait RenderEngine<'c> {
   where
     Self: Sized, // for `dyn`.
   {
-    use ::std::io::{IsTerminal, stderr, stdout};
+    use ::std::io::{IsTerminal, stdout};
 
-    if stdout().is_terminal() && stderr().is_terminal() {
+    if stdout().is_terminal() {
       ColorChoice::Auto
     } else {
       ColorChoice::Never

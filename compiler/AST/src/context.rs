@@ -1,9 +1,12 @@
 use ::rcc_utils::StrRef;
-use ::std::{cell::RefCell, collections::HashSet};
+use ::std::{cell::RefCell, collections::HashSet, ops::Deref};
 
-use crate::types::{
-  Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
-  Primitive, QualifiedType, Type, TypeRef,
+use crate::{
+  TargetInfo,
+  types::{
+    Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
+    Primitive, QualifiedType, Type, TypeRef,
+  },
 };
 type Interner<T> = RefCell<HashSet<T>>;
 #[derive(Debug)]
@@ -45,6 +48,16 @@ pub struct Context<'c> {
   unnamed_str: StrRef<'c>,
 
   langopts: u8,
+
+  target_info: TargetInfo,
+}
+
+impl Deref for Context<'_> {
+  type Target = TargetInfo;
+
+  fn deref(&self) -> &Self::Target {
+    &self.target_info
+  }
 }
 
 impl<'c> Context<'c> {
@@ -261,6 +274,7 @@ impl<'c> Context<'c> {
 
       unnamed_str: arena.alloc_str("<unnamed>"),
       langopts: 23,
+      target_info: TargetInfo::host(),
     };
     {
       let mut refmut = this.ast_type_interner.borrow_mut();

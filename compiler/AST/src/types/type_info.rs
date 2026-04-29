@@ -1,27 +1,27 @@
-use ::rcc_adt::{Floating, Integral};
+use ::rcc_adt::{Alignment, Floating, Integral, Size, SizeBit};
 
 use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer,
   Primitive::{self, *},
   QualifiedType, Record, Type, Union,
 };
-use crate::Constant;
+use crate::{Constant, TargetInfo};
 
 pub const trait TypeInfo<'c> {
   #[must_use]
-  fn size(&self) -> usize;
+  fn size(&self, target_info: &TargetInfo) -> Size;
   #[must_use]
-  fn size_bits(&self) -> usize;
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit;
   #[must_use]
-  fn default_value(&self) -> Constant<'c>;
+  fn default_value(&self, target_info: &TargetInfo) -> Constant<'c>;
   #[must_use]
   fn extent(&self) -> usize;
   #[must_use]
-  fn alignment(&self) -> usize;
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment;
   #[inline(always)]
   #[must_use]
-  fn is_complete(&self) -> bool {
-    self.size() != 0
+  fn is_complete(&self, target_info: &TargetInfo) -> bool {
+    self.size(target_info).get() != 0
   }
   #[inline(always)]
   #[must_use]
@@ -32,18 +32,18 @@ pub const trait TypeInfo<'c> {
 
 impl<'c> TypeInfo<'c> for QualifiedType<'c> {
   #[inline(always)]
-  fn size(&self) -> usize {
-    self.unqualified_type.size()
+  fn size(&self, target_info: &TargetInfo) -> Size {
+    self.unqualified_type.size(target_info)
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.unqualified_type.size_bits()
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    self.unqualified_type.size_bits(target_info)
   }
 
   #[inline(always)]
-  fn default_value(&self) -> Constant<'c> {
-    self.unqualified_type.default_value()
+  fn default_value(&self, target_info: &TargetInfo) -> Constant<'c> {
+    self.unqualified_type.default_value(target_info)
   }
 
   #[inline(always)]
@@ -52,34 +52,34 @@ impl<'c> TypeInfo<'c> for QualifiedType<'c> {
   }
 
   #[inline(always)]
-  fn alignment(&self) -> usize {
-    self.unqualified_type.alignment()
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    self.unqualified_type.alignment(target_info)
   }
 }
 impl<'c> TypeInfo<'c> for Type<'c> {
   #[inline]
-  fn size(&self) -> usize {
+  fn size(&self, target_info: &TargetInfo) -> Size {
     ::rcc_utils::static_dispatch!(
       self,
-      |variant| variant.size() =>
+      |variant| variant.size(target_info) =>
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }
 
   #[inline]
-  fn size_bits(&self) -> usize {
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
     ::rcc_utils::static_dispatch!(
       self,
-      |variant| variant.size_bits() =>
+      |variant| variant.size_bits(target_info) =>
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }
 
   #[inline]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, target_info: &TargetInfo) -> Constant<'c> {
     ::rcc_utils::static_dispatch!(
       self,
-      |variant| variant.default_value() =>
+      |variant| variant.default_value(target_info) =>
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }
@@ -94,61 +94,55 @@ impl<'c> TypeInfo<'c> for Type<'c> {
   }
 
   #[inline]
-  fn alignment(&self) -> usize {
-    let align = ::rcc_utils::static_dispatch!(
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    ::rcc_utils::static_dispatch!(
       self,
-      |variant| variant.alignment() =>
+      |variant| variant.alignment(target_info) =>
       Primitive Array Pointer FunctionProto Enum Record Union
-    );
-    debug_assert!(self.size() % align == 0, "invalid alignment!");
-    align
+    )
   }
 }
 impl<'c> const TypeInfo<'c> for Primitive {
   /// integral size should be aligned with method `Primitive::integer_width()`.
-  fn size(&self) -> usize {
+  fn size(&self, target_info: &TargetInfo) -> Size {
     // x86_64 sizes
     match self {
-      Nullptr => ULongLong.size(),
-      Void => 0,
-      Bool => 1,
-      Char => 1,
-      SChar => 1,
-      Short => 2,
-      Int => 4,
-      Long => 8, // x86_64 linux
-      LongLong => 8,
-      UChar => 1,
-      UShort => 2,
-      UInt => 4,
-      ULong => 8,
-      ULongLong => 8,
-      Float => 4,
-      Double => 8,
-      LongDouble => 16,
-      ComplexFloat => 8,
-      ComplexDouble => 16,
-      ComplexLongDouble => 16,
+      Nullptr => target_info.pointer.size,
+      Void => Size::U0,
+      Bool => target_info.boolean.size,
+      Char | SChar | UChar => target_info.character.size,
+      UShort | Short => target_info.short.size,
+      Int | UInt => target_info.int.size,
+      Long => target_info.long.size,
+      LongLong => target_info.long_long.size,
+      ULong => target_info.long.size,
+      ULongLong => target_info.long_long.size,
+      Float => target_info.float.size,
+      Double => target_info.double.size,
+      LongDouble => target_info.long_double.size,
+      ComplexFloat => (target_info.float.size.get() * 2).into(),
+      ComplexDouble => (target_info.double.size.get() * 2).into(),
+      ComplexLongDouble => (target_info.long_double.size.get() * 2).into(),
       __IRBit => panic!("invalid call"),
     }
   }
 
   #[inline]
-  fn size_bits(&self) -> usize {
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
     match self {
-      __IRBit => 1,
-      _ => self.size() * 8,
+      __IRBit => SizeBit::U1,
+      _ => SizeBit::from(self.size(target_info)),
     }
   }
 
   #[inline]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, target_info: &TargetInfo) -> Constant<'c> {
     match self {
       Nullptr => Constant::Nullptr(),
       Void => panic!("void type has no value"),
       _ if self.is_integer() => Constant::Integral(Integral::new(
         0,
-        self.size_bits() as u8,
+        self.size_bits(target_info),
         self.is_signed().into(),
       )),
       _ if self.is_floating_point() =>
@@ -166,28 +160,44 @@ impl<'c> const TypeInfo<'c> for Primitive {
     }
   }
 
-  fn alignment(&self) -> usize {
-    // System V AMD64 ABI
-    self.size()
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    match self {
+      Nullptr => target_info.pointer.alignment,
+      Void => Alignment::fixed::<1>(),
+      Bool => target_info.boolean.alignment,
+      Char | SChar | UChar => target_info.character.alignment,
+      UShort | Short => target_info.short.alignment,
+      Int | UInt => target_info.int.alignment,
+      Long | ULong => target_info.long.alignment,
+      LongLong | ULongLong => target_info.long_long.alignment,
+      Float => target_info.float.alignment,
+      Double => target_info.double.alignment,
+      LongDouble => target_info.long_double.alignment,
+      ComplexFloat => target_info.float.alignment, // FIXME: may be different
+      ComplexDouble => target_info.double.alignment, // FIXME: may be different
+      ComplexLongDouble => target_info.long_double.alignment, // FIXME: may be different
+      __IRBit => Alignment::fixed::<1>(),
+    }
   }
 }
 
 impl<'c> TypeInfo<'c> for Array<'c> {
-  fn size(&self) -> usize {
+  fn size(&self, target_info: &TargetInfo) -> Size {
     match &self.size {
-      ArraySize::Constant(sz) => sz * self.element_type.unqualified_type.size(),
-      ArraySize::Incomplete => 0,
+      ArraySize::Constant(sz) =>
+        (sz * self.element_type.unqualified_type.size(target_info).get()).into(),
+      ArraySize::Incomplete => Size::U0,
       ArraySize::Variable(_id) => todo!("VLA"), // ignore for now
     }
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.size() * 8
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    self.size(target_info).into()
   }
 
   #[inline]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, _target_info: &TargetInfo) -> Constant<'c> {
     panic!("default value for non-scalar type should not be requested");
   }
 
@@ -195,28 +205,26 @@ impl<'c> TypeInfo<'c> for Array<'c> {
     self.element_type.extent() + 1
   }
 
-  fn alignment(&self) -> usize {
-    // stack is always kept 16-byte aligned on Linux x86_64.
-    Ord::max(self.element_type.alignment(), 16)
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    Ord::max(
+      self.element_type.alignment(target_info),
+      target_info.min_array_align,
+    )
   }
 }
 
 impl<'c> TypeInfo<'c> for Record<'c> {
-  fn size(&self) -> usize {
-    self
-      .fields
-      .iter()
-      .map(|f| f.field_type.unqualified_type.size())
-      .sum() // rough, padding and alignment not considered -- incomplete type has no members anyway so this handles it too
+  fn size(&self, _target_info: &TargetInfo) -> Size {
+    todo!()
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.size() * 8
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    SizeBit::from(self.size(target_info))
   }
 
   #[inline(always)]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, _target_info: &TargetInfo) -> Constant<'c> {
     panic!("default value for non-scalar type should not be requested");
   }
 
@@ -224,28 +232,29 @@ impl<'c> TypeInfo<'c> for Record<'c> {
     1
   }
 
-  fn alignment(&self) -> usize {
+  fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
     todo!()
   }
 }
 
 impl<'c> TypeInfo<'c> for Union<'c> {
-  fn size(&self) -> usize {
-    self
-      .fields
-      .iter()
-      .map(|f| f.field_type.unqualified_type.size())
-      .max()
-      .unwrap_or(0) // ditto
+  fn size(&self, _target_info: &TargetInfo) -> Size {
+    todo!()
+    // self
+    //   .fields
+    //   .iter()
+    //   .map(|f| f.field_type.unqualified_type.size())
+    //   .max()
+    //   .unwrap_or(0) // ditto
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.size() * 8
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    SizeBit::from(self.size(target_info))
   }
 
   #[inline(always)]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, _target_info: &TargetInfo) -> Constant<'c> {
     panic!("default value for non-scalar type should not be requested");
   }
 
@@ -254,23 +263,23 @@ impl<'c> TypeInfo<'c> for Union<'c> {
     1
   }
 
-  fn alignment(&self) -> usize {
+  fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
     todo!()
   }
 }
 impl<'c> const TypeInfo<'c> for Pointer<'c> {
   #[inline(always)]
-  fn size(&self) -> usize {
-    ULongLong.size()
+  fn size(&self, target_info: &TargetInfo) -> Size {
+    target_info.pointer.size
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.size() * 8
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    SizeBit::from(self.size(target_info))
   }
 
   #[inline(always)]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, _target_info: &TargetInfo) -> Constant<'c> {
     Constant::Nullptr()
   }
 
@@ -280,8 +289,8 @@ impl<'c> const TypeInfo<'c> for Pointer<'c> {
   }
 
   #[inline(always)]
-  fn alignment(&self) -> usize {
-    ULongLong.size()
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    target_info.pointer.alignment
   }
 }
 
@@ -292,17 +301,17 @@ impl<'c> TypeInfo<'c> for FunctionProto<'c> {
   /// Clang returns `1` -- and previously here it returns `0` but it causes lot of trouble.
   /// So now it returns `1`.
   #[inline(always)]
-  fn size(&self) -> usize {
-    1
+  fn size(&self, _target_info: &TargetInfo) -> Size {
+    Size::U8
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.size() * 8
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    SizeBit::from(self.size(target_info))
   }
 
   #[inline(always)]
-  fn default_value(&self) -> Constant<'c> {
+  fn default_value(&self, _target_info: &TargetInfo) -> Constant<'c> {
     panic!("default value for non-scalar type should not be requested");
   }
 
@@ -314,24 +323,24 @@ impl<'c> TypeInfo<'c> for FunctionProto<'c> {
 
   /// not meaningful either.
   #[inline(always)]
-  fn alignment(&self) -> usize {
-    1
+  fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
+    Alignment::fixed::<1>()
   }
 }
 impl<'c> TypeInfo<'c> for Enum<'c> {
   #[inline(always)]
-  fn size(&self) -> usize {
-    self.underlying_type.size()
+  fn size(&self, target_info: &TargetInfo) -> Size {
+    self.underlying_type.size(target_info)
   }
 
   #[inline(always)]
-  fn size_bits(&self) -> usize {
-    self.size() * 8
+  fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
+    SizeBit::from(self.size(target_info))
   }
 
   #[inline(always)]
-  fn default_value(&self) -> Constant<'c> {
-    self.underlying_type.default_value()
+  fn default_value(&self, target_info: &TargetInfo) -> Constant<'c> {
+    self.underlying_type.default_value(target_info)
   }
 
   #[inline(always)]
@@ -340,7 +349,7 @@ impl<'c> TypeInfo<'c> for Enum<'c> {
   }
 
   #[inline(always)]
-  fn alignment(&self) -> usize {
-    self.underlying_type.alignment()
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    self.underlying_type.alignment(target_info)
   }
 }

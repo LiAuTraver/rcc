@@ -5,7 +5,7 @@ use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, Record, TypeInfo,
   Union,
 };
-use crate::{Constant, context::Context};
+use crate::{Constant, TargetInfo, context::Context};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type<'c> {
@@ -54,8 +54,8 @@ impl<'c> Type<'c> {
   }
 }
 impl<'c> Type<'c> {
-  pub fn is_modifiable(&self) -> bool {
-    if self.size() == 0 {
+  pub fn is_modifiable(&self, target_info: &TargetInfo) -> bool {
+    if self.size(target_info).get() == 0 {
       false
     } else {
       match self {
@@ -127,25 +127,27 @@ pub trait UnqualExt<'c>: private::Sealed {
 impl<'c> UnqualExt<'c> for Integral {
   fn unqualified_type(&self, context: &'c Context) -> TypeRef<'c> {
     use Signedness::*;
+    let width = self.width().ceil_to_byte();
     match self.signedness() {
       Signed => {
-        match self.width() {
-          Self::WIDTH_CHAR => Context::char_type(context),
-          Self::WIDTH_SHORT => Context::short_type(context),
-          Self::WIDTH_INT => Context::int_type(context),
-          // Self::WIDTH_LONG => Type::Primitive(Primitive::Long),
-          Self::WIDTH_LONG_LONG => Context::long_long_type(context),
-          _ => Context::int_type(context), // default
+        match width {
+          _ if width == context.boolean.size => context.i8_bool_type(),
+          _ if width == context.character.size => context.char_type(),
+          _ if width == context.short.size => context.short_type(),
+          _ if width == context.int.size => context.int_type(),
+          _ if width == context.long.size => context.long_type(),
+          _ if width == context.long_long.size => context.long_long_type(),
+          _ => context.int_type(), // default
         }
       },
       Unsigned => {
-        match self.width() {
-          Self::WIDTH_CHAR => Context::uchar_type(context),
-          Self::WIDTH_SHORT => Context::ushort_type(context),
-          Self::WIDTH_INT => Context::uint_type(context),
-          // Self::WIDTH_LONG => Type::Primitive(Primitive::ULong),
-          Self::WIDTH_LONG_LONG => Context::ulong_long_type(context),
-          _ => Context::uint_type(context), // default
+        match width {
+          _ if width == context.character.size => context.uchar_type(),
+          _ if width == context.short.size => context.ushort_type(),
+          _ if width == context.int.size => context.uint_type(),
+          _ if width == context.long.size => context.ulong_type(),
+          _ if width == context.long_long.size => context.ulong_long_type(),
+          _ => context.uint_type(), // default
         }
       },
     }

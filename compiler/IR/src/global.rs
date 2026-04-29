@@ -1,17 +1,33 @@
 use ::rcc_ast::Constant;
-use ::rcc_shared::FileId;
+use ::rcc_shared::{FileId, Triple};
 use ::rcc_utils::StrRef;
 
-use super::ValueID;
+use super::{DataLayout, ValueID};
 
-#[derive(Debug, Default)]
-pub struct Module {
+#[derive(Debug)]
+pub struct Module<'d> {
   pub file_index: FileId,
+  pub triple: &'d Triple,
+  pub data_layout: &'d DataLayout,
   /// global function and variable entry. Shall be either [`Function`] or [`Variable`], or [`Constant`].
   pub globals: Vec<ValueID>,
 }
 
-/// **Global** function in TAC-SSA form
+impl<'d> Module<'d> {
+  pub fn new_empty(
+    file_index: FileId,
+    triple: &'d Triple,
+    data_layout: &'d DataLayout,
+  ) -> Self {
+    Self {
+      file_index,
+      triple,
+      data_layout,
+      globals: Default::default(),
+    }
+  }
+}
+
 #[derive(Debug)]
 pub struct Function<'c> {
   pub name: StrRef<'c>,

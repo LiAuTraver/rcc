@@ -1,4 +1,4 @@
-use ::rcc_adt::{FloatFormat, Floating, Integral, Signedness};
+use ::rcc_adt::{FloatFormat, Floating, Integral, Signedness, SizeBit};
 use ::rcc_utils::{Opaque, RefEq, StrRef, ensure_is_pod};
 
 /// discrepancy: string literals are not constant values in C `char[N]`
@@ -102,7 +102,7 @@ impl<'c> Constant<'c> {
     }
   }
 
-  pub fn to_integral(self, width: u8, signedness: Signedness) -> Self {
+  pub fn to_integral(self, width: SizeBit, signedness: Signedness) -> Self {
     use Constant::*;
     match self {
       Integral(integral) => integral.cast(width, signedness).into(),

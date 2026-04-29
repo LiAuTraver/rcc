@@ -92,6 +92,9 @@ impl Opaque {
   /// This is the preferred way to retrieve the data, as you don't need to use `unsafe` block on the caller side.
   ///
   /// ```rust
+  /// use ::rcc_utils::Opaque;
+  ///
+  /// let value = 42;
   /// let opaque = Opaque::new(&value);
   /// let value_ref: &i32 = opaque.get_ref::<i32>();
   /// ```
@@ -103,8 +106,11 @@ impl Opaque {
 
   /// Retrieves a mutable reference to the stored data.
   ///
-  /// ```
-  /// let opaque = Opaque::new(&value);
+  /// ```rust
+  /// use ::rcc_utils::Opaque;
+  ///
+  /// let value = 42;
+  /// let mut opaque = Opaque::new(&value);
   /// let value_ref_mut: &mut i32 = opaque.get_ref_mut::<i32>();
   /// ```
   #[must_use]

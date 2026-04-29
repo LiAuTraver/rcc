@@ -124,6 +124,24 @@ use ::std::{fmt::Debug, marker::Destruct, ops::Add};
 #[allow(non_camel_case_types)]
 pub struct const_pre;
 
+impl const Add<bool> for const_pre {
+  type Output = ();
+
+  #[inline(always)]
+  fn add(self, cond: bool) {
+    const_assert!(cond)
+  }
+}
+
+impl const Add<(bool, &str)> for const_pre {
+  type Output = ();
+
+  #[inline(always)]
+  fn add(self, (cond, msg): (bool, &str)) {
+    const_assert!(cond, msg)
+  }
+}
+
 impl<T: [const] PartialEq + [const] Destruct + Debug> const Add<(T, T)>
   for const_pre
 {

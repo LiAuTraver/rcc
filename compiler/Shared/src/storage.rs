@@ -68,7 +68,7 @@ impl<'c> TryFrom<&Literal<'c>> for Storage {
 
   fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
     match literal {
-      Literal::Keyword(kw) => Storage::try_from(kw),
+      Literal::Keyword(kw) => Self::try_from(kw),
       _ => Err(()),
     }
   }
@@ -79,16 +79,17 @@ impl Storage {
     lhs: &Storage,
     rhs: &Storage,
   ) -> Result<Storage, DiagMeta<'c>> {
+    use DiagData::*;
+    use Severity::*;
     match (lhs, rhs) {
       (lhs, rhs) if lhs == rhs => Ok(*lhs),
       (Constexpr, _) | (_, Constexpr) => Err(
-        DiagData::UnsupportedFeature("Constexpr unimplemented yet".to_string())
-          + Severity::Error,
+        UnsupportedFeature("Constexpr unimplemented yet".to_string()) + Error,
       ),
       (Typedef, _) | (_, Typedef) =>
-        Err(DiagData::StorageSpecsUnmergeable(*lhs, *rhs) + Severity::Error),
+        Err(StorageSpecsUnmergeable(*lhs, *rhs) + Error),
       (Extern, other) | (other, Extern) => Ok(*other), // extern is compatible with any other storage class
-      _ => Err(DiagData::StorageSpecsUnmergeable(*lhs, *rhs) + Severity::Error),
+      _ => Err(StorageSpecsUnmergeable(*lhs, *rhs) + Error),
     }
   }
 

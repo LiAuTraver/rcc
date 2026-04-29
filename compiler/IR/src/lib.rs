@@ -2,7 +2,7 @@
 mod builder;
 mod constant;
 mod context;
-mod datalayout;
+mod data_layout;
 mod emitable;
 mod global;
 pub mod instruction;
@@ -15,6 +15,7 @@ pub use self::{
     Constant as IRConstant, Data as ConstantData, Global as GlobalValue,
   },
   context::{Context, Session},
+  data_layout::{DataLayout, SymbolDecoration, TypeSpecs},
   global::{
     BasicBlock, Function as IRFunction, Initializer as IRStaticInitializer,
     Module, Variable as IRVariable,

@@ -1,5 +1,5 @@
 use ::rcc_ast::{
-  Context,
+  Context, TargetInfo,
   blueprints::Placeholder,
   types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeRef},
 };
@@ -345,8 +345,8 @@ impl<'c> Expression<'c> {
   ///           type, does not have a const-qualified type, and if it is a structure or union, does not have any
   ///           member (including, recursively, any member or element of all contained aggregates or unions) with
   ///           a const-qualified type.
-  pub fn is_modifiable_lvalue(&self) -> bool {
-    self.is_lvalue() && self.qualified_type().is_modifiable()
+  pub fn is_modifiable_lvalue(&self, target_info: &TargetInfo) -> bool {
+    self.is_lvalue() && self.qualified_type().is_modifiable(target_info)
   }
 
   pub fn into_rvalue(self) -> Self {

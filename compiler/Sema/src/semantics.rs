@@ -67,8 +67,9 @@ impl<'c> DeclEnvironment<'c> {
     &mut self,
     name: StrRef<'c>,
     declaration: sd::DeclRef<'c>,
+    context: &'c Context<'c>,
   ) -> Result<(), DiagData<'c>> {
-    if !declaration.qualified_type().is_complete() {
+    if !declaration.qualified_type().is_complete(context) {
       Err(VariableIncompleteType(
         name,
         declaration.qualified_type().to_string(),
@@ -221,7 +222,7 @@ impl<'c> Sema<'c> {
               }
             },
           };
-          if !qualified_type.is_complete() {
+          if !qualified_type.is_complete(self.ast()) {
             self.add_error(
               ArrayHasIncompleteType(qualified_type.to_string()),
               array_modifier.span,
@@ -279,7 +280,7 @@ impl<'c> Sema<'c> {
       .iter()
       .map(|param| {
         let qualified_type = param.declaration.qualified_type();
-        if !qualified_type.is_complete() {
+        if !qualified_type.is_complete(self.ast()) {
           self.add_error(
             VariableIncompleteType(
               param.declaration.name(),
@@ -606,7 +607,7 @@ impl<'c> Sema<'c> {
 
     _ = self
       .environment
-      .declare(name, declaration)
+      .declare(name, declaration, self.ast())
       .map_err(|e| self.add_error(e, span));
 
     let function = sd::Function::new(
@@ -660,9 +661,11 @@ impl<'c> Sema<'c> {
         if parameter.declaration.name().starts_with('<') {
           // unnamed parameter - do nothing currently
         } else {
-          _ = self
-            .environment
-            .declare(parameter.declaration.name(), parameter.declaration)
+          _ = self.environment.declare(
+            parameter.declaration.name(),
+            parameter.declaration,
+            self.ast(),
+          )
           // if it's incomplete type, this has already reported when building the functionproto.
           // .map_err(|e| self.add_error(e, parameter.span));
         }
@@ -801,7 +804,7 @@ impl<'c> Sema<'c> {
       }
     };
     // arr can have 1st extend incomplete, handled downstream at init
-    if !qualified_type.is_complete() && !qualified_type.is_array() {
+    if !qualified_type.is_complete(self.ast()) && !qualified_type.is_array() {
       Err(
         DeclarationTyIncomplete(name.into(), qualified_type.to_string())
           + Severity::Error
@@ -896,7 +899,7 @@ impl<'c> Sema<'c> {
 
     _ = self
       .environment
-      .declare(name, vardef.declaration)
+      .declare(name, vardef.declaration, self.ast())
       .map_err(|e| self.add_error(e, span));
     Ok(vardef)
   }
@@ -1010,7 +1013,7 @@ impl<'c> Sema<'c> {
     }
     if (qualified_type
       .as_array()
-      .is_some_and(|array| !array.is_complete()))
+      .is_some_and(|array| !array.is_complete(self.ast())))
       && initializer.is_none()
     {
       self.add_error(
@@ -1072,10 +1075,12 @@ impl<'c> Sema<'c> {
             self.context().ulong_long_type().into(),
           ),
         );
-        let size = analyzed_expr.unqualified_type().size();
+        let size = analyzed_expr.unqualified_type().size(self.ast());
         Ok(se::Expression::new_rvalue(
           self.context(),
-          se::RawExpr::Constant(se::Constant::Integral(size.into())),
+          se::RawExpr::Constant(se::Constant::Integral(Integral::from(
+            size.to_builtin::<usize>(),
+          ))),
           self.context().ulong_long_type().into(),
           SourceSpan {
             end: analyzed_expr.span().end,
@@ -1095,9 +1100,9 @@ impl<'c> Sema<'c> {
         };
         Ok(se::Expression::new_rvalue(
           self.context(),
-          se::RawExpr::Constant(se::Constant::Integral(
-            qualified_type.size().into(),
-          )),
+          se::RawExpr::Constant(se::Constant::Integral(Integral::from(
+            qualified_type.size(self.ast()).to_builtin::<usize>(),
+          ))),
           self.context().ulong_long_type().into(),
           sizeof.span,
         ))
@@ -1474,7 +1479,7 @@ impl<'c> Sema<'c> {
     kind: se::UnaryKind,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    if !operand.is_modifiable_lvalue() {
+    if !operand.is_modifiable_lvalue(self.ast()) {
       Err(ExprNotAssignable(operand.to_string()) + Severity::Error + span)
     } else if !operand.qualified_type().is_scalar() {
       Err(
@@ -1637,7 +1642,7 @@ impl<'c> Sema<'c> {
     let expr_type = *left.qualified_type();
 
     match operator.associated_operator() {
-      _ if !left.is_modifiable_lvalue() => {
+      _ if !left.is_modifiable_lvalue(self.ast()) => {
         self.add_error(ExprNotAssignable(left.to_string()), span);
         Ok(left)
       },

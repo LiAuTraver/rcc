@@ -1,8 +1,10 @@
 /target
 
 # workaround
-**/preprocessor/**
 test_compiler.ps1
+**/a.out
+**/a.exe
+
 # output 
 out.txt
 test*.ll

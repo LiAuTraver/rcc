@@ -1,4 +1,4 @@
-use ::rcc_adt::{Floating, Integral};
+use ::rcc_adt::{Floating, Integral, Size};
 use ::rcc_ast::{
   Session,
   types::{CastType, Compatibility, QualifiedType, TypeInfo},
@@ -549,21 +549,28 @@ impl<'c> Folding<'c, SizeOf<'c>> for Expression<'c> {
     let target_type = *expression.qualified_type();
     let value_category = expression.value_category();
     match sizeof.sizeof {
-      SizeOfKind::Type(qualified_type) => if qualified_type.size() > 0 {
-        Success(Integral::from_uintptr(qualified_type.size()))
-      } else {
-        Failure(Integral::from_uintptr(0))
-      }
-      .map(Into::into)
-      .map(|constant: CL| {
-        Self::new(
-          session.ast(),
-          constant,
-          target_type,
-          value_category,
-          expression.span(),
-        )
-      }),
+      SizeOfKind::Type(qualified_type) =>
+        if qualified_type.is_complete(session.ast()) {
+          Success(Integral::from_unsigned(
+            qualified_type.size(session.ast()).to_builtin::<usize>(),
+            session.ast().pointer.size_bits(),
+          ))
+        } else {
+          Failure(Integral::from_unsigned(
+            Size::U0.to_builtin::<usize>(),
+            session.ast().pointer.size_bits(),
+          ))
+        }
+        .map(Into::into)
+        .map(|constant: CL| {
+          Self::new(
+            session.ast(),
+            constant,
+            target_type,
+            value_category,
+            expression.span(),
+          )
+        }),
       SizeOfKind::Expression(expr) => expr.fold(session),
     }
   }
@@ -711,7 +718,7 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
           Success(alloc_constant(
             c.as_integral_unchecked()
               .cast(
-                target_primitive.size_bits() as u8,
+                target_primitive.size_bits(session.ast()),
                 target_primitive.is_signed().into(),
               )
               .into(),
@@ -746,7 +753,9 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
       },
       FloatingToIntegral => {
         let integral = folded_expr.as_constant_unchecked().clone().to_integral(
-          target_type.as_primitive_unchecked().integer_width(),
+          target_type
+            .as_primitive_unchecked()
+            .size_bits(session.ast()),
           target_type
             .as_primitive_unchecked()
             .is_signed_integer()
@@ -828,9 +837,7 @@ impl IntegralExt for Integral {
           Some(result) => Success(result),
           None => {
             session.diag().add_error(DivideByZero, span);
-            Failure(
-              Integral::new(0, lhs.width() as u8, lhs.signedness()).into(),
-            )
+            Failure(Integral::new(0, lhs.width(), lhs.signedness()).into())
           },
         }
       }};

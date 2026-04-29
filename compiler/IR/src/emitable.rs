@@ -88,6 +88,8 @@ mod instruction {
 
   use super::*;
   mod terminator {
+    use ::rcc_adt::SizeBit;
+
     use super::*;
     impl<'c> Emitable<'c, Jump> for Builder<'c> {
       fn emit(&mut self, jump: Jump, ast_type: ast::TypeRef<'c>) -> ValueID {
@@ -118,7 +120,7 @@ mod instruction {
             || self.visit(branch.condition(), |value| value
               .ir_type
               .as_integer()
-              .is_some_and(|&width| width == 1)),
+              .is_some_and(|&width| width == SizeBit::U1)),
           "Branch condition must be an i1 value, or unset (null)."
         );
         debug_assert!(
@@ -225,7 +227,7 @@ mod instruction {
             || self.visit(zext.operand(), |value| value
               .ir_type
               .as_integer()
-              .is_some_and(|&i| i == 1)),
+              .is_some_and(|&i| i.get() == 1)),
           "Zext target type must be an unsigned or the operand is an i1 \
            boolean, (which is an exception because it makes nosense to sext \
            it)"
@@ -234,7 +236,7 @@ mod instruction {
           self.visit(zext.operand(), |value| value
             .ir_type
             .as_integer()
-            .is_some_and(|&width| width < ast_type.size_bits() as u8)),
+            .is_some_and(|&width| width < ast_type.size_bits(self.ast()))),
           "Zext operand must be an integer"
         );
         self.emit_common_instruction(Cast::Zext(zext), ast_type)
@@ -252,7 +254,7 @@ mod instruction {
           self.visit(sext.operand(), |value| value
             .ir_type
             .as_integer()
-            .is_some_and(|&width| width < ast_type.size_bits() as u8)),
+            .is_some_and(|&width| width < ast_type.size_bits(self.ast()))),
           "Sext operand must be an integer"
         );
         self.emit_common_instruction(Cast::Sext(sext), ast_type)
@@ -268,7 +270,7 @@ mod instruction {
           self.visit(trunc.operand(), |value| value
             .ir_type
             .as_integer()
-            .is_some_and(|&width| width > ast_type.size_bits() as u8)),
+            .is_some_and(|&width| width > ast_type.size_bits(self.ast()))),
           "Trunc operand must be an integer"
         );
         self.emit_common_instruction(Cast::Trunc(trunc), ast_type)
@@ -284,7 +286,9 @@ mod instruction {
           self.visit(fpext.operand(), |value| value
             .ir_type
             .as_floating()
-            .is_some_and(|&format| format.size_bits() < ast_type.size_bits())),
+            .is_some_and(
+              |&format| format.size_bits() < ast_type.size_bits(self.ast())
+            )),
           "FPExt operand must be a floating-point type"
         );
         self.emit_common_instruction(Cast::FPExt(fpext), ast_type)
@@ -304,7 +308,9 @@ mod instruction {
           self.visit(fptrunc.operand(), |value| value
             .ir_type
             .as_floating()
-            .is_some_and(|&format| format.size_bits() > ast_type.size_bits())),
+            .is_some_and(
+              |&format| format.size_bits() > ast_type.size_bits(self.ast())
+            )),
           "FPTrunc operand must be a floating-point type"
         );
         self.emit_common_instruction(Cast::FPTrunc(fptrunc), ast_type)
@@ -369,7 +375,7 @@ mod instruction {
           self.visit(uitofp.operand(), |value| value
             .ir_type
             .as_integer()
-            .is_some_and(|&width| width <= ast_type.size_bits() as u8)),
+            .is_some_and(|&width| width <= ast_type.size_bits(self.ast()))),
           "Cannot convert an integer to a floating-point type that cannot \
            represent all values of the integer type"
         );
@@ -434,7 +440,7 @@ mod instruction {
           self.visit(sitofp.operand(), |value| value
             .ir_type
             .as_integer()
-            .is_some_and(|&width| width <= ast_type.size_bits() as u8)),
+            .is_some_and(|&width| width <= ast_type.size_bits(self.ast()))),
           "Cannot convert an integer to a floating-point type that cannot \
            represent all values of the integer type"
         );
@@ -457,8 +463,10 @@ mod instruction {
         ast_type: ast::TypeRef<'c>,
       ) -> ValueID {
         debug_assert!(
-          self.visit(bitcast.operand(), |value| value.ir_type.size_bits()
-            == ast_type.size_bits()),
+          self.visit(bitcast.operand(), |value| value
+            .ir_type
+            .size_bits(self.data_layout())
+            == ast_type.size_bits(self.ast())),
           "BitCast operand and target type must have the same size"
         );
         self.emit_common_instruction(Cast::BitCast(bitcast), ast_type)
@@ -563,7 +571,8 @@ mod instruction {
               .ast_type
               .as_primitive()
               .is_some_and(|p| {
-                p.size_bits() == self.ast().ptrdiff_type().size_bits()
+                p.size_bits(self.ast())
+                  == self.ast().ptrdiff_type().size_bits(self.ast())
               }))),
           "GEP indices must be ptrdiff_t. 
           Sext or trunc the integral type to ptrdiff_t first."

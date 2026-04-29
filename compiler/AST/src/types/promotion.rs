@@ -49,19 +49,6 @@ impl Primitive {
     }
   }
 
-  /// These value should be consistent with [`Integral::width`].
-  pub const fn integer_width(&self) -> u8 {
-    match self {
-      Bool => 1,
-      Char | SChar | UChar => 8,
-      Short | UShort => 16,
-      Int | UInt => 32,
-      Long | ULong => 64,
-      LongLong | ULongLong => 64,
-      _ => panic!("Not an integer type"),
-    }
-  }
-
   pub const fn is_floating_point(&self) -> bool {
     matches!(self, Float | Double | LongDouble) || self.is_complex()
   }

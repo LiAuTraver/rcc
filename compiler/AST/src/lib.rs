@@ -6,6 +6,7 @@ mod constant;
 mod context;
 mod environment;
 mod session;
+mod target_info;
 pub mod types;
 
 pub use self::{
@@ -14,4 +15,5 @@ pub use self::{
   context::Context,
   environment::UnitScope,
   session::{Session, SessionRef},
+  target_info::TargetInfo,
 };

@@ -5,6 +5,7 @@ use ::rcc_shared::{Keyword, Literal};
 use ::rcc_utils::{IntoWith, RefEq, concat_static_str as css, ensure_is_pod};
 
 use super::{TypeRef, TypeRefMut};
+use crate::TargetInfo;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct QualifiedType<'c> {
@@ -119,8 +120,8 @@ impl<'c> QualifiedType<'c> {
     self
   }
 
-  pub fn is_modifiable(&self) -> bool {
-    self.unqualified_type.is_modifiable()
+  pub fn is_modifiable(&self, target_info: &TargetInfo) -> bool {
+    self.unqualified_type.is_modifiable(target_info)
       && !self.qualifiers.contains(Qualifiers::Const)
   }
 

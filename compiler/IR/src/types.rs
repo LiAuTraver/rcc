@@ -1,5 +1,7 @@
-use ::rcc_adt::FloatFormat;
-use ::rcc_ast::types::TypeInfo;
+use ::rcc_adt::{Alignment, FloatFormat, SizeBit};
+
+use crate::DataLayout;
+
 /// IR Type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type<'ir> {
@@ -8,37 +10,43 @@ pub enum Type<'ir> {
   Floating(FloatFormat),
 
   Pointer(),
-  Integer(u8),
+  Integer(SizeBit),
   Array(Array<'ir>),
   Function(Function<'ir>),
   // TODO: complete it later, placeholder now vvv
   Struct(Struct<'ir>),
 }
 
-impl<'ir> TypeInfo<'ir> for Type<'ir> {
-  fn size(&self) -> usize {
-    self.size_bits() * 8
-  }
-
-  fn size_bits(&self) -> usize {
+impl<'ir> Type<'ir> {
+  pub fn size_bits(&self, data_layout: &DataLayout) -> SizeBit {
     use Type::*;
     match self {
-      Void() => 0,
-      Label() => 0,
-      Pointer() => 64,  // TODO: make it target dependent.
-      Function(_) => 0, // function type itself does not occupy space.
+      Void() => SizeBit::U0,
+      Label() => SizeBit::U0,
+      Function(_) => SizeBit::U0, // function type itself does not occupy space.
+      Pointer() => data_layout.pointer_specs.size_bits(),
       Floating(format) => format.size_bits(),
-      Integer(width) => *width as usize,
-      Array(array) => array.element_type.size_bits() * array.length,
+      Integer(width) => *width,
+      Array(array) => array.element_type.size_bits(data_layout) * array.length,
       Struct(_) => unimplemented!(),
     }
   }
 
-  fn default_value(&self) -> ::rcc_ast::Constant<'ir> {
-    todo!()
+  pub fn alignment(&self, data_layout: &DataLayout) -> Alignment {
+    use Type::*;
+    match self {
+      Void() => panic!("invalid call: void type has no alignment"),
+      Label() => panic!("invalid call: label has no alignment"),
+      Function(_) => panic!("invalid call: function type has no alignment"),
+      Floating(format) => data_layout.float_specs(*format).align(),
+      Pointer() => data_layout.pointer_specs.align(),
+      Integer(size_bit) => data_layout.integer_specs(*size_bit).align(),
+      Array(array) => array.element_type.alignment(data_layout),
+      Struct(_) => todo!(),
+    }
   }
 
-  fn extent(&self) -> usize {
+  pub fn extent(&self) -> usize {
     use Type::*;
     match self {
       Void() => 0,
@@ -50,10 +58,6 @@ impl<'ir> TypeInfo<'ir> for Type<'ir> {
       Struct(_) => 1,
       Array(array) => 1 + array.element_type.extent(),
     }
-  }
-
-  fn alignment(&self) -> usize {
-    todo!()
   }
 }
 
@@ -110,13 +114,13 @@ mod cvt {
   interconvert!(Array, Type, 'ir);
   interconvert!(Function, Type, 'ir);
   interconvert!(Struct, Type, 'ir);
-  interconvert!(u8, Type<'ir>, Integer);
+  interconvert!(SizeBit, Type<'ir>, Integer);
 
   make_trio_for_unit_tuple!(Void, Type<'ir>);
   make_trio_for_unit_tuple!(Label, Type<'ir>);
   make_trio_for_unit_tuple!(Pointer, Type<'ir>);
 
-  make_trio_for!(u8, Type<'ir>, Integer);
+  make_trio_for!(SizeBit, Type<'ir>, Integer);
   make_trio_for!(FloatFormat, Type<'ir>, Floating);
   make_trio_for!(Array, Type, 'ir);
   make_trio_for!(Function, Type, 'ir);

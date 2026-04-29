@@ -1,7 +1,8 @@
-int y = 10;
 
+int y = 10;
+int putchar(int);
 int g(int);
 int main() {
-  const auto d = g;
-  return d(y) & y;
+  putchar('H');
+  return y;
 }

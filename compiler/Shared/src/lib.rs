@@ -1,5 +1,6 @@
 #![feature(adt_const_params)]
-
+#![feature(const_trait_impl)]
+#![feature(const_cmp)]
 mod arena;
 mod diagnosis;
 mod keyword;
@@ -39,5 +40,8 @@ pub use self::{
   },
   storage::Storage,
   token::{Literal, Token},
-  triple::Triple,
+  triple::{
+    Architecture, CallingConvention, DataModel, Endianess, Environment,
+    ObjectFormat, OperatingSystem, Triple, Vendor,
+  },
 };

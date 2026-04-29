@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use ::rcc_adt::Integral;
+use ::rcc_adt::{Integral, SizeBit};
 use ::rcc_ast::Constant;
 use ::rcc_ir::{
   BasicBlock, GlobalValue, IRArguments, IRConstant, IRFunction,
@@ -44,7 +44,8 @@ fn pretty_print_contant_or_id<'c>(
         debug_assert!(value.is_nullptr());
         printer.write("null", &palette.literal)
       },
-      Integer(1u8) => printer.write(value.is_not_zero(), &palette.literal),
+      Integer(SizeBit::U1) =>
+        printer.write(value.is_not_zero(), &palette.literal),
       // if the value is max, print it as -1 for better readability.
       Integer(width) => match value.as_integral_unchecked() {
         bitmask if *bitmask == Integral::bitmask(*width) =>
@@ -83,7 +84,7 @@ fn print_users<'c>(
   };
   printer.write_fmt(args, &palette.info);
 }
-impl<'c> Printable<'c> for Module {
+impl<'c> Printable<'c> for Module<'c> {
   fn print(
     &self,
     printer: &mut impl Printer<'c>,
@@ -91,6 +92,25 @@ impl<'c> Printable<'c> for Module {
     is_last: bool,
     palette: &Palette,
   ) {
+    printer.write("source_filename", &palette.dim);
+    printer.write(" = ", &palette.skeleton);
+    printer.write(
+      quoted!("\"" => printer.src().files[self.file_index as usize].path.file_name().unwrap().display()),
+      &palette.literal,
+    );
+    printer.newline();
+
+    printer.write("target datalayout", &palette.meta);
+    printer.write(" = ", &palette.skeleton);
+    printer.write(quoted!("\"" => self.data_layout), &palette.literal);
+    printer.newline();
+
+    printer.write("target triple", &palette.meta);
+    printer.write(" = ", &palette.skeleton);
+    printer.write(quoted!("\"" => self.triple), &palette.literal);
+
+    printer.write("\n\n\n", &palette.skeleton);
+
     self.globals.iter().for_each(|&value_id| {
       Printable::print(
         &*lookup!(printer, value_id),
@@ -245,6 +265,8 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
           ),
           &palette.info,
         );
+      } else {
+        // printer.write("\t\t\t\t\t\t; no Predecessors!", &palette.error)
       }
     }
     debug_assert!(
@@ -783,8 +805,13 @@ impl<'c> Print<'c, inst::Alloca> for Value<'c> {
     palette: &Palette,
     variant: &inst::Alloca,
   ) {
+    let ir_type = printer.ir().ir_type(self.ast_type);
     printer.write("alloca ", &palette.literal);
-    printer.write(printer.ir().ir_type(self.ast_type), &palette.meta)
+    printer.write(ir_type, &palette.meta);
+
+    printer.write(", ", &palette.skeleton);
+    printer.write("align ", &palette.literal);
+    printer.write(ir_type.alignment(printer.ir().data_layout()), &palette.meta);
   }
 }
 impl<'c> Print<'c, inst::Load> for Value<'c> {
@@ -804,6 +831,13 @@ impl<'c> Print<'c, inst::Load> for Value<'c> {
 
     printer.write("ptr ", &palette.meta);
     printer.write_id(variant.addr());
+
+    printer.write(", ", &palette.skeleton);
+    printer.write("align ", &palette.literal);
+    printer.write(
+      self.ir_type.alignment(printer.ir().data_layout()),
+      &palette.meta,
+    );
   }
 }
 impl<'c> Print<'c, inst::Store> for Value<'c> {
@@ -826,6 +860,15 @@ impl<'c> Print<'c, inst::Store> for Value<'c> {
 
     printer.write("ptr ", &palette.meta);
     printer.write_id(variant.dest());
+
+    printer.write(", ", &palette.skeleton);
+    printer.write("align ", &palette.literal);
+    printer.write(
+      lookup!(printer, variant.dest())
+        .ir_type
+        .alignment(printer.ir().data_layout()),
+      &palette.meta,
+    );
   }
 }
 
