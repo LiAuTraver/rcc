@@ -1,6 +1,6 @@
 use ::rcc_adt::{FloatFormat, Floating, Integral, SizeBit};
 use ::rcc_ast::{Context as ASTContext, TargetInfo, types as ast};
-use ::rcc_shared::{Arena, Diagnosis, SourceManager};
+use ::rcc_shared::{Arena, Diagnosis, SourceManager, Triple};
 
 use super::{
   ConstantData, Type, TypeRef, Value, ValueID,
@@ -16,7 +16,7 @@ pub struct Context<'c> {
   float32_type: TypeRef<'c>,
   float64_type: TypeRef<'c>,
   pointer_type: TypeRef<'c>,
-  common_integer_types: [TypeRef<'c>; 6],
+  common_integer_types: [TypeRef<'c>; 5],
 
   ir_arena: RefCell<SlotMap<ValueID, Value<'c>>>,
   ir_def_use: RefCell<SecondaryMap<ValueID, Vec<ValueID>>>,
@@ -42,6 +42,7 @@ pub struct Session<'c, D: Diagnosis<'c>> {
   ast_context: &'c ASTContext<'c>,
   diagnosis: &'c D,
   manager: &'c SourceManager,
+  triple: Triple,
 }
 pub type SessionRef<'c, D> = &'c Session<'c, D>;
 
@@ -51,33 +52,57 @@ impl<'c, D: Diagnosis<'c>> Session<'c, D> {
     manager: &'c SourceManager,
     ast_context: &'c ASTContext<'c>,
     ir_context: &'c Context<'c>,
+    triple: Triple,
   ) -> Self {
     Self {
       diagnosis,
       manager,
       ast_context,
       ir_context,
+      triple,
     }
   }
 
   pub fn as_ast_session(&self) -> ::rcc_ast::Session<'c, D> {
-    ::rcc_ast::Session::new(self.diagnosis, self.manager, self.ast_context)
+    ::rcc_ast::Session::new(
+      self.diagnosis,
+      self.manager,
+      self.ast_context,
+      self.triple,
+    )
   }
 }
 impl<'c, D: Diagnosis<'c>> Session<'c, D> {
+  #[inline]
   pub fn ast(&self) -> &'c ASTContext<'c> {
     self.ast_context
   }
 
+  #[inline]
   pub fn diag(&self) -> &'c D {
     self.diagnosis
   }
 
+  #[inline]
   pub fn src(&self) -> &'c SourceManager {
     self.manager
   }
 
+  #[inline]
   pub fn ir(&self) -> &'c Context<'c> {
+    self.ir_context
+  }
+
+  #[inline]
+  pub fn triple(&self) -> Triple {
+    self.triple
+  }
+}
+impl<'c, D: Diagnosis<'c>> Deref for Session<'c, D> {
+  type Target = Context<'c>;
+
+  #[inline]
+  fn deref(&self) -> &'c Self::Target {
     self.ir_context
   }
 }
@@ -117,42 +142,40 @@ impl<'c> Context<'c> {
 
   pub fn floating_zero(&self, format: FloatFormat) -> ValueID {
     match format {
-      FloatFormat::IEEE32 => self.common_floating_zero[0],
-      FloatFormat::IEEE64 => self.common_floating_zero[1],
+      IEEE32 => self.common_floating_zero[0],
+      IEEE64 => self.common_floating_zero[1],
     }
   }
 
   pub fn floating_one(&self, format: FloatFormat) -> ValueID {
     match format {
-      FloatFormat::IEEE32 => self.common_floating_one[0],
-      FloatFormat::IEEE64 => self.common_floating_one[1],
+      IEEE32 => self.common_floating_one[0],
+      IEEE64 => self.common_floating_one[1],
     }
   }
 
   pub fn integer_zero(&self, width: SizeBit) -> ValueID {
-    let index = match width.get() {
-      1 => 0,
-      8 => 1,
-      16 => 2,
-      32 => 3,
-      64 => 4,
-      // 128 => 5,
+    match width {
+      SizeBit::U1 => self.common_integer_zero[0],
+      SizeBit::U8 => self.common_integer_zero[1],
+      SizeBit::U16 => self.common_integer_zero[2],
+      SizeBit::U32 => self.common_integer_zero[3],
+      SizeBit::U64 => self.common_integer_zero[4],
+      // SizeBit::U128 => self.common_integer_zero[5],
       _ => panic!("intern other integer constant on the fly"),
-    };
-    self.common_integer_zero[index]
+    }
   }
 
   pub fn integer_one(&self, width: SizeBit) -> ValueID {
-    let index = match width.get() {
-      1 => 0,
-      8 => 1,
-      16 => 2,
-      32 => 3,
-      64 => 4,
-      // 128 => 5,
+    match width {
+      SizeBit::U1 => self.common_integer_one[0],
+      SizeBit::U8 => self.common_integer_one[1],
+      SizeBit::U16 => self.common_integer_one[2],
+      SizeBit::U32 => self.common_integer_one[3],
+      SizeBit::U64 => self.common_integer_one[4],
+      // SizeBit::U128 => self.common_integer_one[5],
       _ => panic!("intern other integer constant on the fly"),
-    };
-    self.common_integer_one[index]
+    }
   }
 
   pub fn data_layout(&self) -> &DataLayout {
@@ -206,13 +229,13 @@ impl<'c> Context<'c> {
   }
 
   pub fn make_integer(&self, bits: SizeBit) -> TypeRef<'c> {
-    match bits.get() {
-      1 => self.common_integer_types[0],
-      8 => self.common_integer_types[1],
-      16 => self.common_integer_types[2],
-      32 => self.common_integer_types[3],
-      64 => self.common_integer_types[4],
-      // 128 => self.common_integer_types[5],
+    match bits {
+      SizeBit::U1 => self.common_integer_types[0],
+      SizeBit::U8 => self.common_integer_types[1],
+      SizeBit::U16 => self.common_integer_types[2],
+      SizeBit::U32 => self.common_integer_types[3],
+      SizeBit::U64 => self.common_integer_types[4],
+      // SizeBit::U128 => self.common_integer_types[5],
       _ => self.intern(Type::Integer(bits)),
     }
   }
@@ -237,6 +260,7 @@ impl<'c> Context<'c> {
 use ::std::{
   cell::{Ref, RefMut},
   mem::MaybeUninit,
+  ops::Deref,
 };
 impl<'c> Context<'c> {
   pub fn insert(&self, value: Value<'c>) -> ValueID {
@@ -359,17 +383,22 @@ impl<'c> Context<'c> {
 use ::bimap::BiHashMap;
 use ::slotmap::{SecondaryMap, SlotMap};
 use ::std::{cell::RefCell, collections::HashSet};
+use FloatFormat::*;
 type Interner<T> = RefCell<HashSet<T>>;
 
 impl<'c> Context<'c> {
   #[allow(clippy::uninit_assumed_init)]
   #[allow(invalid_value)]
-  pub fn new(ast_arena: &'c Arena, ast_context: &'c ASTContext) -> Self {
+  pub fn new(
+    ast_arena: &'c Arena,
+    ast_context: &'c ASTContext,
+    triple: Triple,
+  ) -> Self {
     let mut this = Self {
       void_type: ast_arena.alloc(Type::Void()),
       label_type: ast_arena.alloc(Type::Label()),
-      float32_type: ast_arena.alloc(Type::Floating(FloatFormat::IEEE32)),
-      float64_type: ast_arena.alloc(Type::Floating(FloatFormat::IEEE64)),
+      float32_type: ast_arena.alloc(Type::Floating(IEEE32)),
+      float64_type: ast_arena.alloc(Type::Floating(IEEE64)),
       pointer_type: ast_arena.alloc(Type::Pointer()),
       common_integer_types: [
         ast_arena.alloc(SizeBit::U1.into()),
@@ -377,11 +406,11 @@ impl<'c> Context<'c> {
         ast_arena.alloc(SizeBit::U16.into()),
         ast_arena.alloc(SizeBit::U32.into()),
         ast_arena.alloc(SizeBit::U64.into()),
-        ast_arena.alloc(SizeBit::U128.into()),
+        // ast_arena.alloc(SizeBit::U128.into()),
       ],
       ast_arena,
       ast_target_info: ast_context,
-      ir_data_layout: DataLayout::new(ast_context.triple()),
+      ir_data_layout: DataLayout::new(triple),
       constant_interner: Default::default(),
       ir_arena: Default::default(),
       ir_def_use: Default::default(),
@@ -418,43 +447,43 @@ impl<'c> Context<'c> {
       this.common_floating_zero[0] = ir_arena_ref.insert(Value::new(
         ast_context.float32_type(),
         this.float32_type(),
-        ConstantData::Floating(Floating::zero(FloatFormat::IEEE32)),
+        ConstantData::Floating(Floating::zero(IEEE32)),
         Default::default(),
       ));
       refmut.insert(
         this.common_floating_zero[0],
-        ConstantData::Floating(Floating::zero(FloatFormat::IEEE32)),
+        ConstantData::Floating(Floating::zero(IEEE32)),
       );
 
       this.common_floating_zero[1] = ir_arena_ref.insert(Value::new(
         ast_context.float64_type(),
         this.float64_type(),
-        ConstantData::Floating(Floating::zero(FloatFormat::IEEE64)),
+        ConstantData::Floating(Floating::zero(IEEE64)),
         Default::default(),
       ));
       refmut.insert(
         this.common_floating_zero[1],
-        ConstantData::Floating(Floating::zero(FloatFormat::IEEE64)),
+        ConstantData::Floating(Floating::zero(IEEE64)),
       );
       this.common_floating_one[0] = ir_arena_ref.insert(Value::new(
         ast_context.float32_type(),
         this.float32_type,
-        ConstantData::Floating(Floating::one(FloatFormat::IEEE32)),
+        ConstantData::Floating(Floating::one(IEEE32)),
         Default::default(),
       ));
       refmut.insert(
         this.common_floating_one[0],
-        ConstantData::Floating(Floating::one(FloatFormat::IEEE32)),
+        ConstantData::Floating(Floating::one(IEEE32)),
       );
       this.common_floating_one[1] = ir_arena_ref.insert(Value::new(
         ast_context.float64_type(),
         this.float64_type,
-        ConstantData::Floating(Floating::one(FloatFormat::IEEE64)),
+        ConstantData::Floating(Floating::one(IEEE64)),
         Default::default(),
       ));
       refmut.insert(
         this.common_floating_one[1],
-        ConstantData::Floating(Floating::one(FloatFormat::IEEE64)),
+        ConstantData::Floating(Floating::one(IEEE64)),
       );
 
       let ast_types = [
@@ -465,11 +494,12 @@ impl<'c> Context<'c> {
         ast_context.ulong_long_type(),
       ];
       let widths = [
-        SizeBit::new(1),
-        SizeBit::new(8),
-        SizeBit::new(16),
-        SizeBit::new(32),
-        SizeBit::new(64),
+        SizeBit::U1,
+        SizeBit::U8,
+        SizeBit::U16,
+        SizeBit::U32,
+        SizeBit::U64,
+        // SizeBit::U128,
       ];
       ast_types.iter().zip(widths).enumerate().for_each(
         |(index, (ast_type, width))| {

@@ -81,7 +81,7 @@ impl<'c> Builder<'c> {
       session,
       module: Module::new_empty(
         0,
-        session.ast().triple(),
+        session.triple(),
         session.ir().data_layout(),
       ),
       current_block: Default::default(),
@@ -432,16 +432,25 @@ impl<'c> Builder<'c> {
       common();
     };
 
+    let this_is_the_only_block = || {
+      !self.ir().get_use_list(self.current_block).is_empty()
+        || self.visit(self.current_function, |value| {
+          value
+            .data
+            .as_constant_unchecked()
+            .as_global_unchecked()
+            .as_function_unchecked()
+            .blocks
+            .is_empty()
+        })
+    };
+
     match (has_inst, has_term) {
       // if the current block has a terminator, push it and insert am empty one
       (_, true) => common(),
-      // 5.1.2.3.4 Program termination
+      // 5.1.2.3p4 Program termination
       // If [...], reaching the `}` that terminates the main function returns a value of 0.
-      (_, false)
-        if function_name == "main"
-          // && !self.ir().get_use_list(self.current_block).is_empty()
-           =>
-      {
+      (_, false) if function_name == "main" && this_is_the_only_block() => {
         let _implicit_return = self.emit(
           inst::Return::new(Some(
             self
@@ -453,25 +462,15 @@ impl<'c> Builder<'c> {
         common()
       },
       (_, false)
-        if ast_type.as_functionproto_unchecked().return_type.is_void() =>
+        if ast_type.as_functionproto_unchecked().return_type.is_void() &&
       // if the return type is void it may also be an implicit return void;
       // only when it has no users does it indicate an traling empty block.
-        if !self.ir().get_use_list(self.current_block).is_empty()
-        // or user didnt write anything
-          || self.visit(self.current_function, |value|
-            value.data
-            .as_constant_unchecked()
-            .as_global_unchecked()
-            .as_function_unchecked()
-            .blocks
-            .is_empty())
-        {
-          let _implicit_return = self.emit(
-            inst::Return::new(None),
-            self.ast().void_type(),
-          );
-          common()
-        },
+        this_is_the_only_block() =>
+      {
+        let _implicit_return =
+          self.emit(inst::Return::new(None), self.ast().void_type());
+        common()
+      },
       // if the current blobk is not empty but it does not have a terminator, insert an unreachable and take it.
       (true, false) => make_unreachable_block(),
       // if current block is not empty and is used by other blocks, it probably means the block just missing a terminator,
@@ -908,10 +907,14 @@ impl<'c> Builder<'c> {
 }
 impl<'c> Builder<'c> {
   fn expression(&mut self, expression: se::ExprRef<'c>) -> ValueID {
-    // the fold here contains partial fold. e.g. `3 + 6 + func(4 + 5)` would be folded to `9 + func(9)`.
-    let expression = expression.fold(&self.session().as_ast_session()).take();
+    // FIXME: dont fold here, fold in the passes.
+    // // the fold here contains partial fold. e.g. `3 + 6 + func(4 + 5)` would be folded to `9 + func(9)`.
+    // let expression = expression.fold(&self.session().as_ast_session()).take();
+    // let unqualified_type = expression.unqualified_type();
+    // let span = expression.span();
     let unqualified_type = expression.unqualified_type();
     let span = expression.span();
+
     use se::RawExpr::*;
     match &**expression {
       Empty(_) => contract_violation!(

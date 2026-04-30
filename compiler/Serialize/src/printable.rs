@@ -266,7 +266,7 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
           &palette.info,
         );
       } else {
-        // printer.write("\t\t\t\t\t\t; no Predecessors!", &palette.error)
+        printer.write("\t\t\t\t\t\t; no Predecessors!", &palette.error)
       }
     }
     debug_assert!(
@@ -864,8 +864,9 @@ impl<'c> Print<'c, inst::Store> for Value<'c> {
     printer.write(", ", &palette.skeleton);
     printer.write("align ", &palette.literal);
     printer.write(
-      lookup!(printer, variant.dest())
-        .ir_type
+      printer
+        .ir()
+        .ir_type(lookup!(printer, variant.dest()).ast_type)
         .alignment(printer.ir().data_layout()),
       &palette.meta,
     );

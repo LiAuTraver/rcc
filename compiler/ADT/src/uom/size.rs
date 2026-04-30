@@ -79,6 +79,16 @@ impl SizeBit {
   pub const fn next_byte_boundary(self) -> Self {
     Self::new((self.inner + 0x07) & !0x07)
   }
+
+  #[inline]
+  pub const fn is_power_of_two(self) -> bool {
+    self.inner.is_power_of_two()
+  }
+
+  #[inline]
+  pub const fn next_power_of_two(self) -> Self {
+    Self::new(self.inner.next_power_of_two())
+  }
 }
 impl Size {
   #[inline]
@@ -115,6 +125,16 @@ impl Size {
   pub const fn size_bits(self) -> SizeBit {
     SizeBit::new(self.inner * 8)
   }
+
+  #[inline]
+  pub const fn is_power_of_two(self) -> bool {
+    self.inner.is_power_of_two()
+  }
+
+  #[inline]
+  pub const fn next_power_of_two(self) -> Self {
+    Self::new(self.inner.next_power_of_two())
+  }
 }
 
 mod cvt {
@@ -123,6 +143,12 @@ mod cvt {
   use super::*;
 
   impl const From<usize> for Size {
+    #[inline]
+    fn from(inner: usize) -> Self {
+      Self::new(inner)
+    }
+  }
+  impl const From<usize> for SizeBit {
     #[inline]
     fn from(inner: usize) -> Self {
       Self::new(inner)

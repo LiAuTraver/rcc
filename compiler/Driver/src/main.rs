@@ -6,7 +6,7 @@ use ::rcc_lex::Lexer;
 use ::rcc_parse::Parser;
 use ::rcc_sema::Sema;
 use ::rcc_serialize::{ASTDumper, IRPrinter};
-use ::rcc_shared::{Arena, Diagnosis, OpDiag, SourceManager};
+use ::rcc_shared::{Arena, Diagnosis, OpDiag, SourceManager, Triple};
 use ::rcc_utils::DisplayWith;
 enum Stage {
   Lex,
@@ -53,9 +53,10 @@ fn main() {
 
 fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
   let arena = Arena::default();
-  let ast_context = arena.alloc(ASTContext::new(&arena));
+  let triple = Triple::HOST;
+  let ast_context = arena.alloc(ASTContext::new(&arena, triple));
   let diagnosis = OpDiag::default();
-  let ast_session = ASTSession::new(&diagnosis, &manager, ast_context);
+  let ast_session = ASTSession::new(&diagnosis, &manager, ast_context, triple);
   let mut lexer = Lexer::new(&ast_session);
   let tokens = lexer.lex();
   if ast_session.diag().has_errors() {
@@ -70,14 +71,8 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
   if let Stage::Lex = stage {
     tokens
       .iter()
-      .take(tokens.iter().len() - 1) // last is EOF
-      .for_each(|t| {
-        if pretty_print {
-          println!("{t}");
-        } else {
-          println!("{t} ");
-        }
-      });
+      // .take(tokens.iter().len() - 1) // last is EOF
+      .for_each(|t| println!("{t} "));
     println!("Lex succeeded.");
     return 0;
   }
@@ -136,13 +131,9 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));
-  let ir_context = arena.alloc(IRContext::new(&arena, ast_context));
-  let session = IRSession::new(
-    ast_session.diag(),
-    ast_session.src(),
-    ast_session.ast(),
-    ir_context,
-  );
+  let ir_context = arena.alloc(IRContext::new(&arena, ast_context, triple));
+  let session =
+    IRSession::new(&diagnosis, &manager, ast_context, ir_context, triple);
   let builder = IRBuilder::new(&session);
 
   let module = builder.build(translation_unit);

@@ -238,7 +238,7 @@ impl<'c> Context<'c> {
   }
 }
 impl<'c> Context<'c> {
-  pub fn new(arena: &'c Arena) -> Self {
+  pub fn new(arena: &'c Arena, triple: Triple) -> Self {
     use Primitive::*;
 
     let void_type = arena.alloc(Void.into());
@@ -274,7 +274,7 @@ impl<'c> Context<'c> {
 
       unnamed_str: arena.alloc_str("<unnamed>"),
       langopts: 23,
-      target_info: TargetInfo::host(),
+      target_info: TargetInfo::new(triple),
     };
     {
       let mut refmut = this.ast_type_interner.borrow_mut();
@@ -306,7 +306,7 @@ impl<'c> Context<'c> {
     self.arena
   }
 }
-use ::rcc_shared::{Arena, DiagMeta, Severity};
+use ::rcc_shared::{Arena, DiagMeta, Severity, Triple};
 impl<'c> Context<'c> {
   pub fn main_proto_validate(
     &self,

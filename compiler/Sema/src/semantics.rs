@@ -1543,12 +1543,9 @@ impl<'c> Sema<'c> {
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     assert_eq!(operator, Operator::Not);
-    let operand = operand
-      .lvalue_conversion(self.context())
-      .decay(self.context());
-
     let converted_operand = operand
       .lvalue_conversion(self.context())
+      .decay(self.context())
       .is_contextually_convertible_to_bool()?;
     Ok(se::Expression::new_rvalue(
       self.context(),
@@ -2276,6 +2273,7 @@ impl<'c> Sema<'c> {
       .expression(condition)
       .and_then(|e| {
         e.lvalue_conversion(self.context())
+          .decay(self.context())
           .is_contextually_convertible_to_bool()
       })
       .handle_with(
@@ -2310,6 +2308,7 @@ impl<'c> Sema<'c> {
       .expression(condition)
       .and_then(|e| {
         e.lvalue_conversion(self.context())
+          .decay(self.context())
           .is_contextually_convertible_to_bool()
       })
       .handle_with(
@@ -2356,6 +2355,7 @@ impl<'c> Sema<'c> {
       .expression(condition)
       .and_then(|e| {
         e.lvalue_conversion(self.context())
+          .decay(self.context())
           .is_contextually_convertible_to_bool()
       })
       .handle_with(

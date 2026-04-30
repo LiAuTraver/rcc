@@ -163,7 +163,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
     match self {
       Nullptr => target_info.pointer.alignment,
-      Void => Alignment::fixed::<1>(),
+      Void => Alignment::from_align_fixed::<1>(),
       Bool => target_info.boolean.alignment,
       Char | SChar | UChar => target_info.character.alignment,
       UShort | Short => target_info.short.alignment,
@@ -176,7 +176,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
       ComplexFloat => target_info.float.alignment, // FIXME: may be different
       ComplexDouble => target_info.double.alignment, // FIXME: may be different
       ComplexLongDouble => target_info.long_double.alignment, // FIXME: may be different
-      __IRBit => Alignment::fixed::<1>(),
+      __IRBit => Alignment::from_align_fixed::<1>(),
     }
   }
 }
@@ -206,10 +206,7 @@ impl<'c> TypeInfo<'c> for Array<'c> {
   }
 
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
-    Ord::max(
-      self.element_type.alignment(target_info),
-      target_info.min_array_align,
-    )
+    self.element_type.alignment(target_info)
   }
 }
 
@@ -324,7 +321,7 @@ impl<'c> TypeInfo<'c> for FunctionProto<'c> {
   /// not meaningful either.
   #[inline(always)]
   fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
-    Alignment::fixed::<1>()
+    Alignment::from_align_fixed::<1>()
   }
 }
 impl<'c> TypeInfo<'c> for Enum<'c> {

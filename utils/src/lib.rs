@@ -121,6 +121,8 @@ pub fn _debug_assertion_impl_(cond: bool, msg: &str) {
 }
 
 use ::std::{fmt::Debug, marker::Destruct, ops::Add};
+
+/// [`assert`] in constant evaluation, [`debug_assert`] in runtime evaluation.
 #[allow(non_camel_case_types)]
 pub struct const_pre;
 

@@ -6,7 +6,7 @@
 #![allow(non_camel_case_types)]
 
 use ::rcc_adt::{Signedness, Size};
-use ::rcc_utils::ensure_is_pod;
+use ::rcc_utils::{ensure_is_pod, static_assert};
 
 #[derive(
   Debug,
@@ -106,7 +106,9 @@ pub enum ObjectFormat {
 
 /// Triple is probably not needed nor useful for my compilation pipeline;
 /// see [module level documentation](self).
-#[derive(Debug, Default, Clone)]
+///
+/// Currently this is only be hold inside ast/ir sessions, and the module.
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Triple {
   pub architecture: Architecture,
   pub vendor: Vendor,
@@ -116,6 +118,7 @@ pub struct Triple {
 }
 
 ensure_is_pod!(Triple);
+static_assert!(::std::mem::size_of::<Triple>() <= 8, "Triple too large!");
 
 #[derive(
   Debug,

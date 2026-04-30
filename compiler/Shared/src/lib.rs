@@ -4,6 +4,7 @@
 mod arena;
 mod diagnosis;
 mod keyword;
+mod langopts;
 mod number;
 mod operator;
 mod source_info;
@@ -30,6 +31,7 @@ pub use self::{
     Operational as OpDiag, Severity,
   },
   keyword::Keyword,
+  langopts::LangOpts,
   number::Number,
   operator::{Category as OperatorCategory, Operator},
   source_info::{

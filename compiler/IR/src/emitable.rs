@@ -166,10 +166,6 @@ mod instruction {
     use super::*;
     impl<'c> Emitable<'c, ICmp> for Builder<'c> {
       fn emit(&mut self, icmp: ICmp, ast_type: ast::TypeRef<'c>) -> ValueID {
-        // debug_assert!(
-        //   RefEq::ref_eq(ast_type, self.ast().i1_bool_type()),
-        //   "ICmp inst must have boolean as return type."
-        // );
         debug_assert!(
           self.visit(icmp.lhs(), |value| value.ir_type.is_integer()
             || value.ir_type.is_pointer()),
@@ -193,10 +189,6 @@ mod instruction {
 
     impl<'c> Emitable<'c, FCmp> for Builder<'c> {
       fn emit(&mut self, fcmp: FCmp, ast_type: ast::TypeRef<'c>) -> ValueID {
-        // debug_assert!(
-        //   RefEq::ref_eq(ast_type, self.ast().i1_bool_type()),
-        //   "FCmp inst must have boolean as return type."
-        // );
         debug_assert!(
           self.visit(fcmp.lhs(), |value| value.ir_type.is_floating()),
           "FCmp lhs must be a floating-point type"

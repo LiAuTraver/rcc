@@ -1,6 +1,8 @@
 use ::rcc_utils::const_pre;
 use ::std::num::NonZeroU8;
 
+use super::{Size, SizeBit};
+
 /// 6.2.8p4:  Every valid alignment value shall be a nonnegative integral power of two.
 ///
 /// A tiny alignment type that can represent alignments from 1 to 256
@@ -19,75 +21,86 @@ pub struct Alignment {
 
 impl Alignment {
   #[inline]
-  pub const fn new(flag: u8) -> Option<Self> {
-    if flag != 0 {
-      // SAFETY: safe.
-      Some(Self::new_unchecked(flag))
+  pub const fn from_align_fixed<const ALIGN: usize>() -> Self {
+    const_pre + (ALIGN.is_power_of_two(), "not a power of two");
+    unsafe { Self::from_flag_unchecked(Self::usize2u8flag(ALIGN)) }
+  }
+
+  #[inline]
+  pub const fn from_size(size: Size) -> Option<Self> {
+    if size.is_power_of_two() {
+      Some(unsafe { Self::from_flag_unchecked(Self::usize2u8flag(size.get())) })
     } else {
       None
     }
   }
 
   #[inline]
-  pub const fn new_unchecked(flag: u8) -> Self {
-    const_pre + (flag != 0, "UB");
-    Self {
-      flag: unsafe { NonZeroU8::new_unchecked(flag) },
-    }
-  }
-
-  #[inline]
-  pub const fn fixed<const FLAG: u8>() -> Self {
-    const_pre + (FLAG != 0, "UB");
-    Self {
-      flag: unsafe { NonZeroU8::new_unchecked(FLAG) },
-    }
+  pub const fn from_size_unchecked(size: Size) -> Self {
+    Self::from_align_unchecked(size.get())
   }
 
   /// constructs an alignment which is the smallest power of two greater than or equal to `align`.
   ///
   /// if the alignment is zero, it will be treated as one.
   #[inline]
-  pub const fn from_align_roundup(align: usize) -> Self {
-    Self::new_unchecked(Self::usize2u8flag(align.next_power_of_two()))
-  }
-
-  #[inline]
-  pub const fn from_align_fixed<const ALIGN: usize>() -> Self {
-    const_pre + (ALIGN.is_power_of_two(), "not a power of two");
-    Self::new_unchecked(Self::usize2u8flag(ALIGN))
-  }
-
-  #[inline]
-  pub const fn from_align(align: usize) -> Self {
-    const_pre + (align.is_power_of_two(), "not a power of two");
-    Self::new_unchecked(Self::usize2u8flag(align))
-  }
-
-  #[inline]
-  pub const fn from_maybe_align(align: usize) -> Option<Self> {
-    if align.is_power_of_two() {
-      Some(Self::new_unchecked(Self::usize2u8flag(align)))
-    } else {
-      None
+  pub const fn from_size_ceil(size: Size) -> Self {
+    unsafe {
+      Self::from_flag_unchecked(Self::usize2u8flag(
+        size.get().next_power_of_two(),
+      ))
     }
   }
 
+  #[inline]
+  pub const fn from_size_bits(size_bits: SizeBit) -> Option<Self> {
+    match Size::try_from(size_bits) {
+      Ok(size) => Self::from_size(size),
+      Err(_) => None,
+    }
+  }
+
+  #[inline]
+  pub const fn from_size_bits_unchecked(size_bits: SizeBit) -> Self {
+    Self::from_align_unchecked(size_bits.get() / 8)
+  }
+
+  #[inline]
+  pub const fn from_size_bits_ceil(size_bits: SizeBit) -> Self {
+    Self::from_size_ceil(size_bits.ceil_to_byte())
+  }
+}
+impl Alignment {
   #[inline(always)]
   const fn usize2u8flag(usize: usize) -> u8 {
     (usize.trailing_zeros()) as u8 + 1
+  }
+
+  #[inline]
+  const unsafe fn from_flag_unchecked(flag: u8) -> Self {
+    const_pre + (flag != 0, "UB");
+    Self {
+      // SAFETY: safe.
+      flag: unsafe { NonZeroU8::new_unchecked(flag) },
+    }
+  }
+
+  #[inline]
+  const fn from_align_unchecked(align: usize) -> Self {
+    const_pre + (align.is_power_of_two(), "not a power of two");
+    unsafe { Self::from_flag_unchecked(Self::usize2u8flag(align)) }
   }
 }
 
 impl Alignment {
   #[inline]
-  pub const fn align_bytes(self) -> usize {
-    1usize << (self.flag.get() - 1)
+  pub const fn size(self) -> Size {
+    Size::from(1usize << (self.flag.get() - 1))
   }
 
   #[inline]
-  pub const fn align_bits(self) -> usize {
-    self.align_bytes() * 8
+  pub const fn size_bits(self) -> SizeBit {
+    SizeBit::from(self.size())
   }
 
   #[inline]
@@ -106,7 +119,11 @@ mod ops {
 
     #[inline]
     fn shl(self, rhs: u8) -> Self::Output {
-      Self::new_unchecked(self.flag.checked_add(rhs).expect("overflow!").get())
+      unsafe {
+        Self::from_flag_unchecked(
+          self.flag.checked_add(rhs).expect("overflow!").get(),
+        )
+      }
     }
   }
 
@@ -116,7 +133,11 @@ mod ops {
 
     #[inline]
     fn shr(self, rhs: u8) -> Self::Output {
-      Self::new(self.flag.get() - rhs).expect("downflow!")
+      if self.flag.get() > rhs {
+        unsafe { Self::from_flag_unchecked(self.flag.get() - rhs) }
+      } else {
+        panic!("downflow!")
+      }
     }
   }
 }
@@ -129,7 +150,7 @@ mod fmt {
       impl ::std::fmt::$trait for Alignment {
         #[inline]
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-          self.align_bytes().fmt(f)
+          self.size().fmt(f)
         }
       }
     };
@@ -153,89 +174,76 @@ mod fmt {
 #[allow(non_upper_case_globals)]
 mod tests {
   use ::rcc_utils::static_assert_eq;
+  use Alignment as A;
 
   #[allow(unused)]
   use super::*;
 
   #[test]
   #[should_panic]
-  const fn invalid_fixed() {
-    _ = Alignment::fixed::<0>();
-  }
-
-  #[test]
-  #[should_panic]
-  const fn invalid_new() {
-    _ = Alignment::new(0).unwrap();
-  }
-  #[test]
-  #[should_panic]
   const fn invalid_new_unchecked() {
-    _ = Alignment::new_unchecked(0);
-  }
-  #[test]
-  #[should_panic]
-  const fn invalid_from_fixed() {
-    _ = Alignment::fixed::<0>();
+    _ = unsafe { A::from_flag_unchecked(0) };
   }
   #[test]
   #[should_panic]
   const fn invalid_from_align_fixed() {
-    _ = Alignment::from_align_fixed::<3>();
+    _ = A::from_align_fixed::<3>();
   }
   #[test]
   #[should_panic]
   const fn invalid_from_zero_align() {
-    _ = Alignment::from_align_fixed::<0>();
+    _ = A::from_align_fixed::<0>();
   }
   #[test]
   const fn ctors_fixed() {
-    static_assert_eq!(Alignment::fixed::<1>().align_bytes(), 1);
-    static_assert_eq!(Alignment::fixed::<2>().align_bytes(), 2);
-    static_assert_eq!(Alignment::fixed::<3>().align_bytes(), 4);
-    static_assert_eq!(Alignment::fixed::<4>().align_bytes(), 8);
-    static_assert_eq!(Alignment::fixed::<5>().align_bytes(), 16);
-    static_assert_eq!(Alignment::fixed::<6>().align_bytes(), 32);
-    static_assert_eq!(Alignment::fixed::<7>().align_bytes(), 64);
-    static_assert_eq!(Alignment::fixed::<8>().align_bytes(), 128);
-    static_assert_eq!(Alignment::fixed::<9>().align_bytes(), 256);
-    static_assert_eq!(Alignment::fixed::<10>().align_bytes(), 512);
+    static_assert_eq!(A::from_align_fixed::<1>().power(), 0);
+    static_assert_eq!(A::from_align_fixed::<2>().power(), 1);
+    static_assert_eq!(A::from_align_fixed::<4>().power(), 2);
+    static_assert_eq!(A::from_align_fixed::<8>().power(), 3);
 
-    static_assert_eq!(Alignment::from_align_fixed::<1>().power(), 0);
-    static_assert_eq!(Alignment::from_align_fixed::<2>().power(), 1);
-    static_assert_eq!(Alignment::from_align_fixed::<4>().power(), 2);
-    static_assert_eq!(Alignment::from_align_fixed::<8>().power(), 3);
-
-    static_assert_eq!(Alignment::from_maybe_align(1).unwrap().align_bytes(), 1);
-    static_assert_eq!(Alignment::from_maybe_align(2).unwrap().align_bytes(), 2);
-    static_assert_eq!(Alignment::from_maybe_align(3), None);
-    static_assert_eq!(Alignment::from_maybe_align(4).unwrap().align_bytes(), 4);
-    static_assert_eq!(Alignment::from_maybe_align(5), None);
-    static_assert_eq!(Alignment::from_maybe_align(6), None);
-    static_assert_eq!(Alignment::from_maybe_align(7), None);
-    static_assert_eq!(Alignment::from_maybe_align(8).unwrap().align_bytes(), 8);
+    static_assert_eq!(A::from_size(1.into()).unwrap().size().get(), 1);
+    static_assert_eq!(A::from_size(2.into()).unwrap().size().get(), 2);
+    static_assert_eq!(A::from_size(3.into()), None);
+    static_assert_eq!(A::from_size(4.into()).unwrap().size().get(), 4);
+    static_assert_eq!(A::from_size(5.into()), None);
+    static_assert_eq!(A::from_size(6.into()), None);
+    static_assert_eq!(A::from_size(7.into()), None);
+    static_assert_eq!(A::from_size(8.into()).unwrap().size().get(), 8);
   }
   #[test]
   const fn ctors_align() {
-    static_assert_eq!(Alignment::from_align_roundup(0).align_bytes(), 1);
-    static_assert_eq!(Alignment::from_align_roundup(1).align_bytes(), 1);
-    static_assert_eq!(Alignment::from_align_roundup(2).align_bytes(), 2);
-    static_assert_eq!(Alignment::from_align_roundup(3).align_bytes(), 4);
-    static_assert_eq!(Alignment::from_align_roundup(4).align_bytes(), 4);
-    static_assert_eq!(Alignment::from_align_roundup(5).align_bytes(), 8);
-    static_assert_eq!(Alignment::from_align_roundup(6).align_bytes(), 8);
-    static_assert_eq!(Alignment::from_align_roundup(7).align_bytes(), 8);
-    static_assert_eq!(Alignment::from_align_roundup(8).align_bytes(), 8);
-    static_assert_eq!(Alignment::from_align_roundup(9).align_bytes(), 16);
-    static_assert_eq!(Alignment::from_align_roundup(15).align_bytes(), 16);
-    static_assert_eq!(Alignment::from_align_roundup(16).align_bytes(), 16);
-    static_assert_eq!(Alignment::from_align_roundup(17).align_bytes(), 32);
+    static_assert_eq!(A::from_size_ceil(0.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_ceil(1.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_ceil(2.into()).size().get(), 2);
+    static_assert_eq!(A::from_size_ceil(3.into()).size().get(), 4);
+    static_assert_eq!(A::from_size_ceil(4.into()).size().get(), 4);
+    static_assert_eq!(A::from_size_ceil(5.into()).size().get(), 8);
+    static_assert_eq!(A::from_size_ceil(6.into()).size().get(), 8);
+    static_assert_eq!(A::from_size_ceil(7.into()).size().get(), 8);
+    static_assert_eq!(A::from_size_ceil(8.into()).size().get(), 8);
+    static_assert_eq!(A::from_size_ceil(9.into()).size().get(), 16);
+    static_assert_eq!(A::from_size_ceil(15.into()).size().get(), 16);
+    static_assert_eq!(A::from_size_ceil(16.into()).size().get(), 16);
+    static_assert_eq!(A::from_size_ceil(17.into()).size().get(), 32);
+
+    static_assert_eq!(A::from_size_bits_ceil(0.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_bits_ceil(1.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_bits_ceil(2.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_bits_ceil(7.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_bits_ceil(8.into()).size().get(), 1);
+    static_assert_eq!(A::from_size_bits_ceil(9.into()).size().get(), 2);
+    static_assert_eq!(A::from_size_bits_ceil(15.into()).size().get(), 2);
+    static_assert_eq!(A::from_size_bits_ceil(16.into()).size().get(), 2);
+    static_assert_eq!(A::from_size_bits_ceil(17.into()).size().get(), 4);
+    static_assert_eq!(A::from_size_bits_ceil(31.into()).size().get(), 4);
+    static_assert_eq!(A::from_size_bits_ceil(32.into()).size().get(), 4);
+    static_assert_eq!(A::from_size_bits_ceil(33.into()).size().get(), 8);
   }
 
   #[test]
   const fn ops() {
-    const a: Alignment = Alignment::fixed::<3>();
-    static_assert_eq!((a << 2).align_bytes(), 16);
-    static_assert_eq!((a >> 2).align_bytes(), 1);
+    const a: Alignment = A::from_align_fixed::<4>();
+    static_assert_eq!((a << 2).size().get(), 16);
+    static_assert_eq!((a >> 2).size().get(), 1);
   }
 }

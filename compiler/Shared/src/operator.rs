@@ -127,8 +127,8 @@ pub enum Operator {
   #[strum(serialize = "?:")]
   Elvis,
 
-  #[strum(disabled)]
   #[default]
+  #[strum(serialize = "<EOF>")]
   EOF,
 }
 use Operator::*;

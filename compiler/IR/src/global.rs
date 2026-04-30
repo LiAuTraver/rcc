@@ -7,7 +7,7 @@ use super::{DataLayout, ValueID};
 #[derive(Debug)]
 pub struct Module<'d> {
   pub file_index: FileId,
-  pub triple: &'d Triple,
+  pub triple: Triple,
   pub data_layout: &'d DataLayout,
   /// global function and variable entry. Shall be either [`Function`] or [`Variable`], or [`Constant`].
   pub globals: Vec<ValueID>,
@@ -16,7 +16,7 @@ pub struct Module<'d> {
 impl<'d> Module<'d> {
   pub fn new_empty(
     file_index: FileId,
-    triple: &'d Triple,
+    triple: Triple,
     data_layout: &'d DataLayout,
   ) -> Self {
     Self {
@@ -39,20 +39,6 @@ pub struct Function<'c> {
 }
 
 impl<'c> Function<'c> {
-  pub fn new(
-    name: StrRef<'c>,
-    params: Vec<ValueID>,
-    blocks: Vec<ValueID>,
-    is_variadic: bool,
-  ) -> Self {
-    Self {
-      name,
-      params,
-      blocks,
-      is_variadic,
-    }
-  }
-
   pub fn new_empty(
     name: StrRef<'c>,
     params: Vec<ValueID>,

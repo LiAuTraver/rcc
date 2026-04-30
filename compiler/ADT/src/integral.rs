@@ -8,7 +8,7 @@ mod private {
   pub trait Sealed {}
   impl Sealed for super::SizeBit {}
 }
-pub const trait ToU8: private::Sealed {
+pub(crate) const trait ToU8: private::Sealed {
   fn u8(self) -> u8;
 }
 impl const ToU8 for SizeBit {

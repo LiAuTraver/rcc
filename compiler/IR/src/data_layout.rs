@@ -28,10 +28,19 @@ pub struct TypeSpecs {
   preferred_alignment: Alignment,
 }
 impl TypeSpecs {
+  /// constructs a [`TypeSpecs`] from a given [`Size`],
+  /// rounding up the alignment.
   pub fn from_size(size: Size) -> Self {
-    Self::new(size.into(), Alignment::from_align(size.get()))
+    Self::new(size.into(), Alignment::from_size_ceil(size))
   }
 
+  /// constructs a [`TypeSpecs`] from a given [`SizeBit`],
+  /// rounding up the alignment.
+  pub fn from_size_bits(size_bits: SizeBit) -> Self {
+    Self::new(size_bits, Alignment::from_size_bits_ceil(size_bits))
+  }
+
+  /// constructs a [`TypeSpecs`] from a given [`SizeBit`] and [`Alignment`].
   pub const fn new(width: SizeBit, alignment: Alignment) -> Self {
     Self {
       width,
@@ -40,6 +49,7 @@ impl TypeSpecs {
     }
   }
 
+  /// manually specified all three fields.
   pub const fn new_preferred(
     width: SizeBit,
     alignment: Alignment,
@@ -59,6 +69,11 @@ impl TypeSpecs {
   }
 
   #[inline]
+  pub fn size(&self) -> Option<Size> {
+    Size::try_from(self.width).ok()
+  }
+
+  #[inline]
   pub const fn align(&self) -> Alignment {
     self.alignment
   }
@@ -75,8 +90,7 @@ pub struct DataLayout {
 
   pub pointer_specs: TypeSpecs,
 
-  // TODO: should be a (hashset/std::unordered_map fro rust). currently only works for 64bit cuz LL and L has different size.
-  pub integer_specs: [TypeSpecs; 5],
+  pub integer_specs: [TypeSpecs; 6],
   pub float_specs: [TypeSpecs; 2],
 
   pub stack_align: Alignment,
@@ -85,7 +99,11 @@ pub struct DataLayout {
   // TODO: struct specs
 }
 impl DataLayout {
-  pub fn new(triple: &Triple) -> Self {
+  pub fn host() -> Self {
+    Self::new(Triple::HOST)
+  }
+
+  pub fn new(triple: Triple) -> Self {
     let endianess = triple.endianness().unwrap_or_default();
     let symbol_decoration = triple.object_format.into();
 
@@ -95,18 +113,26 @@ impl DataLayout {
     let pointer_specs = TypeSpecs::from_size(data_model.pointer_width());
 
     let integer_specs = [
-      TypeSpecs::new(SizeBit::U1, Alignment::fixed::<1>()),
-      TypeSpecs::from_size(data_model.char_size()),
-      TypeSpecs::from_size(data_model.short_size()),
-      TypeSpecs::from_size(data_model.int_size()),
-      // TypeSpecs::from_size(data_model.long_size()),
-      TypeSpecs::from_size(data_model.long_long_size()),
+      TypeSpecs::from_size_bits(SizeBit::U1),
+      TypeSpecs::from_size(Size::U8),
+      TypeSpecs::from_size(Size::U16),
+      TypeSpecs::from_size(Size::U32),
+      TypeSpecs::from_size(Size::U64),
+      TypeSpecs::from_size(Size::U128),
     ];
     let float_specs = [
-      TypeSpecs::from_size(data_model.float_size()),
-      TypeSpecs::from_size(data_model.double_size()),
-      // TypeSpecs::from_size(data_model.long_double_size()),
+      TypeSpecs::from_size(Size::U32),
+      TypeSpecs::from_size(Size::U64),
     ];
+
+    fn strict_le(lhs: &TypeSpecs, rhs: &TypeSpecs) -> bool {
+      lhs.size_bits() < rhs.size_bits()
+    }
+
+    debug_assert!(
+      integer_specs.is_sorted_by(strict_le)
+        && float_specs.is_sorted_by(strict_le)
+    );
 
     Self {
       endianess,
@@ -114,7 +140,7 @@ impl DataLayout {
       pointer_specs,
       integer_specs,
       float_specs,
-      stack_align: Alignment::fixed::<8>(),
+      stack_align: Alignment::from_align_fixed::<128>(),
       // just a placeholder to disable `no drop`, we may make integer_specs a vec later, who knows.
       _this_struct_is_not_designed_to_be_pod: Vec::with_capacity(0),
     }
@@ -138,11 +164,12 @@ impl DataLayout {
   }
 
   pub fn integer_specs(&self, size_bit: SizeBit) -> TypeSpecs {
-    *self
-      .integer_specs
-      .iter()
-      .find(|spec| spec.size_bits() == size_bit)
-      .expect("unsupported integer width!")
+    for specs in self.integer_specs.iter() {
+      if specs.size_bits() >= size_bit {
+        return *specs;
+      }
+    }
+    *self.integer_specs.last().expect("no specs!")
   }
 }
 mod fmt {
@@ -176,10 +203,10 @@ mod fmt {
 
   impl fmt::Display for TypeSpecs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      write!(f, "{}:{}", self.size_bits(), self.align().align_bits())?;
+      write!(f, "{}:{}", self.size_bits(), self.align().size_bits())?;
 
       if self.preferred_align() != self.align() {
-        write!(f, ":{}", self.preferred_align().align_bits())?;
+        write!(f, ":{}", self.preferred_align().size_bits())?;
       }
       Ok(())
     }
@@ -195,20 +222,27 @@ mod fmt {
         self.pointer_specs
       )?;
 
+      let needs_print = |specs: &&TypeSpecs| {
+        !specs.size_bits().get().is_multiple_of(8)
+        // ^^^ / vvv size is a power of 2.
+          || specs.size_bits() >= self.pointer_specs.size_bits()
+          || specs.align()
+            != Alignment::from_size_bits_unchecked(specs.size_bits())
+          || specs.preferred_align() != specs.align()
+      };
+
       // only print the integer specs that are eq/gt the pointer size
       self
         .integer_specs
         .iter()
-        .filter(|spec| {
-          spec.size_bits() >= self.pointer_specs.size_bits()
-            || !spec.size_bits().get().is_power_of_two() // always print non-power-of-two types 
-        })
+        .skip(1) //  the first is always i1.
+        .filter(needs_print)
         .try_for_each(|spec| write!(f, "i{}-", spec))?;
 
       self
         .float_specs
         .iter()
-        .filter(|spec| spec.size_bits() >= self.pointer_specs.size_bits())
+        .filter(needs_print)
         .try_for_each(|spec| write!(f, "f{}-", spec))?;
 
       // FIXME: currently just assume the legal integer width is the power of 2 and also >= 8, <= pointer_width.
