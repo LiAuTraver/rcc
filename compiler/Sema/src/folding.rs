@@ -719,7 +719,9 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
             c.as_integral_unchecked()
               .cast(
                 target_primitive.size_bits(session.ast()),
-                target_primitive.is_signed().into(),
+                target_primitive
+                  .signedness(session.ast())
+                  .expect("type has no signedness"),
               )
               .into(),
           ))
@@ -758,8 +760,8 @@ impl<'c> Folding<'c, ImplicitCast<'c>> for Expression<'c> {
             .size_bits(session.ast()),
           target_type
             .as_primitive_unchecked()
-            .is_signed_integer()
-            .into(),
+            .signedness(session.ast())
+            .expect("type has no signedness"),
         );
         Success(alloc_constant(integral))
       },

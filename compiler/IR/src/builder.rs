@@ -1372,7 +1372,7 @@ impl<'c> Builder<'c> {
     ast_type: ast::TypeRef<'c>,
   ) -> ValueID {
     let signedness = ast_type
-      .signedness()
+      .signedness(self.ast())
       .expect("integer always has signedness");
     use Signedness::*;
     match signedness {
@@ -1387,7 +1387,7 @@ impl<'c> Builder<'c> {
     ast_type: ast::TypeRef<'c>,
   ) -> ValueID {
     let signedness = self
-      .visit(operand, |value| value.ast_type.signedness())
+      .visit(operand, |value| value.ast_type.signedness(self.ast()))
       .expect("integer always has signedness");
     use Signedness::*;
     match signedness {
@@ -1439,12 +1439,12 @@ impl<'c> Builder<'c> {
       Left(i) => self.emit(
         ConstantData::Integral(i.cast(
           ast_type.size_bits(self.ast()),
-          ast_type.signedness().expect("never fails"),
+          ast_type.signedness(self.ast()).expect("never fails"),
         )),
         ast_type,
       ),
       Right(width) => match Ord::cmp(&width, &ast_type.size_bits(self.ast())) {
-        Less => match ast_type.signedness() {
+        Less => match ast_type.signedness(self.ast()) {
           Some(Signed) => self.emit(Sext::new(operand), ast_type),
           Some(Unsigned) => self.emit(Zext::new(operand), ast_type),
           None => unreachable!(),
@@ -1469,11 +1469,11 @@ impl<'c> Builder<'c> {
       right,
     } = binary;
 
+    use Operator::*;
+
     match operator {
-      Operator::LogicalAnd =>
-        self.logical_and(*operator, left, right, ast_type, span),
-      Operator::LogicalOr =>
-        self.logical_or(*operator, left, right, ast_type, span),
+      LogicalAnd => self.logical_and(*operator, left, right, ast_type, span),
+      LogicalOr => self.logical_or(*operator, left, right, ast_type, span),
       _ => {
         let left = self.expression(left);
         let right = self.expression(right);
@@ -1649,7 +1649,7 @@ impl<'c> Builder<'c> {
         right,
         ast_type,
         lhs_ty
-          .signedness()
+          .signedness(self.ast())
           .expect("arithmetic type always has signedness."),
         span,
       ),
@@ -1790,7 +1790,10 @@ impl<'c> Builder<'c> {
         .is_some_and(|p| p.is_integer())
     );
 
-    let bitshift = match (operator, lookup!(self, left).ast_type.signedness()) {
+    let bitshift = match (
+      operator,
+      lookup!(self, left).ast_type.signedness(self.ast()),
+    ) {
       (LeftShift, Some(_)) => Shl,
       (RightShift, Some(Signed)) => AShr,
       (RightShift, Some(Unsigned)) => LShr,
@@ -1851,19 +1854,19 @@ impl<'c> Builder<'c> {
         (
           value.ast_type.as_primitive_unchecked().is_integer(),
           value.ast_type.size_bits(self.ast()),
-          value.ast_type.signedness().unwrap(),
+          value.ast_type.signedness(self.ast()).unwrap(),
         )
       }),
       self.visit(right, |value| {
         (
           value.ast_type.as_primitive_unchecked().is_integer(),
           value.ast_type.size_bits(self.ast()),
-          value.ast_type.signedness().unwrap(),
+          value.ast_type.signedness(self.ast()).unwrap(),
         )
       }),
     );
     let signedness = self
-      .visit(left, |value| value.ast_type.signedness())
+      .visit(left, |value| value.ast_type.signedness(self.ast()))
       .expect("integer always have signedness");
 
     self.do_integral_relational(
@@ -2081,10 +2084,11 @@ impl<'c> Builder<'c> {
     ast_type: ast::TypeRef<'c>,
     _span: SourceSpan,
   ) -> ValueID {
+    use Operator::*;
     let is_floating = self.visit(operand, |value| value.ir_type.is_floating());
     match (operator, is_floating) {
-      (Operator::Plus, false) => self.integral_cast(operand, ast_type),
-      (Operator::Minus, false) => {
+      (Plus, false) => self.integral_cast(operand, ast_type),
+      (Minus, false) => {
         let casted = self.integral_cast(operand, ast_type);
         let (width, is_constant) = self.visit(casted, |value| {
           (
@@ -2109,8 +2113,8 @@ impl<'c> Builder<'c> {
       },
       // no need to anything, the plus one forr integral maybe has a pointer operand(may ext or trunc to ast_type),
       // float does not have such exception(which means ast_type is same as operand's.)
-      (Operator::Plus, true) => operand,
-      (Operator::Minus, true) =>
+      (Plus, true) => operand,
+      (Minus, true) =>
         self.emit(inst::Unary::new(inst::UnaryOp::FNeg, operand), ast_type),
       _ => unreachable!(),
     }
@@ -2144,7 +2148,7 @@ impl<'c> Builder<'c> {
           one,
           ast_type,
           ast_type
-            .signedness()
+            .signedness(self.ast())
             .expect("arithematic type always have signedness"),
           span,
         )

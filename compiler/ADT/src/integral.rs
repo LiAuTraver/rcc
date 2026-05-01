@@ -45,12 +45,6 @@ impl Signedness {
   }
 }
 
-impl const From<bool> for Signedness {
-  fn from(signed: bool) -> Self {
-    if signed { Signed } else { Unsigned }
-  }
-}
-
 /// A width-aware integer that can represent any C integer type, inspired by
 /// [LLVM/Clang's APInt](https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/ADT/APInt.h?=#L78),
 /// this provides a unified representation for all integer constants.

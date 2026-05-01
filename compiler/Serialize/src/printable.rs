@@ -248,6 +248,7 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
       printer: &mut impl Printer<'c>,
       palette: &Palette,
       block_id: ValueID,
+      is_entry: bool,
     ) {
       let use_list = printer.ir().get_use_list(block_id);
       if !use_list.is_empty() {
@@ -265,7 +266,7 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
           ),
           &palette.info,
         );
-      } else {
+      } else if !is_entry {
         printer.write("\t\t\t\t\t\t; no Predecessors!", &palette.error)
       }
     }
@@ -320,7 +321,7 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
     } else {
       ir_function_type.params.iter().enumerate().for_each(
         |(index, param_ty)| {
-          printer.write(suff!(" " => param_ty), &palette.meta);
+          printer.write(param_ty, &palette.meta);
           printer.write(
             if variant.params.is_empty() || index + 1 == variant.params.len() {
               ""
@@ -335,21 +336,25 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
     printer.write(")", &palette.skeleton);
     if variant.is_definition() {
       printer.writeln(" {", &palette.skeleton);
-      variant.blocks.iter().for_each(|&block_id| {
-        printer
-          .write(suff!(":" => printer.get_id(block_id)), &palette.skeleton);
-        let block = &*lookup!(printer, block_id);
-        preds(printer, palette, block_id);
-        printer.newline();
-        Print::print(
-          block,
-          printer,
-          "\t",
-          false,
-          palette,
-          block.data.as_basicblock_unchecked(),
-        );
-      });
+      variant
+        .blocks
+        .iter()
+        .enumerate()
+        .for_each(|(index, &block_id)| {
+          printer
+            .write(suff!(":" => printer.get_id(block_id)), &palette.skeleton);
+          preds(printer, palette, block_id, index == 0);
+          let block = &*lookup!(printer, block_id);
+          printer.newline();
+          Print::print(
+            block,
+            printer,
+            "\t",
+            false,
+            palette,
+            block.data.as_basicblock_unchecked(),
+          );
+        });
       printer.write("}", &palette.skeleton);
     }
     printer.newline();

@@ -1,12 +1,14 @@
 //! applied during unary operations, including (implicit) unary inside binary operations
 
-use ::rcc_adt::FloatFormat;
+use ::rcc_adt::{FloatFormat, Signedness};
+use Signedness::*;
 
 use super::{
   CastType,
   Primitive::{self, *},
-  Type,
+  Type, TypeInfo,
 };
+use crate::TargetInfo;
 
 pub trait Promotion {
   #[must_use]
@@ -17,23 +19,37 @@ pub trait Promotion {
 
 impl Primitive {
   pub const fn is_integer(&self) -> bool {
-    self.is_signed_integer() || self.is_unsigned()
+    matches!(
+      self,
+      Bool
+        | Char
+        | SChar
+        | UChar
+        | Short
+        | UShort
+        | Int
+        | UInt
+        | Long
+        | ULong
+        | LongLong
+        | ULongLong
+    )
   }
 
-  pub const fn is_signed_integer(&self) -> bool {
-    matches!(self, Char | SChar | Short | Int | Long | LongLong)
+  pub const fn is_signed_integer(&self, target_info: &TargetInfo) -> bool {
+    matches!(self.signedness(target_info), Some(Signed))
   }
 
   pub const fn is_arithmetic(&self) -> bool {
     self.is_integer() || self.is_floating_point()
   }
 
-  pub const fn is_signed(&self) -> bool {
-    self.is_signed_integer() || self.is_floating_point()
+  pub const fn is_signed(&self, target_info: &TargetInfo) -> bool {
+    self.is_signed_integer(target_info) || self.is_floating_point()
   }
 
-  pub const fn is_unsigned(&self) -> bool {
-    matches!(self, Bool | UChar | UShort | UInt | ULong | ULongLong)
+  pub const fn is_unsigned(&self, target_info: &TargetInfo) -> bool {
+    matches!(self.signedness(target_info), Some(Unsigned))
   }
 
   pub const fn integer_rank(&self) -> u8 {

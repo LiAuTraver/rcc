@@ -25,33 +25,33 @@ pub type TypeRefMut<'c> = &'c mut Type<'c>;
 ensure_is_pod!(Type);
 ensure_is_pod!(TypeRef);
 impl<'c> Type<'c> {
-  fn is_unsigned(&self) -> bool {
-    match self {
-      Type::Primitive(p) => p.is_unsigned(),
-      Type::Pointer(_) => true,
-      Type::Enum(e) => e.underlying_type.is_unsigned(),
-      _ => false,
-    }
-  }
+  // fn is_unsigned(&self) -> bool {
+  //   match self {
+  //     Type::Primitive(p) => p.is_unsigned(),
+  //     Type::Pointer(_) => true,
+  //     Type::Enum(e) => e.underlying_type.is_unsigned(),
+  //     _ => false,
+  //   }
+  // }
 
-  fn is_signed(&self) -> bool {
-    match self {
-      Type::Primitive(p) => p.is_signed(),
-      Type::Enum(e) => e.underlying_type.is_signed(),
-      _ => false,
-    }
-  }
+  // fn is_signed(&self) -> bool {
+  //   match self {
+  //     Type::Primitive(p) => p.is_signed(),
+  //     Type::Enum(e) => e.underlying_type.is_signed(),
+  //     _ => false,
+  //   }
+  // }
 
-  pub fn signedness(&self) -> Option<Signedness> {
-    use Signedness::*;
-    if self.is_signed() {
-      Some(Signed)
-    } else if self.is_unsigned() {
-      Some(Unsigned)
-    } else {
-      None
-    }
-  }
+  // pub fn signedness(&self) -> Option<Signedness> {
+  //   use Signedness::*;
+  //   if self.is_signed() {
+  //     Some(Signed)
+  //   } else if self.is_unsigned() {
+  //     Some(Unsigned)
+  //   } else {
+  //     None
+  //   }
+  // }
 }
 impl<'c> Type<'c> {
   pub fn is_modifiable(&self, target_info: &TargetInfo) -> bool {

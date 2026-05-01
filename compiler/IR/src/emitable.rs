@@ -1,3 +1,4 @@
+use ::rcc_adt::SizeBit;
 use ::rcc_ast::types::{self as ast, TypeInfo};
 use ::rcc_utils::RefEq;
 
@@ -88,7 +89,6 @@ mod instruction {
 
   use super::*;
   mod terminator {
-    use ::rcc_adt::SizeBit;
 
     use super::*;
     impl<'c> Emitable<'c, Jump> for Builder<'c> {
@@ -211,15 +211,19 @@ mod instruction {
   }
   // Cast vvv
   mod cast {
+    use ::rcc_adt::SizeBit;
+
     use super::*;
     impl<'c> Emitable<'c, Zext> for Builder<'c> {
       fn emit(&mut self, zext: Zext, ast_type: ast::TypeRef<'c>) -> ValueID {
         debug_assert!(
-          ast_type.as_primitive().is_some_and(|p| p.is_unsigned())
+          ast_type
+            .as_primitive()
+            .is_some_and(|p| p.is_unsigned(self.ast()))
             || self.visit(zext.operand(), |value| value
               .ir_type
               .as_integer()
-              .is_some_and(|&i| i.get() == 1)),
+              .is_some_and(|&i| i == SizeBit::U1)),
           "Zext target type must be an unsigned or the operand is an i1 \
            boolean, (which is an exception because it makes nosense to sext \
            it)"
@@ -239,7 +243,7 @@ mod instruction {
         debug_assert!(
           ast_type
             .as_primitive()
-            .is_some_and(|p| p.is_signed_integer()),
+            .is_some_and(|p| p.is_signed_integer(self.ast())),
           "Sext target type must be a signed integer"
         );
         debug_assert!(
@@ -318,7 +322,7 @@ mod instruction {
         debug_assert!(
           ast_type
             .as_primitive()
-            .is_some_and(|p| p.is_signed_integer()),
+            .is_some_and(|p| p.is_signed_integer(self.ast())),
           "FPToSI target type must be a signed integer"
         );
         debug_assert!(
@@ -339,7 +343,9 @@ mod instruction {
         ast_type: ast::TypeRef<'c>,
       ) -> ValueID {
         debug_assert!(
-          ast_type.as_primitive().is_some_and(|p| p.is_unsigned()),
+          ast_type
+            .as_primitive()
+            .is_some_and(|p| p.is_unsigned(self.ast())),
           "FPToUI target type must be an unsigned integer"
         );
         debug_assert!(
@@ -375,7 +381,7 @@ mod instruction {
           self.visit(uitofp.operand(), |value| value
             .ast_type
             .as_primitive_unchecked()
-            .is_unsigned()),
+            .is_unsigned(self.ast())),
           "UIToFP operand must be an unsigned integer (this would be wrong \
            though, in IR level the signedness does not matter."
         );
@@ -440,7 +446,7 @@ mod instruction {
           self.visit(sitofp.operand(), |value| value
             .ast_type
             .as_primitive_unchecked()
-            .is_signed_integer()),
+            .is_signed_integer(self.ast())),
           "SIToFP operand must be a signed integer (this would be wrong \
            though)."
         );

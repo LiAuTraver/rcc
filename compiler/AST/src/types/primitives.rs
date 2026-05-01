@@ -126,7 +126,7 @@ impl Primitive {
       // done
       return (lhs, Noop, Noop);
     }
-    if lhs.is_unsigned() == rhs.is_unsigned() {
+    if lhs.is_unsigned(target_info) == rhs.is_unsigned(target_info) {
       return if lhs.integer_rank() > rhs.integer_rank() {
         (lhs, Noop, IntegralCast)
       } else {
@@ -138,8 +138,8 @@ impl Primitive {
       rhs: Primitive,
       target_info: &TargetInfo,
     ) -> (Primitive, CastType, CastType) {
-      debug_assert!(!lhs.is_unsigned());
-      debug_assert!(rhs.is_unsigned());
+      debug_assert!(!lhs.is_unsigned(target_info));
+      debug_assert!(rhs.is_unsigned(target_info));
       if lhs.integer_rank() >= rhs.integer_rank() {
         (lhs, Noop, IntegralCast)
       } else if rhs.size(target_info) > lhs.size(target_info) {
@@ -153,7 +153,7 @@ impl Primitive {
       }
     }
 
-    if lhs.is_unsigned() {
+    if lhs.is_unsigned(target_info) {
       signed_and_unsigned(rhs, lhs, target_info)
     } else {
       signed_and_unsigned(lhs, rhs, target_info)

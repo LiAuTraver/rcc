@@ -1,4 +1,5 @@
-use ::rcc_adt::{Alignment, Floating, Integral, Size, SizeBit};
+use ::rcc_adt::{Alignment, Floating, Integral, Signedness, Size, SizeBit};
+use Signedness::*;
 
 use super::{
   Array, ArraySize, Enum, FunctionProto, Pointer,
@@ -18,6 +19,8 @@ pub const trait TypeInfo<'c> {
   fn extent(&self) -> usize;
   #[must_use]
   fn alignment(&self, target_info: &TargetInfo) -> Alignment;
+  #[must_use]
+  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness>;
   #[inline(always)]
   #[must_use]
   fn is_complete(&self, target_info: &TargetInfo) -> bool {
@@ -49,6 +52,11 @@ impl<'c> TypeInfo<'c> for QualifiedType<'c> {
   #[inline(always)]
   fn extent(&self) -> usize {
     self.unqualified_type.extent()
+  }
+
+  #[inline(always)]
+  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
+    self.unqualified_type.signedness(target_info)
   }
 
   #[inline(always)]
@@ -101,6 +109,15 @@ impl<'c> TypeInfo<'c> for Type<'c> {
       Primitive Array Pointer FunctionProto Enum Record Union
     )
   }
+
+  #[inline]
+  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
+    ::rcc_utils::static_dispatch!(
+      self,
+      |variant| variant.signedness(target_info) =>
+      Primitive Array Pointer FunctionProto Enum Record Union
+    )
+  }
 }
 impl<'c> const TypeInfo<'c> for Primitive {
   /// integral size should be aligned with method `Primitive::integer_width()`.
@@ -143,7 +160,9 @@ impl<'c> const TypeInfo<'c> for Primitive {
       _ if self.is_integer() => Constant::Integral(Integral::new(
         0,
         self.size_bits(target_info),
-        self.is_signed().into(),
+        self
+          .signedness(target_info)
+          .expect("type has no signedness"),
       )),
       _ if self.is_floating_point() =>
         Constant::Floating(Floating::zero(self.floating_format())),
@@ -179,15 +198,29 @@ impl<'c> const TypeInfo<'c> for Primitive {
       __IRBit => Alignment::from_align_fixed::<1>(),
     }
   }
+
+  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
+    use Primitive::*;
+    match self {
+      Void => None,
+      Nullptr => Some(Unsigned),
+      Char => Some(target_info.char_signess),
+      Bool | UChar | UShort | UInt | ULong | ULongLong => Some(Unsigned),
+      SChar | Short | Int | Long | LongLong | Float | Double | LongDouble
+      | ComplexFloat | ComplexDouble | ComplexLongDouble => Some(Signed),
+      __IRBit =>
+        panic!("ir bit i1 is unsigned, but you probably should not call this"),
+    }
+  }
 }
 
 impl<'c> TypeInfo<'c> for Array<'c> {
   fn size(&self, target_info: &TargetInfo) -> Size {
-    match &self.size {
+    match self.size {
       ArraySize::Constant(sz) =>
-        (sz * self.element_type.unqualified_type.size(target_info).get()).into(),
+        self.element_type.unqualified_type.size(target_info) * sz,
       ArraySize::Incomplete => Size::U0,
-      ArraySize::Variable(_id) => todo!("VLA"), // ignore for now
+      ArraySize::Variable(_id) => Size::U0, // ignore for now
     }
   }
 
@@ -207,6 +240,10 @@ impl<'c> TypeInfo<'c> for Array<'c> {
 
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
     self.element_type.alignment(target_info)
+  }
+
+  fn signedness(&self, _target_info: &TargetInfo) -> Option<Signedness> {
+    None
   }
 }
 
@@ -231,6 +268,11 @@ impl<'c> TypeInfo<'c> for Record<'c> {
 
   fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
     todo!()
+  }
+
+  #[inline(always)]
+  fn signedness(&self, _target_info: &TargetInfo) -> Option<Signedness> {
+    None
   }
 }
 
@@ -263,6 +305,11 @@ impl<'c> TypeInfo<'c> for Union<'c> {
   fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
     todo!()
   }
+
+  #[inline(always)]
+  fn signedness(&self, _target_info: &TargetInfo) -> Option<Signedness> {
+    None
+  }
 }
 impl<'c> const TypeInfo<'c> for Pointer<'c> {
   #[inline(always)]
@@ -289,13 +336,18 @@ impl<'c> const TypeInfo<'c> for Pointer<'c> {
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
     target_info.pointer.alignment
   }
+
+  #[inline(always)]
+  fn signedness(&self, _target_info: &TargetInfo) -> Option<Signedness> {
+    Some(Unsigned)
+  }
 }
 
 impl<'c> TypeInfo<'c> for FunctionProto<'c> {
   /// function types have no size
   /// and it is invalid to use `sizeof` w.r.t. `void`, `function designator` and `incomplete type`
   ///
-  /// Clang returns `1` -- and previously here it returns `0` but it causes lot of trouble.
+  /// Clang returns `1` -- and previously here it returns `0` but it causes me lots of trouble.
   /// So now it returns `1`.
   #[inline(always)]
   fn size(&self, _target_info: &TargetInfo) -> Size {
@@ -323,6 +375,11 @@ impl<'c> TypeInfo<'c> for FunctionProto<'c> {
   fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
     Alignment::from_align_fixed::<1>()
   }
+
+  #[inline(always)]
+  fn signedness(&self, _target_info: &TargetInfo) -> Option<Signedness> {
+    None
+  }
 }
 impl<'c> TypeInfo<'c> for Enum<'c> {
   #[inline(always)]
@@ -348,5 +405,10 @@ impl<'c> TypeInfo<'c> for Enum<'c> {
   #[inline(always)]
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
     self.underlying_type.alignment(target_info)
+  }
+
+  #[inline(always)]
+  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
+    self.underlying_type.signedness(target_info)
   }
 }
