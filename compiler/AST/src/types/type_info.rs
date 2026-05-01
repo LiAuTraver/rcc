@@ -182,7 +182,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
     match self {
       Nullptr => target_info.pointer.alignment,
-      Void => Alignment::from_align_fixed::<1>(),
+      Void => Alignment::MIN,
       Bool => target_info.boolean.alignment,
       Char | SChar | UChar => target_info.character.alignment,
       UShort | Short => target_info.short.alignment,
@@ -195,7 +195,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
       ComplexFloat => target_info.float.alignment, // FIXME: may be different
       ComplexDouble => target_info.double.alignment, // FIXME: may be different
       ComplexLongDouble => target_info.long_double.alignment, // FIXME: may be different
-      __IRBit => Alignment::from_align_fixed::<1>(),
+      __IRBit => Alignment::O0,
     }
   }
 
@@ -373,7 +373,7 @@ impl<'c> TypeInfo<'c> for FunctionProto<'c> {
   /// not meaningful either.
   #[inline(always)]
   fn alignment(&self, _target_info: &TargetInfo) -> Alignment {
-    Alignment::from_align_fixed::<1>()
+    Alignment::MIN
   }
 
   #[inline(always)]

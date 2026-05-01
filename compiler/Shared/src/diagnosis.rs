@@ -79,7 +79,7 @@ mod data {
   /// TODO: reduce the size of this enum.
   #[derive(Debug, ::thiserror::Error)]
   pub enum Data<'c> {
-    #[error("Unexpected character '{}'{expected}", &.0.0, expected = format_expected(&.0.1))]
+    #[error("Unexpected character '{}'{expected}", &.0.0, expected = &.0.1.as_ref().map(|s| format!(", expected '{}'", s)).unwrap_or_default())]
     UnexpectedCharacter(Box<(String, Option<String>)>),
     #[error("Unterminated string literal")]
     UnterminatedString,
@@ -345,6 +345,10 @@ mod data {
     EmptyTypedef,
     #[error("Empty statement")]
     EmptyStatement,
+    #[error("non void function does not return a value")]
+    MissingReturnValue,
+    #[error("unreachable code")]
+    UnreachableCode,
   }
   // TODO: reduce the size to 64 and lower vbytes.
   static_assert!(
@@ -364,13 +368,6 @@ mod data {
     #[inline]
     fn add(self, rhs: Severity) -> Self::Output {
       self.into_with(rhs)
-    }
-  }
-
-  fn format_expected(expected: &Option<String>) -> String {
-    match expected {
-      Some(exp) => format!(", expected '{}'", exp),
-      None => String::with_capacity(0),
     }
   }
 
@@ -492,7 +489,7 @@ impl ::std::default::Default for NoOp {
   #[inline]
   fn default() -> Self {
     Self {
-      idk: RefCell::new(Vec::with_capacity(0)),
+      idk: Default::default(),
     }
   }
 }

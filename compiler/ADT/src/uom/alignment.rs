@@ -22,7 +22,7 @@ pub struct Alignment {
 impl Alignment {
   #[inline]
   pub const fn from_align_fixed<const ALIGN: usize>() -> Self {
-    const_pre + (ALIGN.is_power_of_two(), "not a power of two");
+    const_pre + (ALIGN.is_power_of_two(), "ALIGN is not a power of two");
     unsafe { Self::from_flag_unchecked(Self::usize2u8flag(ALIGN)) }
   }
 
@@ -78,7 +78,7 @@ impl Alignment {
 
   #[inline]
   const unsafe fn from_flag_unchecked(flag: u8) -> Self {
-    const_pre + (flag != 0, "UB");
+    const_pre + (flag != 0, "flag should not be 0");
     Self {
       // SAFETY: safe.
       flag: unsafe { NonZeroU8::new_unchecked(flag) },
@@ -91,7 +91,32 @@ impl Alignment {
     unsafe { Self::from_flag_unchecked(Self::usize2u8flag(align)) }
   }
 }
+#[rustfmt::skip]
+impl Alignment {
+  /// the smallest possible [`alignment`](Alignment), i.e., 1 [byte](Size).
+  pub const MIN: Alignment = Self::O0;
 
+  /// Order-0 [`alignment`](Alignment), i.e., `2^0 = 1` [byte](Size).
+  pub const O0: Alignment = Self::from_align_fixed::<1>();
+
+  /// Order-1 [`alignment`](Alignment), i.e., `2^1 = 2` [bytes](Size).
+  pub const O1: Alignment = Self::from_align_fixed::<2>();
+
+  /// Order-2 [`alignment`](Alignment), i.e., `2^2 = 4` [bytes](Size).
+  pub const O2: Alignment = Self::from_align_fixed::<4>();
+
+  /// Order-3 [`alignment`](Alignment), i.e., `2^3 = 8` [bytes](Size).
+  pub const O3: Alignment = Self::from_align_fixed::<8>();
+
+  /// Order-4 [`alignment`](Alignment), i.e., `2^4 = 16` [bytes](Size).
+  pub const O4: Alignment = Self::from_align_fixed::<16>();
+
+  /// Order-255 [`alignment`](Alignment), i.e., `2^255` [bytes](Size).
+  pub const O255: Alignment = unsafe { Self::from_flag_unchecked(255) };
+  
+  /// the largest possible [`alignment`](Alignment) that [`this struct`](Alignment) can represent.
+  pub const MAX: Alignment = Self::O255;
+}
 impl Alignment {
   #[inline]
   pub const fn size(self) -> Size {
@@ -179,20 +204,23 @@ mod tests {
   #[allow(unused)]
   use super::*;
 
+  /// only panic when debug_assertion is enabled at runtime.
   #[test]
-  #[should_panic]
+  #[should_panic(expected = "flag should not be 0")]
   const fn invalid_new_unchecked() {
     _ = unsafe { A::from_flag_unchecked(0) };
   }
+  /// always panic if the given ALIGN is not a valid align at compile-time.
   #[test]
-  #[should_panic]
-  const fn invalid_from_align_fixed() {
-    _ = A::from_align_fixed::<3>();
-  }
-  #[test]
-  #[should_panic]
+  #[should_panic(expected = "ALIGN is not a power of two")]
   const fn invalid_from_zero_align() {
     _ = A::from_align_fixed::<0>();
+  }
+  /// ditto.
+  #[test]
+  #[should_panic(expected = "ALIGN is not a power of two")]
+  const fn invalid_from_align_fixed() {
+    _ = A::from_align_fixed::<3>();
   }
   #[test]
   const fn ctors_fixed() {
@@ -201,6 +229,7 @@ mod tests {
     static_assert_eq!(A::from_align_fixed::<4>().power(), 2);
     static_assert_eq!(A::from_align_fixed::<8>().power(), 3);
 
+    static_assert_eq!(A::from_size(0.into()), None);
     static_assert_eq!(A::from_size(1.into()).unwrap().size().get(), 1);
     static_assert_eq!(A::from_size(2.into()).unwrap().size().get(), 2);
     static_assert_eq!(A::from_size(3.into()), None);
@@ -245,5 +274,24 @@ mod tests {
     const a: Alignment = A::from_align_fixed::<4>();
     static_assert_eq!((a << 2).size().get(), 16);
     static_assert_eq!((a >> 2).size().get(), 1);
+  }
+  #[test]
+  #[should_panic(expected = "downflow!")]
+  const fn ops_invalid() {
+    const p: u8 = 2;
+    const s: u8 = 2;
+    const a: Alignment = A::from_align_fixed::<{ 2usize.pow(p as u32) }>();
+    static_assert_eq!(a >> s, Alignment::O0);
+    _ = a >> (s + 1);
+  }
+
+  #[test]
+  #[should_panic(expected = "overflow!")]
+  const fn ops_invalid_overflow() {
+    const p: u8 = 2;
+    const s: u8 = u8::MAX - p;
+    const a: Alignment = A::from_align_fixed::<{ 2usize.pow(p as u32) }>();
+    static_assert_eq!(a << (s - 1), Alignment::MAX);
+    _ = a << s;
   }
 }

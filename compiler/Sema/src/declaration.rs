@@ -1,6 +1,6 @@
 use ::rcc_ast::{
   Context,
-  types::{FunctionSpecifier, QualifiedType, Type, TypeRef},
+  types::{FunctionSpecifier, Type},
 };
 use ::rcc_shared::{ArenaVec, CollectIn, SourceSpan};
 use ::rcc_utils::StrRef;
@@ -153,23 +153,8 @@ impl<'c> Function<'c> {
   }
 
   #[inline(always)]
-  pub fn is_declaration(&self) -> bool {
-    !self.is_definition()
-  }
-
-  #[inline(always)]
   pub fn is_definition(&self) -> bool {
     self.body.is_some()
-  }
-
-  #[inline]
-  pub fn proto(&self) -> QualifiedType<'c> {
-    self.declaration.qualified_type()
-  }
-
-  #[inline]
-  pub fn proto_unqual(&self) -> TypeRef<'c> {
-    self.declaration.qualified_type().unqualified_type
   }
 }
 

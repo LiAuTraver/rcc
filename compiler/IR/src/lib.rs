@@ -1,4 +1,3 @@
-#[macro_use]
 mod builder;
 mod constant;
 mod context;

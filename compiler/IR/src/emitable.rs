@@ -76,7 +76,7 @@ impl<'c> Emitable<'c, value::Arguments> for Builder<'c> {
   ) -> ValueID {
     self.ir().insert(Value::new(
       ast_type,
-      ty!(self, ast_type),
+      self.ir().ir_type(ast_type),
       value,
       self.current_function,
     ))
@@ -605,7 +605,7 @@ impl<'c> Builder<'c> {
     }
     let value_id = self.ir().insert(Value::new(
       ast_type,
-      ty!(self, ast_type),
+      self.ir().ir_type(ast_type),
       value.into(),
       self.current_block,
     ));
@@ -646,7 +646,7 @@ impl<'c> Builder<'c> {
 
     let value_id = self.ir().insert(Value::new(
       ast_type,
-      ty!(self, ast_type),
+      self.ir().ir_type(ast_type),
       Instruction::from(terminator.into()),
       self.current_block,
     ));

@@ -4,19 +4,20 @@ use ::rcc_ast::{
   types::{self as ast, TypeInfo},
 };
 use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
-use ::rcc_shared::{OpDiag, Operator, OperatorCategory, SourceSpan};
+use ::rcc_shared::{
+  DiagData::*, Diagnosis, OpDiag, Operator, OperatorCategory, SourceSpan,
+};
 use ::rcc_utils::{RefEq, StrRef, contract_violation};
 use ::std::collections::HashMap;
 
 use super::{
-  ConstantData,
+  ConstantData, DataLayout,
   context::{Session, SessionRef},
   emitable::Emitable,
   global::{self, BasicBlock, Module},
   instruction as inst,
   value::{self, Value, ValueID},
 };
-use crate::DataLayout;
 
 #[derive(Default, PartialEq, Eq)]
 pub(super) struct ControlFlowContext {
@@ -57,24 +58,7 @@ impl<'a> ::std::ops::Deref for Builder<'a> {
     self.session
   }
 }
-#[macro_use]
-mod macros {
-  macro_rules! ty {
-    ($self:ident, $ast_type:expr) => {
-      $self.ir().ir_type(&$ast_type)
-    };
-  }
-  macro_rules! lookup {
-    ($self:ident, $value_id:expr) => {
-      $self.ir().get($value_id)
-    };
-  }
-  macro_rules! lookup_mut {
-    ($self:ident, $value_id:expr) => {
-      $self.ir().get_mut($value_id)
-    };
-  }
-}
+
 impl<'c> Builder<'c> {
   pub fn new(session: SessionRef<'c, OpDiag<'c>>) -> Self {
     Self {
@@ -137,7 +121,8 @@ impl<'c> Builder<'c> {
 
     use super::types::Type::*;
 
-    let ir_type = lookup!(self, value_id).ir_type;
+    let ir_type = self.visit(value_id, |data| data.ir_type);
+
     match ir_type {
       Void() | Label() | Struct(_) | Array(_) | Function(_) => unreachable!(),
       Pointer() => self.emit(
@@ -172,21 +157,30 @@ impl<'c> Builder<'c> {
   fn seal_current_block(&mut self) {
     if !self.current_block.is_null() {
       debug_assert!(
-        !lookup!(self, self.current_block)
+        self.visit(self.current_block, |value| !value
           .data
           .as_basicblock_unchecked()
           .terminator
-          .is_null(),
+          .is_null()),
         "BasicBlock must ends with a proper terminator before adding it to \
          parent function."
       );
-      lookup_mut!(self, self.current_function)
-        .data
-        .as_constant_mut_unchecked()
-        .as_global_mut_unchecked()
-        .as_function_mut_unchecked()
-        .blocks
-        .push(self.current_block);
+      self.apply(self.current_block, |value| {
+        value
+          .data
+          .as_basicblock_mut_unchecked()
+          .instructions
+          .shrink_to_fit()
+      });
+      self.apply(self.current_function, |value| {
+        value
+          .data
+          .as_constant_mut_unchecked()
+          .as_global_mut_unchecked()
+          .as_function_mut_unchecked()
+          .blocks
+          .push(self.current_block)
+      });
       self.current_block = ValueID::null();
     };
   }
@@ -254,6 +248,8 @@ impl<'c> Builder<'c> {
     debug_assert!(self.current_function.is_null());
     debug_assert!(self.ctrlflow_ctx.is_empty());
 
+    self.module.globals.shrink_to_fit();
+
     self.module
   }
 }
@@ -276,10 +272,10 @@ impl<'c> Builder<'c> {
     let declaration = declaration.canonical_decl();
     if let Some(&value_id) = self.globals.get(&declaration) {
       debug_assert!(
-        lookup!(self, value_id)
+        self.visit(value_id, |value| value
           .data
           .as_constant()
-          .is_some_and(|c| c.as_global().is_some_and(|g| g.is_function())),
+          .is_some_and(|c| c.as_global().is_some_and(|g| g.is_function()))),
         "pre-registered value should be a function"
       );
     } else {
@@ -306,50 +302,40 @@ impl<'c> Builder<'c> {
     let function_name = declaration.name();
     let ast_type = declaration.qualified_type().unqualified_type;
 
-    self.current_function = if let Some(&value_id) =
-      self.globals.get(&declaration)
-    {
-      // should be function and declaration-only
-      debug_assert!(!lookup!(self, value_id).
-      data
-      .as_constant()
-      .is_some_and(|c| c
-        .as_global()
-        .is_some_and(|g| g
-          .as_function()
-          .is_some_and(|f| f
-            .is_definition()
-            && function_name == self.visit(value_id, |value| value.data.as_constant_unchecked().as_global_unchecked().as_function_unchecked().name)
-            // RefEq::ref_eq(
-            //   &function_name,
-            //   &lookup!(self, value_id).data.as_function_unchecked().name
-            // )
-            && f.is_variadic
-              == ast_type.as_functionproto_unchecked().is_variadic))),
+    self.current_function =
+      if let Some(&value_id) = self.globals.get(&declaration) {
+        // should be function and declaration-only
+        debug_assert!(
+          self.visit(value_id, |value| value.data.as_constant().is_some_and(
+            |c| c.as_global().is_some_and(|g| g.as_function().is_some_and(
+              |f| !f.is_definition()
+                && function_name
+                  == self.visit(value_id, |value| value
+                    .data
+                    .as_constant_unchecked()
+                    .as_global_unchecked()
+                    .as_function_unchecked()
+                    .name)
+                && f.is_variadic
+                  == ast_type.as_functionproto_unchecked().is_variadic
+            ))
+          )),
           "pre-registered function should be declaration-only"
         );
-      value_id
-    } else {
-      let function_id = self.emit(
-        global::Function::new_empty(
-          function_name,
-          Default::default(),
-          ast_type.as_functionproto_unchecked().is_variadic,
-        ),
-        ast_type,
-      );
+        value_id
+      } else {
+        let function_id = self.emit(
+          global::Function::new_empty(
+            function_name,
+            Default::default(),
+            ast_type.as_functionproto_unchecked().is_variadic,
+          ),
+          ast_type,
+        );
 
-      self.globals.insert(declaration, function_id);
-      use ::std::debug_assert_matches;
-      debug_assert_matches!(
-        lookup!(self, function_id).data,
-        crate::ValueData::Constant(crate::constant::Constant::Global(
-          crate::GlobalValue::Function(ref f)
-        ))if !f.is_definition(),
-        "pre-registered function should be declaration-only"
-      );
-      function_id
-    };
+        self.globals.insert(declaration, function_id);
+        function_id
+      };
 
     debug_assert!(self.locals.is_empty());
     debug_assert!(self.labels.is_empty());
@@ -379,7 +365,7 @@ impl<'c> Builder<'c> {
     }
 
     // insert params into the local scope and allocate spaces
-    let params = parameters
+    let mut params = parameters
       .iter()
       .enumerate()
       .map(|(index, parameter)| {
@@ -395,6 +381,8 @@ impl<'c> Builder<'c> {
         arg_id
       })
       .collect::<Vec<_>>();
+
+    params.shrink_to_fit();
 
     self.apply(self.current_function, |value| {
       value
@@ -429,6 +417,7 @@ impl<'c> Builder<'c> {
       let this = unsafe { &mut *this };
       let _unreachable =
         this.emit(inst::Unreachable::new(), this.ast().void_type());
+      this.diag().add_warning(MissingReturnValue, function.span);
       common();
     };
 
@@ -486,15 +475,25 @@ impl<'c> Builder<'c> {
     self.locals.clear();
     self.labels.clear();
 
-    debug_assert!(
-      !lookup!(self, self.current_function)
+    debug_assert!(self.visit(self.current_function, |value| {
+      !value
         .data
         .as_constant_unchecked()
         .as_global_unchecked()
         .as_function_unchecked()
         .entry()
         .is_null()
-    );
+    }));
+
+    self.apply(self.current_function, |value| {
+      value
+        .data
+        .as_constant_mut_unchecked()
+        .as_global_mut_unchecked()
+        .as_function_mut_unchecked()
+        .blocks
+        .shrink_to_fit()
+    });
 
     self.current_function = ValueID::null();
   }
@@ -522,9 +521,8 @@ impl<'c> Builder<'c> {
   fn local_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
     debug_assert!(!self.current_block.is_null());
     match declaration {
-      sd::ExternalDeclarationRef::Function(function_decl) => {
-        self.funcdecl(function_decl.declaration);
-      },
+      sd::ExternalDeclarationRef::Function(function_decl) =>
+        self.funcdecl(function_decl.declaration),
       sd::ExternalDeclarationRef::Variable(var_def) =>
         self.local_vardef(var_def),
     }
@@ -580,10 +578,6 @@ impl<'c> Builder<'c> {
 
   fn return_stmt(&mut self, return_stmt: &ss::Return<'c>) {
     let ss::Return { expression, .. } = return_stmt;
-    // let ast_type = expression
-    //   .as_ref()
-    //   .map(|e| e.unqualified_type())
-    //   .unwrap_or(self.ast().void_type());
     let operand: Option<ValueID> = expression.map(|e| self.expression(e));
     let _ret_inst =
       self.emit(inst::Return::new(operand), self.ast().void_type());
@@ -624,20 +618,17 @@ impl<'c> Builder<'c> {
     self.statement(then_branch);
 
     let then_block_terminator = {
-      let terminator = lookup!(self, self.current_block)
-        .data
-        .as_basicblock_unchecked()
-        .terminator;
+      let terminator = self.visit(self.current_block, |value| {
+        value.data.as_basicblock_unchecked().terminator
+      });
 
       terminator.unwrap_or_else(|| {
         self.emit(inst::Jump::new(ValueID::null()), self.ast().void_type())
       })
     };
 
-    // the assertion here is wrong. new controlflow may add many blocks.
-    // let shuold_be_then = self.push_block(else_block_id);
-    // debug_assert_eq!(shuold_be_then, then_block_id);
-
+    // dont perform assertion here, new controlflow may add many blocks;
+    // i.e., `_last_block_of_then` is not necessarily the same as `then_block_id`.
     let _last_block_of_then = self.push_block(else_block_id);
 
     self.refill_branch(now_block_terminator, then_block_id, else_block_id);
@@ -645,10 +636,9 @@ impl<'c> Builder<'c> {
     else_branch
       .map(|else_branch| {
         self.statement(else_branch);
-        let terminator = lookup!(self, self.current_block)
-          .data
-          .as_basicblock_unchecked()
-          .terminator;
+        let terminator = self.visit(self.current_block, |value| {
+          value.data.as_basicblock_unchecked().terminator
+        });
         terminator.unwrap_or_else(|| {
           self.emit(inst::Jump::new(ValueID::null()), self.ast().void_type())
         })
@@ -656,10 +646,7 @@ impl<'c> Builder<'c> {
       .unwrap_or_default()
       .and_then(|else_block_terminator| {
         let immediate_block_id = self.new_empty_block();
-
-        // ditto
         let _last_block_of_else = self.push_block(immediate_block_id);
-        // debug_assert_eq!(should_be_else, else_block_id);
 
         self.refill_jump(then_block_terminator, immediate_block_id);
         self.refill_jump(else_block_terminator, immediate_block_id)
@@ -703,10 +690,9 @@ impl<'c> Builder<'c> {
     self.statement(body);
 
     let _body_block_terminator = {
-      let terminator = lookup!(self, self.current_block)
-        .data
-        .as_basicblock_unchecked()
-        .terminator;
+      let terminator = self.visit(self.current_block, |value| {
+        value.data.as_basicblock_unchecked().terminator
+      });
       terminator.unwrap_or_else(|| {
         self.emit(inst::Jump::new(cond_block_id), self.ast().void_type())
       })
@@ -759,10 +745,9 @@ impl<'c> Builder<'c> {
     self.statement(body);
 
     let _body_block_terminator = {
-      let terminator = lookup!(self, self.current_block)
-        .data
-        .as_basicblock_unchecked()
-        .terminator;
+      let terminator = self.visit(self.current_block, |value| {
+        value.data.as_basicblock_unchecked().terminator
+      });
       terminator.unwrap_or_else(|| {
         self.emit(inst::Jump::new(cond_block_id), self.ast().void_type())
       })
@@ -821,10 +806,9 @@ impl<'c> Builder<'c> {
     self.statement(body);
 
     let _body_block_terminator = {
-      let terminator = lookup!(self, self.current_block)
-        .data
-        .as_basicblock_unchecked()
-        .terminator;
+      let terminator = self.visit(self.current_block, |value| {
+        value.data.as_basicblock_unchecked().terminator
+      });
       terminator.unwrap_or_else(|| {
         self.emit(inst::Jump::new(increment_block_id), self.ast().void_type())
       })
@@ -996,13 +980,9 @@ impl<'c> Builder<'c> {
     let then_id = self.expression(then_expr);
 
     let _then_block_terminator = {
-      debug_assert!(
-        lookup!(self, self.current_block)
-          .data
-          .as_basicblock_unchecked()
-          .terminator
-          .is_null()
-      );
+      debug_assert!(self.visit(self.current_block, |value| {
+        value.data.as_basicblock_unchecked().terminator.is_null()
+      }));
 
       self.emit(inst::Jump::new(immediate_block_id), self.ast().void_type())
     };
@@ -1012,13 +992,9 @@ impl<'c> Builder<'c> {
     let else_id = self.expression(else_expr);
 
     let _else_block_terminator = {
-      debug_assert!(
-        lookup!(self, self.current_block)
-          .data
-          .as_basicblock_unchecked()
-          .terminator
-          .is_null()
-      );
+      debug_assert!(self.visit(self.current_block, |value| {
+        value.data.as_basicblock_unchecked().terminator.is_null()
+      }));
       self.emit(inst::Jump::new(immediate_block_id), self.ast().void_type())
     };
 
@@ -1519,7 +1495,11 @@ impl<'c> Builder<'c> {
     _span: SourceSpan,
   ) -> ValueID {
     debug_assert_eq!(operator, Operator::Assign);
-    debug_assert!(lookup!(self, left).ir_type.is_pointer());
+    debug_assert!(
+      self.visit(left, |value| value.ir_type.is_pointer()),
+      "The lhs of an assignment should be an lvalue by the sema, and thus has \
+       a pointer type in IR."
+    );
 
     self.emit(inst::Store::new(left, right), self.ast().void_type())
   }
@@ -1783,16 +1763,16 @@ impl<'c> Builder<'c> {
     use Signedness::*;
     use inst::BinaryOp::*;
 
-    debug_assert!(
-      lookup!(self, right)
+    debug_assert!(self.visit(right, |value| {
+      value
         .ast_type
         .as_primitive()
         .is_some_and(|p| p.is_integer())
-    );
+    }),);
 
     let bitshift = match (
       operator,
-      lookup!(self, left).ast_type.signedness(self.ast()),
+      self.visit(left, |value| value.ast_type.signedness(self.ast())),
     ) {
       (LeftShift, Some(_)) => Shl,
       (RightShift, Some(Signed)) => AShr,
@@ -1826,8 +1806,8 @@ impl<'c> Builder<'c> {
   ) -> ValueID {
     use super::Type::*;
 
-    let lhs_ir_type = lookup!(self, left).ir_type;
-    let rhs_ir_type = lookup!(self, right).ir_type;
+    let (lhs_ir_type, rhs_ir_type) =
+      self.inspect(left, right, |lhs, rhs| (lhs.ir_type, rhs.ir_type));
 
     match (lhs_ir_type, rhs_ir_type) {
       (Integer(_), Integer(_)) =>
@@ -2016,7 +1996,7 @@ impl<'c> Builder<'c> {
     _span: SourceSpan,
   ) -> ValueID {
     debug_assert_eq!(operator, Operator::Star);
-    debug_assert!(lookup!(self, operand).ir_type.is_pointer());
+    debug_assert!(self.visit(operand, |value| value.ir_type.is_pointer()));
     operand
   }
 

@@ -140,7 +140,7 @@ impl DataLayout {
       pointer_specs,
       integer_specs,
       float_specs,
-      stack_align: Alignment::from_align_fixed::<128>(),
+      stack_align: Alignment::O4,
       // just a placeholder to disable `no drop`, we may make integer_specs a vec later, who knows.
       _this_struct_is_not_designed_to_be_pod: Vec::with_capacity(0),
     }
@@ -257,7 +257,7 @@ mod fmt {
           .join(":")
       )?;
 
-      write!(f, "S{}", self.stack_align)
+      write!(f, "S{}", self.stack_align.size_bits())
     }
   }
 }

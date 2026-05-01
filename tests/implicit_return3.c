@@ -13,3 +13,11 @@ int f(void) {
   else
     int k = 100;
 }
+
+// unreachable
+int g(void) {
+  if (0) {
+    return 10;
+  } else
+    int k = 100;
+}

@@ -2,11 +2,11 @@
 
 # workaround
 test_compiler.ps1
-**/a.out
-**/a.exe
 
 # output 
+./test*.ll
+./test*.S
+./*.exe
+./*.out
 out.txt
-test*.ll
-test*.S
 .idea/

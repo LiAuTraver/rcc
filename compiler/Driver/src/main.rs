@@ -132,12 +132,30 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
   }
   assert!(matches!(stage, Stage::Ir));
   let ir_context = arena.alloc(IRContext::new(&arena, ast_context, triple));
-  let session =
+  let ir_session =
     IRSession::new(&diagnosis, &manager, ast_context, ir_context, triple);
-  let builder = IRBuilder::new(&session);
-
+  let builder = IRBuilder::new(&ir_session);
   let module = builder.build(translation_unit);
-  IRPrinter::print(&module, &session).unwrap();
+
+  IRPrinter::print(&module, &ir_session).unwrap();
+
+  if ir_session.diag().has_warnings() {
+    eprintln!("IR gen warnings:");
+    ir_session
+      .diag()
+      .warnings()
+      .iter()
+      .for_each(|e| eprintln!("{}", e.display_with(ir_session.src())));
+  }
+  if ir_session.diag().has_errors() {
+    eprintln!("IR gen errors:");
+    ir_session
+      .diag()
+      .errors()
+      .iter()
+      .for_each(|e| eprintln!("{}", e.display_with(ir_session.src())));
+    return 1;
+  }
   0
 }
 
