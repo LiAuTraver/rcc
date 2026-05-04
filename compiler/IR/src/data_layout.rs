@@ -30,8 +30,8 @@ pub struct TypeSpecs {
 impl TypeSpecs {
   /// constructs a [`TypeSpecs`] from a given [`Size`],
   /// rounding up the alignment.
-  pub fn from_size(size: Size) -> Self {
-    Self::new(size.into(), Alignment::from_size_ceil(size))
+  pub const fn from_size(size: Size) -> Self {
+    Self::new(size.size_bits(), Alignment::from_size_ceil(size))
   }
 
   /// constructs a [`TypeSpecs`] from a given [`SizeBit`],
@@ -99,6 +99,7 @@ pub struct DataLayout {
   // TODO: struct specs
 }
 impl DataLayout {
+  #[inline]
   pub fn host() -> Self {
     Self::new(Triple::HOST)
   }

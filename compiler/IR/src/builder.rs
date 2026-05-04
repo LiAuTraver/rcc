@@ -8,14 +8,15 @@ use ::rcc_shared::{
   DiagData::*, Diagnosis, OpDiag, Operator, OperatorCategory, SourceSpan,
 };
 use ::rcc_utils::{RefEq, StrRef, contract_violation};
-use ::std::collections::HashMap;
+use ::std::{collections::HashMap, ops::Deref};
 
 use super::{
   ConstantData, DataLayout,
   context::{Session, SessionRef},
   emitable::Emitable,
-  global::{self, BasicBlock, Module},
+  global::{self, BasicBlock},
   instruction as inst,
+  module::Module,
   value::{self, Value, ValueID},
 };
 
@@ -51,7 +52,7 @@ pub struct Builder<'c> {
   pub(super) globals: HashMap<sd::DeclRef<'c>, ValueID>,
   pub(super) module: Module<'c>,
 }
-impl<'a> ::std::ops::Deref for Builder<'a> {
+impl<'a> Deref for Builder<'a> {
   type Target = Session<'a, OpDiag<'a>>;
 
   fn deref(&self) -> &Self::Target {
@@ -75,11 +76,6 @@ impl<'c> Builder<'c> {
       labels: Default::default(),
       ctrlflow_ctx: Default::default(),
     }
-  }
-
-  #[inline(always)]
-  pub(super) fn session(&self) -> SessionRef<'c, OpDiag<'c>> {
-    self.session
   }
 
   #[inline(always)]
@@ -112,7 +108,7 @@ impl<'c> Builder<'c> {
     id: ValueID,
     action: F,
   ) -> R {
-    self.session().ir().apply(id, action)
+    self.ir().apply(id, action)
   }
 }
 impl<'c> Builder<'c> {

@@ -1,22 +1,6 @@
 pub use ::rcc_ast::Constant as Data;
-use ::rcc_utils::StrRef;
 
-use crate::global::{Function, Variable};
-#[derive(Debug)]
-pub enum Global<'ir> {
-  Function(Function<'ir>),
-  Variable(Variable<'ir>),
-}
-
-impl<'ir> Global<'ir> {
-  pub fn name(&self) -> StrRef<'ir> {
-    ::rcc_utils::static_dispatch!(
-      Global : self,
-      |variant| variant.name =>
-      Function Variable
-    )
-  }
-}
+use crate::global::{Function, Global, Variable};
 
 #[derive(Debug)]
 pub enum Constant<'ir> {
@@ -52,12 +36,6 @@ mod fmt {
         |variant| Display::fmt(variant, f) =>
         Data Global
       )
-    }
-  }
-
-  impl<'ir> Display for Global<'ir> {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> Result {
-      unreachable!("when is it possible to reach here?")
     }
   }
 }

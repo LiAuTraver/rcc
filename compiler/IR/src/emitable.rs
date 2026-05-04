@@ -14,10 +14,9 @@ use super::{
 ///
 /// Also, this `emit` function acts like the ctor but with assertions, which is **crucial**.
 pub trait Emitable<'a, ValueType> {
-  #[must_use = "Usually the return value_id shall not be ignored; one such \
-                exception is for `store` instruction, which returns void. use \
-                `_` to explicitly` ignore the return value_id if you don't \
-                need it."]
+  #[must_use = "Usually the returned id shall not be ignored; such exceptions \
+                including the `store` instruction as well as terminators, \
+                which return void. use `_` to explicitly` ignore those."]
   fn emit(&mut self, value: ValueType, ast_type: ast::TypeRef<'a>) -> ValueID;
 }
 

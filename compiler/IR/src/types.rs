@@ -42,7 +42,7 @@ impl<'ir> Type<'ir> {
       Pointer() => data_layout.pointer_specs.align(),
       Integer(size_bit) => data_layout.integer_specs(*size_bit).align(),
       Array(array) => array.element_type.alignment(data_layout),
-      Struct(_) => todo!(),
+      Struct(_) => unimplemented!(),
     }
   }
 
@@ -51,10 +51,10 @@ impl<'ir> Type<'ir> {
     match self {
       Void() => 0,
       Label() => 0,
+      Function(_) => 0,
       Floating(_) => 1,
       Pointer() => 1,
       Integer(_) => 1,
-      Function(_) => 0,
       Struct(_) => 1,
       Array(array) => 1 + array.element_type.extent(),
     }
@@ -149,11 +149,12 @@ mod fmt {
 
   impl Display for Type<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      use FloatFormat::*;
       match self {
         Self::Void() => write!(f, "void"),
         Self::Label() => write!(f, "label"),
-        Self::Floating(FloatFormat::IEEE32) => write!(f, "float"),
-        Self::Floating(FloatFormat::IEEE64) => write!(f, "double"),
+        Self::Floating(IEEE32) => write!(f, "float"),
+        Self::Floating(IEEE64) => write!(f, "double"),
         Self::Pointer() => write!(f, "ptr"),
         Self::Integer(bit_width) => write!(f, "i{bit_width}"),
         Self::Array(array) => array.fmt(f),

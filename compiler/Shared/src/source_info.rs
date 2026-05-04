@@ -68,7 +68,7 @@ impl Manager {
     Ok(self.add_file(path, source))
   }
 
-  /// mustly used in debugging/testing
+  /// mostly used in debugging/testing
   pub fn add_string(&mut self, source: String) -> u32 {
     self.add_file(PathBuf::from("<input>"), source)
   }

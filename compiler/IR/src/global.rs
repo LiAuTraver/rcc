@@ -1,30 +1,28 @@
 use ::rcc_ast::Constant;
-use ::rcc_shared::{FileId, Triple};
 use ::rcc_utils::StrRef;
 
-use super::{DataLayout, ValueID};
+use super::ValueID;
 
 #[derive(Debug)]
-pub struct Module<'d> {
-  pub file_index: FileId,
-  pub triple: Triple,
-  pub data_layout: &'d DataLayout,
-  /// global function and variable entry. Shall be either [`Function`] or [`Variable`], or [`Constant`].
-  pub globals: Vec<ValueID>,
+pub enum Linkage {
+  External,
+  Internal,
+  Common,
 }
 
-impl<'d> Module<'d> {
-  pub fn new_empty(
-    file_index: FileId,
-    triple: Triple,
-    data_layout: &'d DataLayout,
-  ) -> Self {
-    Self {
-      file_index,
-      triple,
-      data_layout,
-      globals: Default::default(),
-    }
+#[derive(Debug)]
+pub enum Global<'ir> {
+  Function(Function<'ir>),
+  Variable(Variable<'ir>),
+}
+
+impl<'ir> Global<'ir> {
+  pub fn name(&self) -> StrRef<'ir> {
+    ::rcc_utils::static_dispatch!(
+      Global : self,
+      |variant| variant.name =>
+      Function Variable
+    )
   }
 }
 
@@ -103,4 +101,16 @@ impl BasicBlock {
 pub enum Initializer<'c> {
   Scalar(Constant<'c>),
   Aggregate(Vec<Initializer<'c>>),
+}
+
+mod fmt {
+  use ::std::fmt::{Display, Formatter, Result};
+
+  use super::*;
+
+  impl Display for Global<'_> {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> Result {
+      unreachable!("when is it possible to reach here?")
+    }
+  }
 }
