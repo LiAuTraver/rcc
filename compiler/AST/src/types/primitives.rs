@@ -120,8 +120,10 @@ impl Primitive {
   ) -> (Self, CastType, CastType) {
     assert!(lhs.is_integer() && rhs.is_integer());
 
-    let (lhs, _) = lhs.integer_promotion();
-    let (rhs, _) = rhs.integer_promotion();
+    // shall be promoted upstream
+    debug_assert_eq!(lhs, lhs.integer_promotion().0);
+    debug_assert_eq!(rhs, rhs.integer_promotion().0);
+
     if lhs == rhs {
       // done
       return (lhs, Noop, Noop);
@@ -134,21 +136,21 @@ impl Primitive {
       };
     }
     fn signed_and_unsigned(
-      lhs: Primitive,
-      rhs: Primitive,
+      signed: Primitive,
+      unsigned: Primitive,
       target_info: &TargetInfo,
     ) -> (Primitive, CastType, CastType) {
-      debug_assert!(!lhs.is_unsigned(target_info));
-      debug_assert!(rhs.is_unsigned(target_info));
-      if lhs.integer_rank() >= rhs.integer_rank() {
-        (lhs, Noop, IntegralCast)
-      } else if rhs.size(target_info) > lhs.size(target_info) {
-        (rhs, IntegralCast, Noop)
+      debug_assert!(!signed.is_unsigned(target_info));
+      debug_assert!(unsigned.is_unsigned(target_info));
+      if signed.integer_rank() >= unsigned.integer_rank() {
+        (signed, Noop, IntegralCast)
+      } else if unsigned.size(target_info) > signed.size(target_info) {
+        (unsigned, Noop, IntegralCast)
       } else {
         // if the signed type cannot represent all values of the unsigned type, return the unsigned version of the signed type
         // the signed type is always larger than the corresponding unsigned type on my x86_64 architecture
         // so this branch is unlikely to be taken
-        let promoted_rhs = rhs.into_unsigned();
+        let promoted_rhs = unsigned.into_unsigned();
         (promoted_rhs, IntegralCast, IntegralCast)
       }
     }

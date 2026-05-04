@@ -11,3 +11,6 @@ match_block_trailing_comma = true
 format_macro_matchers = true
 format_strings = true
 style_edition = "2024"
+format_code_in_doc_comments = true
+# wrap_comments = true
+comment_width = 120

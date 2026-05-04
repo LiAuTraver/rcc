@@ -71,7 +71,6 @@ impl<'c> Expression<'c> {
   /// and `!`, `&&` and `||` operators;
   /// instead, at AST level, the condition is required to be contextually convertible to bool,
   /// and the actual boolean conversion is performed at IR level.
-  ///
   #[must_use]
   #[inline]
   pub fn boolean_conversion(

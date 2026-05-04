@@ -1,26 +1,30 @@
 use ::rcc_ast::{Context, VarDeclKind, types::QualifiedType};
 use ::rcc_shared::Storage;
-use ::rcc_utils::StrRef;
+use ::rcc_utils::{PtrEq, StrRef};
 use ::std::{marker::PhantomData, ptr::NonNull};
+use VarDeclKind::*;
 
 #[derive(Debug)]
 pub struct DeclNode<'c> {
+  name: StrRef<'c>,
   qualified_type: QualifiedType<'c>,
   storage_class: Storage,
-  name: StrRef<'c>,
-  /// for global variable, if the [`VarDeclKind`] is [`VarDeclKind::Definition`]
+  /// for global variable, if the [`VarDeclKind`] is [`Definition`]
   /// and the [`Self::storage_class`] is [`Storage::Extern`], the [`Storage::Extern`] has no effect
   ///
   /// That being said, during TAC gen,
-  /// - if the global vardef has both [`Storage::Extern`] and [`VarDeclKind::Definition`]
-  ///   or one [`VarDeclKind::Tentative`] (one tantative counts as definition), add it as definition
-  /// - else if only has [`Storage::Extern`] and [`VarDeclKind::Declaration`], it's declaration and let linker handle it.
+  /// - if the global vardef has both [`Storage::Extern`] and [`Definition`]
+  ///   or one [`Tentative`] (one tantative counts as definition), add it as definition
+  /// - else if only has [`Storage::Extern`] and [`Declaration`], it's declaration and let linker handle it.
   declkind: VarDeclKind,
-  /// Shall only be [`None`] if the current one is canonical.
-  previous_decl: Option<DeclRef<'c>>,
+  /// stores either the previous declaration or the latest declaration.
+  ///
+  /// - if the node is the canonical one, it points to the latest declaration in the chain;
+  /// - otherwise, it points to the previous declaration.
+  previous_or_latest_decl: DeclRef<'c>,
   /// The nopde points to the eearlist appeared node.
   canonical_decl: DeclRef<'c>,
-  /// The node points to the `definition` node.
+  /// The node points to the `definition` node. This is not a good design, maybe fixme.
   ///
   /// # Directly access this field to judge whether a definition exists is wrong.
   /// only canonical one would be updated.
@@ -35,16 +39,54 @@ pub struct DeclRef<'c> {
 }
 
 impl<'c> DeclRef<'c> {
-  fn from_ptr(ptr: *mut DeclNode<'c>) -> Self {
-    Self {
-      ptr: NonNull::new(ptr).expect("declaration pointer shall not be null"),
+  pub fn new(
+    context: &'c Context<'c>,
+    qualified_type: QualifiedType<'c>,
+    storage_class: Storage,
+    name: StrRef<'c>,
+    declkind: VarDeclKind,
+    previous_decl: Option<DeclRef<'c>>,
+  ) -> Self {
+    use ::std::mem::MaybeUninit;
+    #[allow(clippy::uninit_assumed_init)]
+    #[allow(invalid_value)]
+    let node = context.arena().alloc(DeclNode {
+      qualified_type,
+      storage_class,
+      name,
+      declkind,
+      canonical_decl: unsafe { MaybeUninit::uninit().assume_init() },
+      previous_or_latest_decl: unsafe { MaybeUninit::uninit().assume_init() },
+      definition: unsafe { MaybeUninit::uninit().assume_init() },
+    });
+    let this = Self {
+      ptr: unsafe { NonNull::new_unchecked(&raw mut *node as *mut _) },
       marker: PhantomData,
-    }
+    };
+
+    (node.canonical_decl, node.previous_or_latest_decl) =
+      if let Some(previous_decl) = previous_decl {
+        previous_decl
+          .canonical_decl()
+          .as_decl_mut()
+          .previous_or_latest_decl = this;
+        (previous_decl.canonical_decl(), previous_decl)
+      } else {
+        (this, this)
+      };
+    node.definition = match declkind {
+      Definition => {
+        // if we are the definition, update the canonical node so all prior/future
+        // nodes in the chain can find the definition.
+        this.canonical_decl().set_definition(Some(this));
+        Some(this)
+      },
+      _ => previous_decl.and_then(DeclRef::definition),
+    };
+
+    this
   }
 
-  // fn as_ptr(self) -> *mut DeclNode<'c> {
-  //   self.ptr.as_ptr()
-  // }
   #[inline]
   fn as_decl(self) -> &'c DeclNode<'c> {
     unsafe { self.ptr.as_ref() }
@@ -77,7 +119,11 @@ impl<'c> DeclRef<'c> {
 
   #[inline]
   pub fn previous_decl(self) -> Option<DeclRef<'c>> {
-    self.as_decl().previous_decl
+    if self.is_canonical() {
+      None
+    } else {
+      Some(self.as_decl().previous_or_latest_decl)
+    }
   }
 
   #[inline]
@@ -86,8 +132,26 @@ impl<'c> DeclRef<'c> {
   }
 
   #[inline]
+  pub fn latest_decl(self) -> DeclRef<'c> {
+    self.canonical_decl().as_decl().previous_or_latest_decl
+  }
+
+  /// Returns the definition [`DeclRef`] node if exists w.r.t. current symbol,
+  /// otherwise returns [`None`].
+  ///
+  /// this it **NOT** a direct access to the `definition` field,
+  /// but rather looking up through the canonical chain.
+  ///
+  /// To judge whether this particular declaration is a definition, use
+  /// [`Self::declkind`] instead.
+  #[inline]
   pub fn definition(self) -> Option<DeclRef<'c>> {
     self.canonical_decl().as_decl().definition
+  }
+
+  #[inline]
+  pub fn is_canonical(self) -> bool {
+    PtrEq::ptr_eq(&self, &self.canonical_decl())
   }
 
   #[inline]
@@ -95,41 +159,18 @@ impl<'c> DeclRef<'c> {
     self.storage_class().is_typedef()
   }
 
-  #[inline]
-  pub fn is_constexpr(self) -> bool {
-    self.storage_class().is_constexpr()
-  }
-
-  // pub fn is_address_constant(self) -> bool {
-  //   self.qualified_type().is_functionproto()
-  //     || matches!(
-  //       self.storage_class(),
-  //       Storage::Static | Storage::Extern // | Storage::Constexpr //< not an addr constant
-  //     )
-  // }
-
   /// tecnically speaking a node is created and shall never change except for the `definition` pointer,
   /// but here in my sema i didnt merge first then create node, but backpatching them, so here it serves as a workaround.
   #[inline]
-  pub(super) fn set_qualified_type(self, qualified_type: QualifiedType<'c>) {
-    self.as_decl_mut().qualified_type = qualified_type;
+  pub(super) fn refill(
+    self,
+    storage_class: Storage,
+    qualified_type: QualifiedType<'c>,
+  ) {
+    let decl = self.as_decl_mut();
+    decl.qualified_type = qualified_type;
+    decl.storage_class = storage_class;
   }
-
-  /// ditto.
-  #[inline]
-  pub(super) fn set_storage_class(self, storage_class: Storage) {
-    self.as_decl_mut().storage_class = storage_class;
-  }
-
-  // pub(super) fn set_declkind(self, declkind: VarDeclKind) {
-  //   {
-  //     let decl = self.as_decl_mut();
-  //     decl.declkind = declkind;
-  //     if matches!(declkind, VarDeclKind::Definition) {
-  //       decl.definition = Some(self);
-  //     }
-  //   }
-  // }
 
   #[inline]
   fn set_definition(self, definition: Option<DeclRef<'c>>) {
@@ -137,48 +178,14 @@ impl<'c> DeclRef<'c> {
   }
 }
 
-impl<'c> DeclNode<'c> {
-  pub fn alloc(
-    context: &'c Context<'c>,
-    qualified_type: QualifiedType<'c>,
-    storage_class: Storage,
-    name: StrRef<'c>,
-    declkind: VarDeclKind,
-    previous_decl: Option<DeclRef<'c>>,
-  ) -> DeclRef<'c> {
-    use ::std::mem::MaybeUninit;
-    #[allow(clippy::uninit_assumed_init)]
-    #[allow(invalid_value)]
-    let node = context.arena().alloc(Self {
-      qualified_type,
-      storage_class,
-      name,
-      declkind,
-      previous_decl,
-      canonical_decl: unsafe { MaybeUninit::uninit().assume_init() },
-      definition: None,
-    });
-    let this = DeclRef::from_ptr(&raw mut *node as *mut _);
-
-    node.canonical_decl = previous_decl
-      .map(|prev| prev.canonical_decl())
-      .unwrap_or(this);
-
-    node.definition = match declkind {
-      VarDeclKind::Definition => Some(this),
-      _ =>
-        previous_decl.and_then(|previous: DeclRef<'_>| previous.definition()),
-    };
-
-    if matches!(declkind, VarDeclKind::Definition) {
-      // If we are the definition, update the canonical node so all prior/future
-      // nodes in the chain can find the definition.
-      this.canonical_decl().set_definition(Some(this));
-    }
-
-    this
+impl PtrEq for DeclRef<'_> {
+  #[inline]
+  fn ptr_eq(lhs: &Self, rhs: &Self) -> bool {
+    lhs.ptr.as_ptr() == rhs.ptr.as_ptr()
   }
+}
 
+impl<'c> DeclNode<'c> {
   #[inline]
   pub fn decl(
     context: &'c Context<'c>,
@@ -187,12 +194,12 @@ impl<'c> DeclNode<'c> {
     name: StrRef<'c>,
     previous_decl: Option<DeclRef<'c>>,
   ) -> DeclRef<'c> {
-    Self::alloc(
+    DeclRef::new(
       context,
       qualified_type,
       storage_class,
       name,
-      VarDeclKind::Declaration,
+      Declaration,
       previous_decl,
     )
   }
@@ -205,12 +212,12 @@ impl<'c> DeclNode<'c> {
     name: StrRef<'c>,
     previous_decl: Option<DeclRef<'c>>,
   ) -> DeclRef<'c> {
-    Self::alloc(
+    DeclRef::new(
       context,
       qualified_type,
       storage_class,
       name,
-      VarDeclKind::Definition,
+      Definition,
       previous_decl,
     )
   }
@@ -223,12 +230,12 @@ impl<'c> DeclNode<'c> {
     name: StrRef<'c>,
     previous_decl: Option<DeclRef<'c>>,
   ) -> DeclRef<'c> {
-    Self::alloc(
+    DeclRef::new(
       context,
       qualified_type,
       storage_class,
       name,
-      VarDeclKind::Tentative,
+      Tentative,
       previous_decl,
     )
   }

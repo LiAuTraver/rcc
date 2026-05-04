@@ -1,6 +1,7 @@
 //! applied during unary operations, including (implicit) unary inside binary operations
 
 use ::rcc_adt::{FloatFormat, Signedness};
+use CastType::*;
 use Signedness::*;
 
 use super::{
@@ -113,9 +114,9 @@ impl Primitive {
     assert!(self.is_integer(), "Type {:?} is not an integer type", self);
 
     if self.integer_rank() < Int.integer_rank() {
-      (Int, CastType::IntegralCast)
+      (Int, IntegralCast)
     } else {
-      (self, CastType::Noop)
+      (self, Noop)
     }
   }
 
@@ -128,9 +129,9 @@ impl Primitive {
       self
     );
     if self.floating_rank() < Double.floating_rank() {
-      (Double, CastType::FloatingCast)
+      (Double, FloatingCast)
     } else {
-      (self, CastType::Noop)
+      (self, Noop)
     }
   }
 
@@ -153,7 +154,7 @@ impl Promotion for Primitive {
     if self.is_integer() {
       self.integer_promotion()
     } else {
-      (self, CastType::Noop)
+      (self, Noop)
     }
   }
 }
@@ -164,7 +165,7 @@ impl<'c> Promotion for Type<'c> {
         let (promoted, cast_type) = p.promote();
         (Self::Primitive(promoted), cast_type)
       },
-      _ => (self, CastType::Noop),
+      _ => (self, Noop),
     }
   }
 }

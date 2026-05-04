@@ -39,6 +39,26 @@ impl ControlFlowContext {
     }
   }
 }
+#[derive(Default)]
+pub struct Globals<'c> {
+  inner: HashMap<sd::DeclRef<'c>, ValueID>,
+}
+impl<'c> Globals<'c> {
+  pub fn contains_key(&self, decl: &sd::DeclRef<'c>) -> bool {
+    debug_assert!(decl.is_canonical());
+    self.inner.contains_key(decl)
+  }
+
+  pub fn get(&self, decl: &sd::DeclRef<'c>) -> Option<&ValueID> {
+    debug_assert!(decl.is_canonical());
+    self.inner.get(decl)
+  }
+
+  pub fn insert(&mut self, decl: sd::DeclRef<'c>, value_id: ValueID) {
+    debug_assert!(decl.is_canonical());
+    self.inner.insert(decl, value_id);
+  }
+}
 pub struct Builder<'c> {
   pub(super) session: SessionRef<'c, OpDiag<'c>>,
   /// The basic block currently being written into
@@ -49,7 +69,7 @@ pub struct Builder<'c> {
   pub(super) labels: HashMap<StrRef<'c>, ValueID>,
   pub(super) locals: HashMap<sd::DeclRef<'c>, ValueID>,
   /// function name → ValueID for call resolution
-  pub(super) globals: HashMap<sd::DeclRef<'c>, ValueID>,
+  pub(super) globals: Globals<'c>,
   pub(super) module: Module<'c>,
 }
 impl<'a> Deref for Builder<'a> {
@@ -252,41 +272,44 @@ impl<'c> Builder<'c> {
 
 impl<'c> Builder<'c> {
   fn global_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
-    match declaration {
-      sd::ExternalDeclarationRef::Function(function) =>
-        match function.is_definition() {
-          true => self.global_funcdef(function),
-          false => self.funcdecl(function.declaration),
+    let declref = declaration.declref();
+    if self.globals.contains_key(&declref.canonical_decl()) {
+      // the node, no matter it's decl or def, has alreaady been recorded
+    } else {
+      match declaration {
+        sd::ExternalDeclarationRef::Function(_function) => todo!("FIXME!"),
+        // match function.declaration.definition().is_some() {
+        //   true =>
+        //     if function.is_definition() {
+        //       self.global_funcdef(function)
+        //     },
+        //   false => self.funcdecl(function.declaration),
+        // },
+        sd::ExternalDeclarationRef::Variable(variable) => {
+          self.global_vardef(variable);
         },
-      sd::ExternalDeclarationRef::Variable(variable) => {
-        self.global_vardef(variable);
-      },
+      }
     }
   }
 
   fn funcdecl(&mut self, declaration: sd::DeclRef<'c>) {
-    let declaration = declaration.canonical_decl();
-    if let Some(&value_id) = self.globals.get(&declaration) {
-      debug_assert!(
-        self.visit(value_id, |value| value
-          .data
-          .as_constant()
-          .is_some_and(|c| c.as_global().is_some_and(|g| g.is_function()))),
-        "pre-registered value should be a function"
-      );
-    } else {
-      let decl = declaration;
-      let name = decl.name();
-      let ast_type = decl.qualified_type().unqualified_type;
-      let is_variadic = ast_type.as_functionproto_unchecked().is_variadic;
+    // last decl has the most information.
+    let declaration = declaration.latest_decl();
 
-      let value_id = self.emit(
-        global::Function::new_empty(name, Default::default(), is_variadic),
-        ast_type,
-      );
+    let value_id = self.emit(
+      global::Function::new_empty(
+        declaration.name(),
+        Default::default(),
+        declaration
+          .qualified_type()
+          .unqualified_type
+          .as_functionproto_unchecked()
+          .is_variadic,
+      ),
+      &declaration.qualified_type(),
+    );
 
-      self.globals.insert(declaration, value_id);
-    }
+    self.globals.insert(declaration.canonical_decl(), value_id);
   }
 
   fn global_funcdef(&mut self, function: sd::FunctionRef<'c>) {
@@ -1967,7 +1990,10 @@ impl<'c> Builder<'c> {
     }
   }
 
-  /// Addressof is a no-op in IR level(for valid operands), since the operand should have already been loaded to a pointer if it's an lvalue, and if it's not an lvalue, it's already an rvalue and the address-of operator is invalid and should have been rejected by sema.
+  /// Addressof is a no-op in IR level(for valid operands), since the operand
+  /// should have already been loaded to a pointer if it's an lvalue, and if
+  /// it's not an lvalue, it's already an rvalue and the address-of operator is
+  /// invalid and should have been rejected by sema.
   #[inline(always)]
   fn addressof(
     &mut self,

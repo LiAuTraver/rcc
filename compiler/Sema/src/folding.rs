@@ -67,7 +67,8 @@ pub trait Folding<'c, VariantTy> {
   /// If folding is not possible, return self unchanged.
   /// So it may end up being a no-op, partial-fold, or full-fold.
   ///
-  /// If [`Diagnosis`] is not required, use [`NoOp`](crate::diagnosis::NoOp) as the dummy parameter.
+  /// If [`Diagnosis`] is not required, use [`NoOp`](crate::diagnosis::NoOp) as
+  /// the dummy parameter.
   #[must_use]
   fn fold<D: Diagnosis<'c>>(
     expression: ExprRef<'c>,
@@ -404,8 +405,8 @@ impl<'c> Folding<'c, Binary<'c>> for Expression<'c> {
       ),
       "type checker makes sure both sides have the same type via \
        `ImplicitCast`! {:#?} vs {:#?}, op {:#?}",
-      folded_lhs.qualified_type(),
-      folded_rhs.qualified_type(),
+      folded_lhs.unqualified_type(),
+      folded_rhs.unqualified_type(),
       binary.operator
     );
     let lhs_type = folded_lhs.qualified_type();

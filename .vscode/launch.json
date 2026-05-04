@@ -32,7 +32,7 @@
       "request": "launch",
       "name": "lldb-dap debug rcc",
       "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}\\target\\debug\\rcc.exe",
+      "program": "${workspaceFolder}/target/debug/rcc.exe",
       "env": [
         "RUST_BACKTRACE=short",
         "RUSTC_TOOLCHAIN=Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"

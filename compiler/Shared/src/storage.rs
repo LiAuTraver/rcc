@@ -1,4 +1,4 @@
-use super::{DiagData, DiagMeta, Keyword, Literal, Severity};
+use super::{DiagData, Keyword, Literal};
 
 /// storage-class-specifier
 #[derive(Debug, ::strum_macros::Display, PartialEq, Eq, Clone, Copy, Hash)]
@@ -76,20 +76,18 @@ impl<'c> TryFrom<&Literal<'c>> for Storage {
 
 impl Storage {
   pub fn try_merge<'c>(
-    lhs: &Storage,
-    rhs: &Storage,
-  ) -> Result<Storage, DiagMeta<'c>> {
+    lhs: Storage,
+    rhs: Storage,
+  ) -> Result<Storage, DiagData<'c>> {
     use DiagData::*;
-    use Severity::*;
     match (lhs, rhs) {
-      (lhs, rhs) if lhs == rhs => Ok(*lhs),
-      (Constexpr, _) | (_, Constexpr) => Err(
-        UnsupportedFeature("Constexpr unimplemented yet".to_string()) + Error,
-      ),
-      (Typedef, _) | (_, Typedef) =>
-        Err(StorageSpecsUnmergeable(*lhs, *rhs) + Error),
-      (Extern, other) | (other, Extern) => Ok(*other), // extern is compatible with any other storage class
-      _ => Err(StorageSpecsUnmergeable(*lhs, *rhs) + Error),
+      (lhs, rhs) if lhs == rhs => Ok(lhs),
+      (Constexpr, _) | (_, Constexpr) => Err(UnsupportedFeature(
+        "Constexpr unimplemented yet".to_string(),
+      )),
+      (Typedef, _) | (_, Typedef) => Err(StorageSpecsUnmergeable(lhs, rhs)),
+      (Extern, other) | (other, Extern) => Ok(other), // extern is compatible with any other storage class
+      _ => Err(StorageSpecsUnmergeable(lhs, rhs)),
     }
   }
 

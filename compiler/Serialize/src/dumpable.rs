@@ -680,10 +680,17 @@ impl<'c> Dumpable<'c> for VarDef<'_> {
     if let Some(prev) = decl.previous_decl() {
       dumper.write_fmt(format_args!("prev {:p} ", prev,), &palette.skeleton);
     }
-    dumper.write_fmt(
-      format_args!("can {:p} ", decl.canonical_decl()),
-      &palette.skeleton,
-    );
+    if !decl.is_canonical() {
+      dumper.write_fmt(
+        format_args!("can {:p} ", decl.canonical_decl()),
+        &palette.skeleton,
+      );
+    } else {
+      dumper.write_fmt(
+        format_args!("last {:p} ", decl.latest_decl()),
+        &palette.skeleton,
+      );
+    }
 
     if let Some(def) = decl.definition() {
       dumper.write_fmt(format_args!("def {:p} ", def,), &palette.skeleton);

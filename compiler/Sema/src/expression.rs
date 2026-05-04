@@ -9,6 +9,7 @@ use ::rcc_utils::{PtrEq, StrRef};
 use crate::declref::DeclRef;
 
 pub(super) type UnaryKind = ::rcc_ast::blueprints::UnaryKind;
+use ::rcc_ast::blueprints::UnaryKind::*;
 
 pub type ExprRef<'c> = &'c Expression<'c>;
 
@@ -114,13 +115,13 @@ impl<'c> Unary<'c> {
   #[inline(always)]
   pub fn prefix(operator: Operator, operand: ExprRef<'c>) -> Self {
     debug_assert!(operator.unary(), "not a unary operator! got {:?}", operator);
-    Self::new(operator, operand, UnaryKind::Prefix)
+    Self::new(operator, operand, Prefix)
   }
 
   #[inline(always)]
   pub fn postfix(operator: Operator, operand: ExprRef<'c>) -> Self {
     debug_assert!(operator.unary(), "not a unary operator! got {:?}", operator);
-    Self::new(operator, operand, UnaryKind::Postfix)
+    Self::new(operator, operand, Postfix)
   }
 }
 

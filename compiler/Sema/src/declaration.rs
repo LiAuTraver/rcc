@@ -22,6 +22,15 @@ pub enum ExternalDeclarationRef<'c> {
   Variable(VarDefRef<'c>),
 }
 
+impl<'c> ExternalDeclarationRef<'c> {
+  pub fn declref(&self) -> DeclRef<'c> {
+    match self {
+      Self::Function(func) => func.declaration,
+      Self::Variable(var) => var.declaration,
+    }
+  }
+}
+
 #[derive(Debug)]
 pub struct Function<'c> {
   pub declaration: DeclRef<'c>,
@@ -129,6 +138,17 @@ impl<'c> Function<'c> {
     context.arena().alloc(function)
   }
 
+  #[inline]
+  pub fn new_decl(
+    context: &'c Context<'c>,
+    declaration: DeclRef<'c>,
+    parameters: impl IntoIterator<Item = Parameter<'c>>,
+    specifier: FunctionSpecifier,
+    span: SourceSpan,
+  ) -> Self {
+    Self::new(context, declaration, parameters, specifier, None, span)
+  }
+
   pub fn new(
     context: &'c Context<'c>,
     declaration: DeclRef<'c>,
@@ -159,6 +179,7 @@ impl<'c> Function<'c> {
 }
 
 impl<'c> VarDef<'c> {
+  #[inline]
   pub fn new(
     context: &'c Context<'c>,
     declaration: DeclRef<'c>,
@@ -170,6 +191,25 @@ impl<'c> VarDef<'c> {
       initializer,
       span,
     })
+  }
+
+  #[inline]
+  pub fn decl(
+    context: &'c Context<'c>,
+    declaration: DeclRef<'c>,
+    span: SourceSpan,
+  ) -> VarDefRef<'c> {
+    Self::new(context, declaration, None, span)
+  }
+
+  #[inline]
+  pub fn def(
+    context: &'c Context<'c>,
+    declaration: DeclRef<'c>,
+    initializer: Initializer<'c>,
+    span: SourceSpan,
+  ) -> VarDefRef<'c> {
+    Self::new(context, declaration, Some(initializer), span)
   }
 }
 

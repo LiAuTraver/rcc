@@ -96,8 +96,8 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
     return 0;
   }
 
-  let mut analyzer = Sema::new(program, &ast_session);
-  let translation_unit = analyzer.analyze();
+  let mut analyzer = Sema::new(&ast_session);
+  let translation_unit = analyzer.analyze(program);
 
   ASTDumper::dump(&translation_unit, &ast_session).unwrap();
 
