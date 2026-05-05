@@ -259,7 +259,6 @@ impl<'c> Context<'c> {
 }
 use ::std::{
   cell::{Ref, RefMut},
-  mem::MaybeUninit,
   ops::Deref,
 };
 impl<'c> Context<'c> {
@@ -387,13 +386,16 @@ use FloatFormat::*;
 type Interner<T> = RefCell<HashSet<T>>;
 
 impl<'c> Context<'c> {
-  #[allow(clippy::uninit_assumed_init)]
-  #[allow(invalid_value)]
   pub fn new(
     ast_arena: &'c Arena,
     ast_context: &'c ASTContext,
     triple: Triple,
   ) -> Self {
+    // FIXME: we dont need this, but create uninitialized array maybe?
+    #[inline(always)]
+    fn fill_null<const LEN: usize>() -> [ValueID; LEN] {
+      [ValueID::null(); LEN]
+    }
     let mut this = Self {
       void_type: ast_arena.alloc(Type::Void()),
       label_type: ast_arena.alloc(Type::Label()),
@@ -415,11 +417,11 @@ impl<'c> Context<'c> {
       ir_arena: Default::default(),
       ir_def_use: Default::default(),
       ir_type_interner: Default::default(),
-      nullptr: unsafe { MaybeUninit::uninit().assume_init() },
-      common_integer_one: unsafe { MaybeUninit::uninit().assume_init() },
-      common_integer_zero: unsafe { MaybeUninit::uninit().assume_init() },
-      common_floating_one: unsafe { MaybeUninit::uninit().assume_init() },
-      common_floating_zero: unsafe { MaybeUninit::uninit().assume_init() },
+      nullptr: fill_null::<1>()[0],
+      common_integer_one: fill_null(),
+      common_integer_zero: fill_null(),
+      common_floating_one: fill_null(),
+      common_floating_zero: fill_null(),
     };
     {
       let mut refmut = this.ir_type_interner.borrow_mut();

@@ -611,14 +611,14 @@ impl<'c> Folding<'c, Variable<'c>> for Expression<'c> {
         Failure(expression)
       },
       Automatic | Register | Extern | Static => Failure(expression),
-      ThreadLocal | Constexpr => {
+      Constexpr => {
         session.diag().add_error(
           UnsupportedFeature("constexpr variable not implemented".to_string()),
           expression.span(),
         );
         Failure(expression)
       },
-      Typedef => unreachable!(),
+      Typedef | ThreadLocal => unreachable!(),
     }
   }
 }

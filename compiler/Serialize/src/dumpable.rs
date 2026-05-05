@@ -703,15 +703,22 @@ impl<'c> Dumpable<'c> for VarDef<'_> {
 
     dumper.write_fmt(format_args!(" '{}' ", decl.name()), &palette.literal);
 
-    dumper.write("[", &palette.skeleton);
-    dumper
-      .write_fmt(format_args!("'{}'", decl.qualified_type()), &palette.meta);
-
     dumper.write_fmt(
-      format_args!(" {:p}", decl.qualified_type().unqualified_type),
-      &palette.skeleton,
+      format_args!("'{}' ", decl.storage_class()),
+      &palette.literal,
     );
-    dumper.write("]\n", &palette.skeleton);
+
+    // dumper.write("[", &palette.skeleton);
+    // dumper
+    //   .write_fmt(format_args!("'{}'", decl.qualified_type()), &palette.meta);
+
+    // dumper.write_fmt(
+    //   format_args!(" {:p}", decl.qualified_type().unqualified_type),
+    //   &palette.skeleton,
+    // );
+    // dumper.write("]", &palette.skeleton);
+
+    dumper.newline();
 
     if let Some(initializer) = &self.initializer {
       let subprefix = dumper.child_prefix(prefix, is_last);
@@ -751,13 +758,20 @@ impl<'c> Dumpable<'c> for Function<'_> {
     dumper.write(decl.declkind(), &palette.kind);
     dumper.write(">", &palette.skeleton);
     dumper.write_fmt(quoted!(" '", decl.name(), "' "), &palette.literal);
-    dumper.write("[", &palette.skeleton);
-    dumper.write(quoted!("'" => decl.qualified_type()), &palette.meta);
+
     dumper.write_fmt(
-      format_args!(" {:p}", decl.qualified_type().unqualified_type),
-      &palette.skeleton,
+      format_args!("'{}' ", decl.storage_class()),
+      &palette.literal,
     );
-    dumper.write("]\n", &palette.skeleton);
+    // dumper.write("[", &palette.skeleton);
+    // dumper.write(quoted!("'" => decl.qualified_type()), &palette.meta);
+    // dumper.write_fmt(
+    //   format_args!(" {:p}", decl.qualified_type().unqualified_type),
+    //   &palette.skeleton,
+    // );
+    // dumper.write("]", &palette.skeleton);
+
+    dumper.newline();
 
     if let Some(body) = &self.body {
       let subprefix = dumper.child_prefix(prefix, is_last);

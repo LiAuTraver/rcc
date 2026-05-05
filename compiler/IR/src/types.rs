@@ -37,13 +37,18 @@ impl<'ir> Type<'ir> {
     match self {
       Void() => panic!("invalid call: void type has no alignment"),
       Label() => panic!("invalid call: label has no alignment"),
-      Function(_) => panic!("invalid call: function type has no alignment"),
+      Function(_) => data_layout.pointer_specs.align(), // treat it as ptr has many benifits.
       Floating(format) => data_layout.float_specs(*format).align(),
       Pointer() => data_layout.pointer_specs.align(),
       Integer(size_bit) => data_layout.integer_specs(*size_bit).align(),
       Array(array) => array.element_type.alignment(data_layout),
       Struct(_) => unimplemented!(),
     }
+  }
+
+  #[inline]
+  pub fn is_scalar(&self) -> bool {
+    self.extent() == 1
   }
 
   pub fn extent(&self) -> usize {

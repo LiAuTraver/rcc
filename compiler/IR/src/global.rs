@@ -1,15 +1,45 @@
 use ::rcc_ast::Constant;
+use ::rcc_shared::Storage;
 use ::rcc_utils::StrRef;
 
 use super::ValueID;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Linkage {
+  /// Visible to other translation units, [`Storage::Extern`].
   External,
+  /// Not visible, [`Storage::Static`].
   Internal,
-  Common,
+  /// Anonymous data like string literals and const arrays. Also [`Storage::Static`].
+  Private,
+  // /// Tentative.
+  // Common,
 }
 
+impl From<Storage> for Linkage {
+  fn from(storage: Storage) -> Self {
+    use Linkage::*;
+    use Storage::*;
+    match storage {
+      Extern => External,
+      Static => Internal,
+      _ => panic!("not a truly storage class."),
+    }
+  }
+}
+// impl Linkage {
+//   pub fn maybe_tentative(decl: DeclRef) -> Self {
+//     use Linkage::*;
+//     use Storage::*;
+//     use VarDeclKind::*;
+//     match (decl.storage_class(), decl.declkind()) {
+//       (_, Tentative) => Common,
+//       (Extern, _) => External,
+//       (Static, _) => Internal,
+//       _ => panic!("invalid call"),
+//     }
+//   }
+// }
 #[derive(Debug)]
 pub enum Global<'ir> {
   Function(Function<'ir>),
@@ -29,6 +59,7 @@ impl<'ir> Global<'ir> {
 #[derive(Debug)]
 pub struct Function<'c> {
   pub name: StrRef<'c>,
+  pub linkage: Linkage,
   /// Shall be [`Argument`].
   pub params: Vec<ValueID>,
   /// Shall be [`BasicBlock`].
@@ -39,11 +70,13 @@ pub struct Function<'c> {
 impl<'c> Function<'c> {
   pub fn new_empty(
     name: StrRef<'c>,
+    linkage: Linkage,
     params: Vec<ValueID>,
     is_variadic: bool,
   ) -> Self {
     Self {
       name,
+      linkage,
       is_variadic,
       params,
       blocks: Default::default(),
@@ -65,12 +98,30 @@ impl<'c> Function<'c> {
 #[derive(Debug)]
 pub struct Variable<'c> {
   pub name: StrRef<'c>,
+  pub linkage: Linkage,
   pub initializer: Option<Initializer<'c>>,
 }
 
 impl<'c> Variable<'c> {
-  pub fn new(name: StrRef<'c>, initializer: Option<Initializer<'c>>) -> Self {
-    Self { name, initializer }
+  /// the `linkage` param has some nuances and UB w.r.t. C standard if tentative definition is involved.
+  pub fn new(
+    name: StrRef<'c>,
+    linkage: Linkage,
+    initializer: Option<Initializer<'c>>,
+  ) -> Self {
+    Self {
+      name,
+      linkage,
+      initializer,
+    }
+  }
+}
+
+impl Variable<'_> {
+  pub fn is_definition(&self) -> bool {
+    // use Linkage::*;
+    self.initializer.is_some()
+    // || matches!(self.linkage, Common)
   }
 }
 
@@ -99,6 +150,7 @@ impl BasicBlock {
 /// **Static** initializer.
 #[derive(Debug, Clone)]
 pub enum Initializer<'c> {
+  Zeroed(),
   Scalar(Constant<'c>),
   Aggregate(Vec<Initializer<'c>>),
 }

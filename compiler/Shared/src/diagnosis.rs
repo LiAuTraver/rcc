@@ -11,8 +11,8 @@ mod data {
   //!
   //! A [`Data`] can be easily converted into a [`Meta`] with a given [`Severity`], like
   //! ```rust
-  //! use ::rcc_utils::IntoWith;
   //! use ::rcc_shared::{DiagData as Data, DiagMeta as Meta, Severity};
+  //! use ::rcc_utils::IntoWith;
   //! let data = Data::MissingIdentifier("after type specifier".to_string());
   //! let meta: Meta = data.into_with(Severity::Error);
   //! let diag = meta.into_with(Default::default()); // default span
@@ -202,8 +202,10 @@ mod data {
       "variable '{0}' declared with 'register' cannot be taken address of"
     )]
     AddressofOperandRegVar(Elem),
-    #[error("Global variable cannot be declared with 'register', ignoring")]
+    #[error("Global variable cannot be declared with 'register'")]
     GlobalRegVar(Elem),
+    #[error("Global variable cannot be declared with automatic storage")]
+    GlobalAutoVar(Elem),
     #[error(
       "variable declared with 'register' can only have pointer type, got '{0}'"
     )]
@@ -227,7 +229,7 @@ mod data {
     IncompatibleType(StrRef<'c>, QualTyStr, QualTyStr),
     #[error("Incompatible pointer types '{0}' and '{1}'")]
     IncompatiblePointerTypes(QualTyStr, QualTyStr),
-    #[error("Cannot merge storage classes '{0}' and '{1}'")]
+    #[error("Cannot combine previous storage class '{0}' with '{1}'")]
     StorageSpecsUnmergeable(Storage, Storage),
     #[error("{0}")]
     MainFunctionProtoMismatch(CustomMsgFixed),

@@ -4,6 +4,7 @@ int y;
 int putchar(int);
 int puts(const char *);
 int g(int);
+extern int k;
 int main() {
   putchar('H');
   char arr[6];
@@ -16,5 +17,5 @@ int main() {
   puts(arr);
   // this failed rn:
   // puts("Hello");
-  return y;
+  return k;
 }

@@ -1,22 +1,22 @@
 use ::rcc_adt::{Integral, Signedness, SizeBit};
 use ::rcc_ast::{
-  UnaryKind,
+  UnaryKind, VarDeclKind,
   types::{self as ast, TypeInfo},
 };
 use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
 use ::rcc_shared::{
   DiagData::*, Diagnosis, OpDiag, Operator, OperatorCategory, SourceSpan,
+  Storage,
 };
 use ::rcc_utils::{RefEq, StrRef, contract_violation};
 use ::std::{collections::HashMap, ops::Deref};
 
 use super::{
-  ConstantData, DataLayout,
+  ConstantData, DataLayout, Module,
   context::{Session, SessionRef},
   emitable::Emitable,
   global::{self, BasicBlock},
   instruction as inst,
-  module::Module,
   value::{self, Value, ValueID},
 };
 
@@ -40,10 +40,11 @@ impl ControlFlowContext {
   }
 }
 #[derive(Default)]
-pub struct Globals<'c> {
+pub struct CanonicalMap<'c> {
   inner: HashMap<sd::DeclRef<'c>, ValueID>,
 }
-impl<'c> Globals<'c> {
+impl<'c> CanonicalMap<'c> {
+  #[allow(unused)]
   pub fn contains_key(&self, decl: &sd::DeclRef<'c>) -> bool {
     debug_assert!(decl.is_canonical());
     self.inner.contains_key(decl)
@@ -58,6 +59,14 @@ impl<'c> Globals<'c> {
     debug_assert!(decl.is_canonical());
     self.inner.insert(decl, value_id);
   }
+
+  pub fn is_empty(&self) -> bool {
+    self.inner.is_empty()
+  }
+
+  pub fn clear(&mut self) {
+    self.inner.clear()
+  }
 }
 pub struct Builder<'c> {
   pub(super) session: SessionRef<'c, OpDiag<'c>>,
@@ -67,9 +76,9 @@ pub struct Builder<'c> {
   pub(super) current_function: ValueID,
   pub(super) ctrlflow_ctx: Vec<ControlFlowContext>,
   pub(super) labels: HashMap<StrRef<'c>, ValueID>,
-  pub(super) locals: HashMap<sd::DeclRef<'c>, ValueID>,
+  pub(super) locals: CanonicalMap<'c>,
   /// function name → ValueID for call resolution
-  pub(super) globals: Globals<'c>,
+  pub(super) globals: CanonicalMap<'c>,
   pub(super) module: Module<'c>,
 }
 impl<'a> Deref for Builder<'a> {
@@ -272,89 +281,102 @@ impl<'c> Builder<'c> {
 
 impl<'c> Builder<'c> {
   fn global_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
-    let declref = declaration.declref();
-    if self.globals.contains_key(&declref.canonical_decl()) {
-      // the node, no matter it's decl or def, has alreaady been recorded
-    } else {
-      match declaration {
-        sd::ExternalDeclarationRef::Function(_function) => todo!("FIXME!"),
-        // match function.declaration.definition().is_some() {
-        //   true =>
-        //     if function.is_definition() {
-        //       self.global_funcdef(function)
-        //     },
-        //   false => self.funcdecl(function.declaration),
-        // },
-        sd::ExternalDeclarationRef::Variable(variable) => {
-          self.global_vardef(variable);
+    match declaration {
+      sd::ExternalDeclarationRef::Function(function) =>
+        match function.is_definition() {
+          true => self.global_funcdef(function),
+          false => self.funcdecl(function.declaration),
         },
-      }
+      sd::ExternalDeclarationRef::Variable(variable) =>
+        match variable.declaration.is_definition() {
+          true => self.global_vardef(variable),
+          false => self.global_vardecl(variable),
+        },
+      // if self
+      //   .globals
+      //   .contains_key(&declaration.declref().canonical_decl())
+      // {
+      //   // the node, no matter it's decl or def, has alreaady been recorded
+      // } else {
+      //   self.global_vardef(variable);
+      // },
     }
   }
 
   fn funcdecl(&mut self, declaration: sd::DeclRef<'c>) {
-    // last decl has the most information.
-    let declaration = declaration.latest_decl();
+    if self.globals.get(&declaration.canonical_decl()).is_some() {
+      // do nothing.
+    } else {
+      // last decl has the most information.
+      let latest_decl = declaration.latest_decl();
+      let value_id = self.emit(
+        global::Function::new_empty(
+          latest_decl.name(),
+          latest_decl.storage_class().into(),
+          Default::default(),
+          latest_decl
+            .qualified_type()
+            .unqualified_type
+            .as_functionproto_unchecked()
+            .is_variadic,
+        ),
+        &latest_decl.qualified_type(),
+      );
 
-    let value_id = self.emit(
-      global::Function::new_empty(
-        declaration.name(),
-        Default::default(),
-        declaration
-          .qualified_type()
-          .unqualified_type
-          .as_functionproto_unchecked()
-          .is_variadic,
-      ),
-      &declaration.qualified_type(),
-    );
-
-    self.globals.insert(declaration.canonical_decl(), value_id);
+      self.globals.insert(latest_decl.canonical_decl(), value_id);
+    }
   }
 
+  /// TODO:
+  /// 1. merge data like qtype, storage with the latest decl.
+  /// 2. add linkage specs
   fn global_funcdef(&mut self, function: sd::FunctionRef<'c>) {
     debug_assert!(function.is_definition());
 
-    let declaration = function.declaration.canonical_decl();
+    let latest_decl = function.declaration.latest_decl();
     let parameters = function.parameters;
 
-    let function_name = declaration.name();
-    let ast_type = declaration.qualified_type().unqualified_type;
+    let function_name = latest_decl.name();
+    let ast_type = latest_decl.qualified_type().unqualified_type;
 
-    self.current_function =
-      if let Some(&value_id) = self.globals.get(&declaration) {
-        // should be function and declaration-only
-        debug_assert!(
-          self.visit(value_id, |value| value.data.as_constant().is_some_and(
-            |c| c.as_global().is_some_and(|g| g.as_function().is_some_and(
-              |f| !f.is_definition()
-                && function_name
-                  == self.visit(value_id, |value| value
-                    .data
-                    .as_constant_unchecked()
-                    .as_global_unchecked()
-                    .as_function_unchecked()
-                    .name)
-                && f.is_variadic
-                  == ast_type.as_functionproto_unchecked().is_variadic
-            ))
-          )),
-          "pre-registered function should be declaration-only"
-        );
-        value_id
-      } else {
-        let function_id = self.emit(
-          global::Function::new_empty(
-            function_name,
-            Default::default(),
-            ast_type.as_functionproto_unchecked().is_variadic,
-          ),
-          ast_type,
-        );
+    self.current_function = if let Some(&value_id) =
+      self.globals.get(&function.declaration.canonical_decl())
+    {
+      // should be function and declaration-only
+      debug_assert!(
+        self.visit(value_id, |value| value.data.as_constant().is_some_and(
+          |c| c.as_global().is_some_and(|g| g.as_function().is_some_and(
+            |f| !f.is_definition()
+              && function_name
+                == self.visit(value_id, |value| value
+                  .data
+                  .as_constant_unchecked()
+                  .as_global_unchecked()
+                  .as_function_unchecked()
+                  .name)
+              && f.is_variadic
+                == ast_type.as_functionproto_unchecked().is_variadic
+          ))
+        )),
+        "pre-registered function should be declaration-only"
+      );
+      value_id
+    } else {
+      let function_id = self.emit(
+        global::Function::new_empty(
+          function_name,
+          latest_decl.storage_class().into(),
+          Default::default(),
+          ast_type.as_functionproto_unchecked().is_variadic,
+        ),
+        ast_type,
+      );
 
-        self.globals.insert(declaration, function_id);
-        function_id
-      };
+      self
+        .globals
+        .insert(function.declaration.canonical_decl(), function_id);
+      function_id
+    };
 
     debug_assert!(self.locals.is_empty());
     debug_assert!(self.labels.is_empty());
@@ -392,7 +414,9 @@ impl<'c> Builder<'c> {
         let ast_type = declaration.qualified_type().unqualified_type;
         let arg_id = self.emit(value::Arguments::new(index), ast_type);
         let localed_arg_id = self.emit(inst::Alloca::new(), ast_type);
-        self.locals.insert(declaration, localed_arg_id);
+        self
+          .locals
+          .insert(declaration.canonical_decl(), localed_arg_id);
         _ = self.emit(
           inst::Store::new(localed_arg_id, arg_id),
           self.ast().void_type(),
@@ -431,7 +455,7 @@ impl<'c> Builder<'c> {
       let next_function_entry = this.new_empty_block();
       let _ = this.push_block(next_function_entry);
     };
-    // A | (B if B ...) this syntax is not supported.
+    // A | (B if B ...) this syntax is not supported in pattern matching in rust...
     let make_unreachable_block = || {
       let this = unsafe { &mut *this };
       let _unreachable =
@@ -517,24 +541,87 @@ impl<'c> Builder<'c> {
     self.current_function = ValueID::null();
   }
 
+  fn global_vardecl(&mut self, variable: sd::VarDefRef<'c>) {
+    debug_assert!(matches!(
+      variable.declaration.declkind(),
+      VarDeclKind::Declaration | VarDeclKind::Tentative
+    ));
+    debug_assert!(variable.initializer.is_none());
+    // not reached the end nor the node is not recorded, just record it and wait for the definition.
+    if let Some(value_id) = self
+      .globals
+      .get(&variable.declaration.canonical_decl())
+      .copied()
+    {
+      if variable.declaration.is_latest() {
+        self.apply(value_id, |value| {
+          value
+            .data
+            .as_constant_mut_unchecked()
+            .as_global_mut_unchecked()
+            .as_variable_mut_unchecked()
+            .initializer
+            .get_or_insert(global::Initializer::Zeroed());
+        });
+      }
+    } else {
+      let latest_decl = variable.declaration.latest_decl();
+      let value_id = self.emit(
+        global::Variable::new(
+          latest_decl.name(),
+          latest_decl.storage_class().into(),
+          None,
+        ),
+        &latest_decl.qualified_type(),
+      );
+      self
+        .globals
+        .insert(variable.declaration.canonical_decl(), value_id);
+    }
+  }
+
   fn global_vardef(&mut self, variable: sd::VarDefRef<'c>) {
-    let declaration = variable.declaration.canonical_decl();
+    debug_assert!(variable.declaration.is_definition());
 
     let initializer = match variable.initializer {
       Some(sd::Initializer::Scalar(expr)) => Some(global::Initializer::Scalar(
         expr.as_constant_unchecked().clone(),
       )),
-      Some(sd::Initializer::List(_)) => todo!(),
+      Some(sd::Initializer::List(_)) => todo!("ilist lowering"), // TODO: handle initializers
       None => None,
     };
-    let value_id = self.emit(
-      global::Variable::new(
-        declaration.name(),
-        initializer, // TODO: handle initializers
-      ),
-      declaration.qualified_type().unqualified_type,
-    );
-    self.globals.insert(declaration, value_id);
+    if let Some(value_id) = self
+      .globals
+      .get(&variable.declaration.canonical_decl())
+      .copied()
+    {
+      self.apply(value_id, |value| {
+        debug_assert!(value.data.as_constant().is_some_and(|c| {
+          c.as_global().is_some_and(|g| {
+            g.as_variable().is_some_and(|v| v.initializer.is_none())
+          })
+        }));
+        value
+          .data
+          .as_constant_mut_unchecked()
+          .as_global_mut_unchecked()
+          .as_variable_mut_unchecked()
+          .initializer = initializer;
+      });
+    } else {
+      let latest_decl = variable.declaration.latest_decl();
+      let value_id = self.emit(
+        global::Variable::new(
+          latest_decl.name(),
+          latest_decl.storage_class().into(),
+          initializer,
+        ),
+        &latest_decl.qualified_type(),
+      );
+      self
+        .globals
+        .insert(variable.declaration.canonical_decl(), value_id);
+    }
   }
 
   fn local_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
@@ -548,11 +635,25 @@ impl<'c> Builder<'c> {
   }
 
   fn local_vardef(&mut self, var_def: sd::VarDefRef<'c>) {
+    use Storage::*;
+    debug_assert!(!matches!(
+      var_def.declaration.latest_decl().storage_class(),
+      Typedef | ThreadLocal
+    ));
+    if matches!(
+      var_def.declaration.latest_decl().storage_class(),
+      Static | Extern | Constexpr
+    ) {
+      todo!("local static/extern variable is not implemented yet!")
+    } else if matches!(
+      var_def.declaration.latest_decl().storage_class(),
+      Register
+    ) {
+      // we just ignore the register storage classifier.
+    }
     let declaration = var_def.declaration;
-    let value_id = self.emit(
-      inst::Alloca::new(),
-      declaration.qualified_type().unqualified_type,
-    );
+    let value_id =
+      self.emit(inst::Alloca::new(), &declaration.qualified_type());
 
     match var_def.initializer {
       Some(sd::Initializer::Scalar(expr)) => {
@@ -565,7 +666,7 @@ impl<'c> Builder<'c> {
       Some(sd::Initializer::List(_)) => todo!(),
       None => (),
     };
-    self.locals.insert(declaration, value_id);
+    self.locals.insert(declaration.canonical_decl(), value_id);
   }
 }
 
@@ -1100,14 +1201,13 @@ impl<'c> Builder<'c> {
     _ast_type: ast::TypeRef<'c>,
     _span: SourceSpan,
   ) -> ValueID {
-    let declaration = variable.canonical_decl();
-    let name = declaration.name();
-    if let Some(&vid) = self.locals.get(&declaration) {
+    let can_decl = variable.canonical_decl();
+    if let Some(&vid) = self.locals.get(&can_decl) {
       vid
-    } else if let Some(&vid) = self.globals.get(&declaration) {
+    } else if let Some(&vid) = self.globals.get(&can_decl) {
       vid
     } else {
-      panic!("undefined variable: {name}")
+      panic!("undefined variable: {}", can_decl.name())
     }
   }
 

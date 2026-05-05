@@ -4,7 +4,7 @@ use ::rcc_adt::{Integral, SizeBit};
 use ::rcc_ast::Constant;
 use ::rcc_ir::{
   BasicBlock, GlobalValue, IRArguments, IRConstant, IRFunction,
-  IRStaticInitializer, IRVariable, Module, Value, ValueData, ValueID,
+  IRStaticInitializer, IRVariable, Linkage, Module, Value, ValueData, ValueID,
   instruction as inst,
 };
 
@@ -297,6 +297,9 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
       ),
       &palette.literal,
     );
+    if matches!(variant.linkage, Linkage::Internal) {
+      printer.write("internal ", &palette.literal);
+    }
 
     printer.write(suff!(" " => ir_function_type.return_type), &palette.meta);
 
@@ -332,6 +335,9 @@ impl<'c> Print<'c, IRFunction<'_>> for Value<'c> {
           );
         },
       );
+    }
+    if ir_function_type.params.is_empty() {
+      printer.write("void", &palette.meta);
     }
     printer.write(")", &palette.skeleton);
     if variant.is_definition() {
@@ -371,17 +377,34 @@ impl<'c> Print<'c, IRVariable<'_>> for Value<'c> {
     variant: &IRVariable<'_>,
   ) {
     printer.write_fmt(format_args!("@{} = ", variant.name), &palette.skeleton);
-    printer.write("global ", &palette.meta);
+    if !variant.is_definition() {
+      // debug_assert!(matches!(variant.linkage, Linkage::External));
+      printer.write("external ", &palette.literal);
+    } else if matches!(variant.linkage, Linkage::Internal) {
+      printer.write("internal ", &palette.literal);
+    }
+    printer.write("global ", &palette.literal);
     printer.write(printer.ir().ir_type(self.ast_type), &palette.meta);
 
     if let Some(initializer) = &variant.initializer {
       printer.write(" ", &palette.skeleton);
       match initializer {
+        IRStaticInitializer::Zeroed() =>
+          printer.write("zeroinitializer", &palette.meta),
         IRStaticInitializer::Scalar(constant) =>
           printer.write(constant, &palette.literal),
         IRStaticInitializer::Aggregate(_) => todo!(),
       }
     }
+    printer.write(", ", &palette.skeleton);
+    printer.write("align ", &palette.literal);
+    printer.write(
+      printer
+        .ir()
+        .ir_type(self.ast_type)
+        .alignment(printer.ir().data_layout()),
+      &palette.meta,
+    );
 
     printer.newline();
   }
@@ -871,7 +894,7 @@ impl<'c> Print<'c, inst::Store> for Value<'c> {
     printer.write(
       printer
         .ir()
-        .ir_type(lookup!(printer, variant.dest()).ast_type)
+        .ir_type(lookup!(printer, variant.data()).ast_type)
         .alignment(printer.ir().data_layout()),
       &palette.meta,
     );

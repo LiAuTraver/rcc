@@ -334,22 +334,26 @@ impl<'c> Parser<'c> {
             && self.parse_type_specifier_with_offset(1).is_some()))
       {
         match storage {
-          Some(ref existing_storage) if existing_storage == storage_class => {
+          _ if matches!(storage_class, Storage::ThreadLocal) => self.add_error(
+            UnsupportedFeature(
+              "Thread local unimplemented. (quick notes: the keyword is \
+               classified as storage class but it acts more like an \
+               attribute. so handle it there.)"
+                .to_string(),
+            ),
+            self.eloc(location),
+          ),
+          Some(ref existing_storage) if existing_storage == storage_class =>
             self.add_warning(
               RedundantStorageSpecs(storage_class),
               self.eloc(location),
-            );
-          },
-          Some(ref existing_storage) => {
-            self.add_error(
-              StorageSpecsUnmergeable(*existing_storage, storage_class),
-              self.eloc(location),
-            );
-          },
-          None => {
-            storage = Some(storage_class);
-          },
-        }
+            ),
+          Some(ref existing_storage) => self.add_error(
+            StorageSpecsUnmergeable(*existing_storage, storage_class),
+            self.eloc(location),
+          ),
+          None => storage = Some(storage_class),
+        };
         self.get(); // get the storage class
       // it's a bit tricky to parse type specifiers here
       } else if let Some(specifier) = self.parse_type_specifier() {
