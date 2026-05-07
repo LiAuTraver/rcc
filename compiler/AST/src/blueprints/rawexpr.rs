@@ -115,31 +115,31 @@ macro_rules! type_alias_expr {
       }
     }
 
-    mod getspan {
-      use super::*;
-      use ::rcc_shared::SourceSpan;
-      impl<'c> RawExpr<'c> {
-        pub fn span(&self) -> SourceSpan {
-          match self {
-            RawExpr::Empty(_) => SourceSpan::default(),
-            RawExpr::Constant(c) => c.span,
-            RawExpr::Unary(u) => u.span,
-            RawExpr::Binary(b) => b.span,
-            RawExpr::Call(call) => call.span,
-            RawExpr::Paren(p) => p.span,
-            RawExpr::MemberAccess(ma) => ma.span,
-            RawExpr::Ternary(t) => t.span,
-            RawExpr::SizeOf(sizeof) => sizeof.span,
-            RawExpr::CStyleCast(cast) => cast.span,
-            RawExpr::ArraySubscript(arrsub) => arrsub.span,
-            RawExpr::CompoundLiteral(cl) => cl.span,
-            $(
-              RawExpr::$extra(inner) => inner.span,
-            )*
-          }
-        }
-      }
-    }
+    // mod getspan {
+    //   use super::*;
+    //   use ::rcc_shared::SourceSpan;
+    //   impl<'c> RawExpr<'c> {
+    //     pub fn span(&self) -> SourceSpan {
+    //       match self {
+    //         RawExpr::Empty(_) => SourceSpan::default(),
+    //         RawExpr::Constant(c) => c.span,
+    //         RawExpr::Unary(u) => u.span,
+    //         RawExpr::Binary(b) => b.span,
+    //         RawExpr::Call(call) => call.span,
+    //         RawExpr::Paren(p) => p.span,
+    //         RawExpr::MemberAccess(ma) => ma.span,
+    //         RawExpr::Ternary(t) => t.span,
+    //         RawExpr::SizeOf(sizeof) => sizeof.span,
+    //         RawExpr::CStyleCast(cast) => cast.span,
+    //         RawExpr::ArraySubscript(arrsub) => arrsub.span,
+    //         RawExpr::CompoundLiteral(cl) => cl.span,
+    //         $(
+    //           RawExpr::$extra(inner) => inner.span,
+    //         )*
+    //       }
+    //     }
+    //   }
+    // }
 
     ::rcc_utils::static_assert!(
       ::std::mem::size_of::<RawExpr>() <= 80, // compoundassign has maximun size now

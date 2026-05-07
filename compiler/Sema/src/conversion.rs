@@ -493,7 +493,7 @@ impl<'c> Expression<'c> {
     let (common_type, lhs_cast, rhs_cast) =
       match (lhs.unqualified_type(), rhs.unqualified_type()) {
         (Type::Primitive(l), Type::Primitive(r)) =>
-          Primitive::common_type(l, r, context),
+          Primitive::common_type(*l, *r, context),
         _ => {
           let lhs_span = lhs.span();
           Err(

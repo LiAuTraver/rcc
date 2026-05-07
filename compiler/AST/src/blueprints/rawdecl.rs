@@ -29,13 +29,13 @@ pub enum VarDeclKind {
   /// if it has internal linkage, the type shall be complete.
   Tentative,
 }
-impl VarDeclKind {
-  pub fn merge(lhs: Self, rhs: Self) -> Self {
-    use VarDeclKind::*;
-    match (lhs, rhs) {
-      (Tentative, Tentative) => Tentative,
-      (Definition, _) | (_, Definition) => Definition,
-      _ => Declaration,
-    }
-  }
-}
+// impl VarDeclKind {
+//   pub fn merge(lhs: Self, rhs: Self) -> Self {
+//     use VarDeclKind::*;
+//     match (lhs, rhs) {
+//       (Tentative, Tentative) => Tentative,
+//       (Definition, _) | (_, Definition) => Definition,
+//       _ => Declaration,
+//     }
+//   }
+// }

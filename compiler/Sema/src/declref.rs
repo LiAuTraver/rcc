@@ -5,7 +5,7 @@ use ::std::{cell::Cell, marker::PhantomData, ptr::NonNull};
 use VarDeclKind::*;
 
 #[derive(Debug)]
-pub struct DeclNode<'c> {
+struct DeclNode<'c> {
   name: StrRef<'c>,
   qualified_type: QualifiedType<'c>,
   storage_class: Storage,
@@ -38,10 +38,7 @@ impl<'c> DeclRef<'c> {
     declkind: VarDeclKind,
     previous_decl: Option<DeclRef<'c>>,
   ) -> Self {
-    use ::std::mem::MaybeUninit;
-
-    let node_uninit =
-      context.arena().alloc(MaybeUninit::<DeclNode<'_>>::uninit());
+    let node_uninit = context.arena().alloc_uninit();
 
     let this = Self {
       ptr: unsafe { NonNull::new_unchecked(node_uninit.as_mut_ptr()) },
@@ -207,7 +204,7 @@ impl<'c> DeclRef<'c> {
     name: StrRef<'c>,
     previous_decl: Option<DeclRef<'c>>,
   ) -> Self {
-    DeclRef::new(
+    Self::new(
       context,
       qualified_type,
       storage_class,
@@ -225,7 +222,7 @@ impl<'c> DeclRef<'c> {
     name: StrRef<'c>,
     previous_decl: Option<DeclRef<'c>>,
   ) -> Self {
-    DeclRef::new(
+    Self::new(
       context,
       qualified_type,
       storage_class,
@@ -243,7 +240,7 @@ impl<'c> DeclRef<'c> {
     name: StrRef<'c>,
     previous_decl: Option<DeclRef<'c>>,
   ) -> Self {
-    DeclRef::new(
+    Self::new(
       context,
       qualified_type,
       storage_class,

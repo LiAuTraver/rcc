@@ -10,6 +10,7 @@ use ::rcc_shared::{
 };
 use ::rcc_utils::{RefEq, StrRef, contract_violation};
 use ::std::{collections::HashMap, ops::Deref};
+use VarDeclKind::*;
 
 use super::{
   ConstantData, DataLayout, Module,
@@ -44,26 +45,35 @@ pub struct CanonicalMap<'c> {
   inner: HashMap<sd::DeclRef<'c>, ValueID>,
 }
 impl<'c> CanonicalMap<'c> {
-  #[allow(unused)]
+  #[inline]
   pub fn contains_key(&self, decl: &sd::DeclRef<'c>) -> bool {
     debug_assert!(decl.is_canonical());
     self.inner.contains_key(decl)
   }
 
+  #[inline]
   pub fn get(&self, decl: &sd::DeclRef<'c>) -> Option<&ValueID> {
     debug_assert!(decl.is_canonical());
     self.inner.get(decl)
   }
 
-  pub fn insert(&mut self, decl: sd::DeclRef<'c>, value_id: ValueID) {
+  #[inline]
+  pub fn insert(
+    &mut self,
+    decl: sd::DeclRef<'c>,
+    value_id: ValueID,
+  ) -> Option<ValueID> {
     debug_assert!(decl.is_canonical());
-    self.inner.insert(decl, value_id);
+    debug_assert!(!self.contains_key(&decl));
+    self.inner.insert(decl, value_id)
   }
 
+  #[inline]
   pub fn is_empty(&self) -> bool {
     self.inner.is_empty()
   }
 
+  #[inline]
   pub fn clear(&mut self) {
     self.inner.clear()
   }
@@ -84,6 +94,7 @@ pub struct Builder<'c> {
 impl<'a> Deref for Builder<'a> {
   type Target = Session<'a, OpDiag<'a>>;
 
+  #[inline]
   fn deref(&self) -> &Self::Target {
     self.session
   }
@@ -292,14 +303,6 @@ impl<'c> Builder<'c> {
           true => self.global_vardef(variable),
           false => self.global_vardecl(variable),
         },
-      // if self
-      //   .globals
-      //   .contains_key(&declaration.declref().canonical_decl())
-      // {
-      //   // the node, no matter it's decl or def, has alreaady been recorded
-      // } else {
-      //   self.global_vardef(variable);
-      // },
     }
   }
 
@@ -327,9 +330,6 @@ impl<'c> Builder<'c> {
     }
   }
 
-  /// TODO:
-  /// 1. merge data like qtype, storage with the latest decl.
-  /// 2. add linkage specs
   fn global_funcdef(&mut self, function: sd::FunctionRef<'c>) {
     debug_assert!(function.is_definition());
 
@@ -544,26 +544,17 @@ impl<'c> Builder<'c> {
   fn global_vardecl(&mut self, variable: sd::VarDefRef<'c>) {
     debug_assert!(matches!(
       variable.declaration.declkind(),
-      VarDeclKind::Declaration | VarDeclKind::Tentative
+      Declaration | Tentative
     ));
     debug_assert!(variable.initializer.is_none());
     // not reached the end nor the node is not recorded, just record it and wait for the definition.
-    if let Some(value_id) = self
+    let value_id = if let Some(value_id) = self
       .globals
       .get(&variable.declaration.canonical_decl())
       .copied()
     {
-      if variable.declaration.is_latest() {
-        self.apply(value_id, |value| {
-          value
-            .data
-            .as_constant_mut_unchecked()
-            .as_global_mut_unchecked()
-            .as_variable_mut_unchecked()
-            .initializer
-            .get_or_insert(global::Initializer::Zeroed());
-        });
-      }
+      // nothing.
+      value_id
     } else {
       let latest_decl = variable.declaration.latest_decl();
       let value_id = self.emit(
@@ -577,6 +568,38 @@ impl<'c> Builder<'c> {
       self
         .globals
         .insert(variable.declaration.canonical_decl(), value_id);
+      value_id
+    };
+    if variable.declaration.is_latest()
+      && matches!(variable.declaration.declkind(), Tentative)
+    {
+      self.apply(value_id, |value| {
+        value
+          .data
+          .as_constant_mut_unchecked()
+          .as_global_mut_unchecked()
+          .as_variable_mut_unchecked()
+          .initializer
+          .get_or_insert(global::Initializer::Zeroed());
+        if let ast::Type::Array(array) = value.ast_type
+          && matches!(array.size, ast::ArraySize::Incomplete)
+        {
+          // 6.9.3p2
+          self.diag().add_warning(
+            TentativeIncompleteArrType(
+              variable.declaration.name(),
+              value.ast_type.to_string(),
+            ),
+            variable.span,
+          );
+          value.ast_type = ast::Type::Array(ast::Array::new(
+            array.element_type,
+            ast::ArraySize::Constant(1usize),
+          ))
+          .lookup(self.ast());
+          value.ir_type = self.ir_type(value.ast_type);
+        }
+      });
     }
   }
 
@@ -1860,11 +1883,11 @@ impl<'c> Builder<'c> {
     _span: SourceSpan,
   ) -> ValueID {
     use Operator::*;
-    use inst::BinaryOp;
+    use inst::BinaryOp::*;
     let bitwise = match operator {
-      Ampersand => BinaryOp::And,
-      Pipe => BinaryOp::Or,
-      Caret => BinaryOp::Xor,
+      Ampersand => And,
+      Pipe => Or,
+      Caret => Xor,
       _ => unreachable!(),
     };
     self.emit(inst::Binary::new(bitwise, left, right), ast_type)
@@ -1948,22 +1971,15 @@ impl<'c> Builder<'c> {
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
-    debug_assert_eq!(
-      self.visit(left, |value| {
-        (
-          value.ast_type.as_primitive_unchecked().is_integer(),
-          value.ast_type.size_bits(self.ast()),
-          value.ast_type.signedness(self.ast()).unwrap(),
-        )
-      }),
-      self.visit(right, |value| {
-        (
-          value.ast_type.as_primitive_unchecked().is_integer(),
-          value.ast_type.size_bits(self.ast()),
-          value.ast_type.signedness(self.ast()).unwrap(),
-        )
-      }),
-    );
+    debug_assert!(self.inspect(left, right, |lhs, rhs| (
+      lhs.ast_type.as_primitive_unchecked().is_integer(),
+      lhs.ast_type.size_bits(self.ast()),
+      lhs.ast_type.signedness(self.ast()).unwrap(),
+    ) == (
+      rhs.ast_type.as_primitive_unchecked().is_integer(),
+      rhs.ast_type.size_bits(self.ast()),
+      rhs.ast_type.signedness(self.ast()).unwrap(),
+    )));
     let signedness = self
       .visit(left, |value| value.ast_type.signedness(self.ast()))
       .expect("integer always have signedness");
@@ -2233,7 +2249,6 @@ impl<'c> Builder<'c> {
     let pm = operator.ppmm2pm().expect("precond: op is pp or mm");
 
     let loaded = self.emit(inst::Load::new(operand), ast_type);
-    // let ast_type = self.visit(loaded, |value| value.ast_type);
     // if ast_type is plain arithemetic type, just add or sub the corresponding integer or floating constant, and store back.
     // if it's a pointer type, do gep with 1 or -1 using the pointer arithmetic function, and store back.
     use ast::Type::*;

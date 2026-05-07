@@ -47,10 +47,17 @@ static int has_warning_ub5;
 extern unsigned short truly_external;
 extern unsigned short truly_external;
 
+extern int k[];
+// tentative array def of incomplete array assumed to have 1 elem
+int k[];
+
+extern int truly_external_array[];
+
 void use() {
   ub2 = 100;
   y = 50;
   has_warning_ub5 = 10;
   undefined_behavior = 90;
   truly_external = 100;
+  truly_external_array[10] = 1;
 }

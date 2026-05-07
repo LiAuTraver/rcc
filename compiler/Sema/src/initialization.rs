@@ -11,17 +11,17 @@
 //! ### todos:
 //! - [`SourceSpan`] handling is very bad.
 //! - Struct and union initializers are not implemented yet.
-//! - VLA is out of consideration. it's simple here, but the upstream has blocked it as [`unimplemented!`].
-//!
+//! - VLA is treated as [`Incomplete`] and only allows empty initialization.
+//!   it's simple here, but the upstream has blocked it as [`unimplemented!`].
 
 use ::rcc_ast::types::{Array, ArraySize, QualifiedType, Type, TypeInfo};
 use ::rcc_parse::{declaration as pd, expression as pe};
 use ::rcc_shared::{ArenaVec, CollectIn, DiagData::*, SourceSpan};
 use ::rcc_utils::RefEq;
 use ::std::{collections::HashMap, ops::Deref};
+use ArraySize::*;
 
 use crate::{Sema, declaration as sd, expression as se, semantics::HandleWith};
-
 #[allow(non_upper_case_globals)]
 const npos: usize = sd::Designator::npos;
 /// See the [Module level](self) for more information.
@@ -77,6 +77,7 @@ struct TreeEntry<'c> {
 }
 
 impl<'c> TreeEntry<'c> {
+  #[inline]
   fn new(index: usize, node: InitNode<'c>, is_implicit: bool) -> Self {
     Self {
       index,
@@ -227,10 +228,15 @@ impl<'i, 'c> Initialization<'i, 'c> {
     target_type: Option<QualifiedType<'c>>,
   ) -> (sd::Initializer<'c>, QualifiedType<'c>) {
     match target_type {
-      Some(target_type) => {
-        let (list, inferred_type) = self.list(list, target_type);
-        (list.into(), inferred_type)
-      },
+      Some(target_type) =>
+        if target_type.has_vla_dim() && !list.entries.is_empty() {
+          self.add_error(NonEmptyInitVLA, list.span);
+          let list = sd::InitializerList::new(&[], list.span);
+          (list.into(), target_type)
+        } else {
+          let (list, inferred_type) = self.list(list, target_type);
+          (list.into(), inferred_type)
+        },
       None => {
         self.add_error(DeducedTypeWithBracedInitializer, list.span);
         (self.__empty_expr.into(), self.ast().void_type().into())
@@ -287,9 +293,9 @@ impl<'i, 'c> Initialization<'i, 'c> {
   fn scalar_leaf_width(&self, target_type: QualifiedType<'c>) -> usize {
     match target_type.unqualified_type {
       Type::Array(array) => match array.size {
-        ArraySize::Constant(size) =>
+        Constant(size) =>
           size.saturating_mul(self.scalar_leaf_width(array.element_type)),
-        ArraySize::Incomplete | ArraySize::Variable(_) => 0,
+        Incomplete | Variable(_) => 0,
       },
       _ => 1,
     }
@@ -299,7 +305,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     &self,
     element_type: QualifiedType<'c>,
   ) -> QualifiedType<'c> {
-    Type::Array(Array::new(element_type, ArraySize::Constant(1)))
+    Type::Array(Array::new(element_type, Constant(1)))
       .lookup(self.context())
       .into()
   }
@@ -514,6 +520,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     let (Type::Array(lhs_array), Type::Array(rhs_array)) =
       (lhs.unqualified_type, rhs.unqualified_type)
     else {
+      // can we reach here?
       return lhs;
     };
 
@@ -524,14 +531,12 @@ impl<'i, 'c> Initialization<'i, 'c> {
     } else {
       lhs_array.element_type
     };
-    use ArraySize::*;
 
     let size = match (lhs_array.size, rhs_array.size) {
-      (Variable(_), _) | (_, Variable(_)) => todo!("VLA not supported"),
       (Constant(lhs), Constant(rhs)) => Constant(Ord::max(lhs, rhs)),
-      (Constant(lhs), Incomplete) => Constant(lhs),
-      (Incomplete, Constant(rhs)) => Constant(rhs),
-      (Incomplete, Incomplete) => Incomplete,
+      (Constant(lhs), Incomplete | Variable(_)) => Constant(lhs),
+      (Incomplete | Variable(_), Constant(rhs)) => Constant(rhs),
+      (Incomplete | Variable(_), Incomplete | Variable(_)) => Incomplete,
     };
 
     Type::Array(Array::new(element_type, size))
@@ -554,7 +559,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
           match target_type.unqualified_type {
             Type::Array(array) => {
-              if let ArraySize::Constant(bound) = array.size
+              if let Constant(bound) = array.size
                 && let Some(index) = index
                 && index >= bound
               {
@@ -884,18 +889,9 @@ impl<'i, 'c> Initialization<'i, 'c> {
       array.element_type
     };
 
-    use ArraySize::*;
-
     let size = match array.size {
       Constant(size) => Constant(size),
-      Incomplete => Constant(tree.max_index.saturating_add(1)),
-      Variable(_) => {
-        self.add_error(
-          UnsupportedFeature("VLA initializer not supported".to_string()),
-          tree.span,
-        );
-        Constant(tree.max_index.saturating_add(1))
-      },
+      Incomplete | Variable(_) => Constant(tree.max_index.saturating_add(1)),
     };
 
     Type::Array(Array::new(element_type, size))
@@ -952,7 +948,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
       return target_type;
     };
 
-    if !matches!(array.size, ArraySize::Incomplete)
+    if !matches!(array.size, Incomplete)
       || !array.element_type.is_character_type()
     {
       return target_type;
@@ -964,12 +960,9 @@ impl<'i, 'c> Initialization<'i, 'c> {
       return target_type;
     };
 
-    Type::Array(Array::new(
-      array.element_type,
-      ArraySize::Constant(required_size),
-    ))
-    .lookup(self.context())
-    .into()
+    Type::Array(Array::new(array.element_type, Constant(required_size)))
+      .lookup(self.context())
+      .into()
   }
 
   fn assign_cvt_if_eligible(

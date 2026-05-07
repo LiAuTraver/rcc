@@ -151,15 +151,15 @@ mod data {
       "Declaration of variable '{0}' declared with deduced type '__auto_type' \
        requires an initializer"
     )]
-    DeducedTypeWithNoInitializer(Elem),
+    DeducedTypeWithNoInitializer(StrRef<'c>),
     #[error("Variable '{0}' has incomplete type '{1}'")]
     VariableIncompleteType(StrRef<'c>, QualTyStr),
     #[error("Variable '{0}' already defined")]
-    VariableAlreadyDefined(Elem),
+    VariableAlreadyDefined(StrRef<'c>),
     #[error("Function '{0}' already defined")]
-    FunctionAlreadyDefined(Elem),
+    FunctionAlreadyDefined(StrRef<'c>),
     #[error("Local extern variable '{0}' cannot have initializer")]
-    LocalExternVarWithInitializer(Elem),
+    LocalExternVarWithInitializer(StrRef<'c>),
     #[error("expression '{0}' is not callable")]
     InvalidCallee(QualTyStr),
     #[error("'{0}' is not a variable")]
@@ -203,13 +203,18 @@ mod data {
     )]
     AddressofOperandRegVar(Elem),
     #[error("Global variable cannot be declared with 'register'")]
-    GlobalRegVar(Elem),
+    GlobalRegVar(StrRef<'c>),
     #[error("Global variable cannot be declared with automatic storage")]
-    GlobalAutoVar(Elem),
+    GlobalAutoVar(StrRef<'c>),
     #[error(
       "variable declared with 'register' can only have pointer type, got '{0}'"
     )]
     InvalidRegVarDecl(QualTyStr),
+    #[error(
+      "Tentative definition of variable '{0}' which has incomplete array type \
+       '{1}' assumed to have one element"
+    )]
+    TentativeIncompleteArrType(StrRef<'c>, QualTyStr),
     #[error("Operand of indirection operator must be pointer type, got '{0}'")]
     DerefNonPtr(Elem),
     #[error("Array subscript is not an integer, got '{0}'")]
@@ -257,7 +262,16 @@ mod data {
       "Definition of variable '{0}' has incomplete array type '{1}' and does \
        not have an explicit initializer"
     )]
-    IncompleteArrayDefNoInit(String, QualTyStr),
+    IncompleteArrayDefNoInit(StrRef<'c>, QualTyStr),
+    #[error(
+      "Top-level declaration of variable '{0}' cannot have Variable-length \
+       array type"
+    )]
+    TopLevelVLA(StrRef<'c>),
+    #[error(
+      "Variable-length array can only be initialized with an empty initializer"
+    )]
+    NonEmptyInitVLA,
     #[error("incomplete type '{1}' used in declaration of '{0}'")]
     DeclarationTyIncomplete(String, QualTyStr),
     #[error("auto type cannot be used with ilist in C.")]

@@ -74,18 +74,23 @@ use super::{
   TypeInfo,
 };
 use crate::TargetInfo;
+type CommonTypeResult = (
+  Primitive, /* the common type. */
+  CastType,  /* the cast type which shall be applied to lhs. */
+  CastType,  /* the cast type which shall be applied to rhs. */
+);
 impl Primitive {
   #[must_use]
   pub fn common_type(
-    lhs: &Self,
-    rhs: &Self,
+    lhs: Self,
+    rhs: Self,
     target_info: &TargetInfo,
-  ) -> (Self, CastType, CastType) {
+  ) -> CommonTypeResult {
     // If both operands have the same type, then no further conversion is needed.
     // first: _Decimal types ignored
     // also, complex types ignored
     if lhs == rhs {
-      return (*lhs, Noop, Noop);
+      return (lhs, Noop, Noop);
     }
     if matches!(lhs, Self::Void | Self::Nullptr)
       || matches!(rhs, Self::Void | Self::Nullptr)
@@ -95,15 +100,15 @@ impl Primitive {
     // otherwise, if either operand is of some floating type, the other operand is converted to it.
     // Otherwise, if any of the two types is an enumeration, it is converted to its underlying type. - handled upstream
     match (lhs.is_floating_point(), rhs.is_floating_point()) {
-      (true, false) => (*lhs, Noop, IntegralToFloating),
-      (false, true) => (*rhs, IntegralToFloating, Noop),
-      (true, true) => Self::common_floating_rank(*lhs, *rhs),
-      (false, false) => Self::common_integer_rank(*lhs, *rhs, target_info),
+      (true, false) => (lhs, Noop, IntegralToFloating),
+      (false, true) => (rhs, IntegralToFloating, Noop),
+      (true, true) => Self::common_floating_rank(lhs, rhs),
+      (false, false) => Self::common_integer_rank(lhs, rhs, target_info),
     }
   }
 
   #[must_use]
-  fn common_floating_rank(lhs: Self, rhs: Self) -> (Self, CastType, CastType) {
+  fn common_floating_rank(lhs: Self, rhs: Self) -> CommonTypeResult {
     assert!(lhs.is_floating_point() && rhs.is_floating_point());
     if lhs.floating_rank() > rhs.floating_rank() {
       (lhs, Noop, FloatingCast)
@@ -117,7 +122,7 @@ impl Primitive {
     lhs: Self,
     rhs: Self,
     target_info: &TargetInfo,
-  ) -> (Self, CastType, CastType) {
+  ) -> CommonTypeResult {
     assert!(lhs.is_integer() && rhs.is_integer());
 
     // shall be promoted upstream
@@ -139,24 +144,38 @@ impl Primitive {
       signed: Primitive,
       unsigned: Primitive,
       target_info: &TargetInfo,
-    ) -> (Primitive, CastType, CastType) {
+    ) -> (
+      Primitive, /* common type */
+      CastType,  /* from signed */
+      CastType,  /* from unsigned */
+    ) {
       debug_assert!(!signed.is_unsigned(target_info));
       debug_assert!(unsigned.is_unsigned(target_info));
       if signed.integer_rank() >= unsigned.integer_rank() {
         (signed, Noop, IntegralCast)
       } else if unsigned.size(target_info) > signed.size(target_info) {
-        (unsigned, Noop, IntegralCast)
+        (unsigned, IntegralCast, Noop)
       } else {
         // if the signed type cannot represent all values of the unsigned type, return the unsigned version of the signed type
-        // the signed type is always larger than the corresponding unsigned type on my x86_64 architecture
-        // so this branch is unlikely to be taken
-        let promoted_rhs = unsigned.into_unsigned();
-        (promoted_rhs, IntegralCast, IntegralCast)
+        // the unsigned type is always larger/equal than the corresponding unsigned type.
+        // so this branch is extremely unlikely to be taken
+        (signed.into_unsigned(), IntegralCast, IntegralCast)
+      }
+    }
+    const trait TupleExt {
+      #[must_use]
+      fn swap2nd3rd(self) -> Self;
+    }
+    impl const TupleExt for CommonTypeResult {
+      #[inline(always)]
+      fn swap2nd3rd(self) -> Self {
+        let (t, l, r) = self;
+        (t, r, l)
       }
     }
 
     if lhs.is_unsigned(target_info) {
-      signed_and_unsigned(rhs, lhs, target_info)
+      signed_and_unsigned(rhs, lhs, target_info).swap2nd3rd()
     } else {
       signed_and_unsigned(lhs, rhs, target_info)
     }

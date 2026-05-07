@@ -13,7 +13,8 @@ use ::rcc_shared::{
   Diagnosis, OpDiag, Operator, OperatorCategory, Severity, SourceSpan, Storage,
 };
 use ::rcc_utils::{
-  RefEq, StrRef, contract_assert, contract_violation, not_implemented_feature,
+  Opaque, RefEq, StrRef, contract_assert, contract_violation,
+  not_implemented_feature,
 };
 use ::std::collections::{HashMap, HashSet};
 
@@ -128,7 +129,7 @@ impl<'c> Sema<'c> {
   }
 
   pub fn analyze(
-    &mut self,
+    mut self,
     program: pd::Program<'c>,
   ) -> sd::TranslationUnit<'c> {
     self.environment.enter();
@@ -136,6 +137,8 @@ impl<'c> Sema<'c> {
       sd::TranslationUnit::new(self.context(), self.externaldecl(program));
 
     self.environment.exit();
+    debug_assert!(self.environment.scopes.is_empty());
+
     translation_unit
   }
 }
@@ -195,7 +198,7 @@ impl<'c> Sema<'c> {
                         )),
                         expr.span(),
                       );
-                      ArraySize::Constant(0)
+                      ArraySize::Variable(Opaque::new(expr))
                     },
                   },
                 Ok(analyzed_expr) => {
@@ -575,7 +578,7 @@ impl<'c> Sema<'c> {
 
       if matches!(declkind, Definition) && previous_decl.definition().is_some()
       {
-        Err(FunctionAlreadyDefined(name.to_string()) + Severity::Error + span)?
+        Err(FunctionAlreadyDefined(name) + Severity::Error + span)?
       }
       (
         Compatibility::composite_unchecked(
@@ -768,11 +771,7 @@ impl<'c> Sema<'c> {
         if let Some((initializer, qualified_type)) = out {
           (storage, qualified_type, Some(initializer))
         } else {
-          Err(
-            DeducedTypeWithNoInitializer(name.to_string())
-              + Severity::Error
-              + span,
-          )?
+          Err(DeducedTypeWithNoInitializer(name) + Severity::Error + span)?
         }
       } else {
         let (function_specifier, storage, raw_qualified_type) =
@@ -784,15 +783,20 @@ impl<'c> Sema<'c> {
         );
         let raw_qualified_type =
           self.apply_modifiers_for_varty(raw_qualified_type, modifiers);
-        let out = initializer.map(|initializer| {
-          self.initializer(
-            initializer,
-            Some(raw_qualified_type),
-            self.environment.is_global()
-              || matches!(storage, Some(Constexpr | Static | ThreadLocal)),
-          )
-        });
-        if let Some((initializer, qualified_type)) = out {
+        if self.environment.is_global() && raw_qualified_type.has_vla_dim() {
+          self.add_error(TopLevelVLA(name), span);
+          // skip init part...
+          (storage, raw_qualified_type, None)
+        } else if let Some((initializer, qualified_type)) =
+          initializer.map(|initializer| {
+            self.initializer(
+              initializer,
+              Some(raw_qualified_type),
+              self.environment.is_global()
+                || matches!(storage, Some(Constexpr | Static | ThreadLocal)),
+            )
+          })
+        {
           (storage, qualified_type, Some(initializer))
         } else {
           (storage, raw_qualified_type, None)
@@ -815,7 +819,7 @@ impl<'c> Sema<'c> {
           )?
         } else {
           if prev_decl_ref.definition().is_some() && initializer.is_some() {
-            self.add_error(VariableAlreadyDefined(name.to_string()), span)
+            self.add_error(VariableAlreadyDefined(name), span)
           }
           if storage.is_none()
             && !matches!(prev_decl_ref.storage_class(), Extern)
@@ -916,7 +920,7 @@ impl<'c> Sema<'c> {
   ) -> sd::VarDefRef<'c> {
     use Storage::*;
 
-    let t = || {
+    let ten = || {
       sd::VarDef::decl(
         self.context(),
         DeclRef::tentative(
@@ -929,23 +933,8 @@ impl<'c> Sema<'c> {
         span,
       )
     };
-    let check = |storage: Storage, has_initializer: bool| match storage {
-      Register => self.add_error(GlobalRegVar(name.to_string()), span),
-      Automatic => self.add_error(GlobalAutoVar(name.to_string()), span),
-      Extern if has_initializer =>
-        self.add_warning(ExternVariableWithInitializer(name.to_string()), span),
-      _ => (),
-    };
-    match (original_storage, initializer) {
-      // 6.9.3p2, tentative.
-      (None, None) => t(),
-      (Some(storage @ (Register | Constexpr | Static | Automatic)), None) => {
-        check(storage, false);
-        t()
-      },
-      (Some(Typedef), _) => unreachable!(),
-      // declaration.
-      (Some(Extern | ThreadLocal), None) => sd::VarDef::decl(
+    let decl = || {
+      sd::VarDef::decl(
         self.context(),
         DeclRef::decl(
           self.context(),
@@ -955,25 +944,63 @@ impl<'c> Sema<'c> {
           previous_decl,
         ),
         span,
-      ),
-      // definition.
-      (storage, Some(initializer)) => {
-        if let Some(storage) = storage {
-          check(storage, true);
-        }
-        sd::VarDef::def(
+      )
+    };
+    let def = |init| {
+      sd::VarDef::def(
+        self.context(),
+        DeclRef::def(
           self.context(),
-          DeclRef::def(
-            self.context(),
-            qualified_type,
-            merged_storage,
-            name,
-            previous_decl,
-          ),
-          initializer,
-          span,
-        )
+          qualified_type,
+          merged_storage,
+          name,
+          previous_decl,
+        ),
+        init,
+        span,
+      )
+    };
+    // code here written deliberately repetitive to catch bugs.
+    match (original_storage, initializer) {
+      // 6.9.3p2, tentative.
+      (None, None) => ten(),
+      (Some(Static), None) => ten(),
+      (Some(Constexpr), None) => ten(),
+      // tentative w/ errors.
+      (Some(Register), None) => {
+        self.add_error(GlobalRegVar(name), span);
+        ten()
       },
+      (Some(Automatic), None) => {
+        self.add_error(GlobalAutoVar(name), span);
+        ten()
+      },
+      // declaration.
+      (Some(Extern), None) => decl(),
+      // definition.
+      (None, Some(init)) => def(init),
+      (Some(Static), Some(init)) => def(init),
+      (Some(Constexpr), Some(init)) => def(init),
+      // definition w/ warnings.
+      (Some(Extern), Some(init)) => {
+        self.add_warning(ExternVariableWithInitializer(name.to_string()), span);
+        def(init)
+      },
+      // definition w/ errors.
+      (Some(Register), Some(init)) => {
+        self.add_error(GlobalRegVar(name), span);
+        def(init)
+      },
+      (Some(Automatic), Some(init)) => {
+        self.add_error(GlobalAutoVar(name), span);
+        def(init)
+      },
+      // todos.
+      (Some(Typedef), _) => todo!(
+        "{Typedef} handling requires medium-refect of the vardef function."
+      ),
+      (Some(ThreadLocal), _) =>
+        unreachable!("{ThreadLocal} should not be handled here"),
     }
   }
 
@@ -992,9 +1019,12 @@ impl<'c> Sema<'c> {
     match original_storage {
       Automatic | Register => (),
       Extern if initializer.is_some() =>
-        self.add_error(LocalExternVarWithInitializer(name.to_string()), span),
+        self.add_error(LocalExternVarWithInitializer(name), span),
       Extern | Static | Constexpr => todo!(),
-      Typedef | ThreadLocal => unreachable!(),
+      Typedef => todo!(
+        "{Typedef} handling requires medium-refect of the vardef function."
+      ),
+      ThreadLocal => unreachable!("{ThreadLocal} should not be handled here"),
     }
     if (qualified_type
       .as_array()
@@ -1002,18 +1032,22 @@ impl<'c> Sema<'c> {
       && initializer.is_none()
     {
       self.add_error(
-        IncompleteArrayDefNoInit(name.into(), qualified_type.to_string()),
+        IncompleteArrayDefNoInit(name, qualified_type.to_string()),
         span,
       );
     }
-    let declaration = DeclRef::def(
+    sd::VarDef::new(
       self.context(),
-      qualified_type,
-      merged_storage,
-      name,
-      previous_decl,
-    );
-    sd::VarDef::new(self.context(), declaration, initializer, span)
+      DeclRef::def(
+        self.context(),
+        qualified_type,
+        merged_storage,
+        name,
+        previous_decl,
+      ),
+      initializer,
+      span,
+    )
   }
 }
 

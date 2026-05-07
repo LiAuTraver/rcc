@@ -132,11 +132,7 @@ mod terminator {
     }
 
     pub fn result(&self) -> Option<ValueID> {
-      if self.operands[0].is_null() {
-        None
-      } else {
-        Some(self.operands[0])
-      }
+      self.operands[0].to_option()
     }
 
     pub fn set_result(&mut self, result: Option<ValueID>) {

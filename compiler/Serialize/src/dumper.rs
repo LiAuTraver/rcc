@@ -94,12 +94,12 @@ pub trait Dumpable<'c> {
   /// Recurse through the tree.
   /// - 'prefix' is the string of vertical bars from parents.
   /// - 'is_last' determines if we use an end marker or a middle marker
-  ///   (e.g., `└──` and `├──` in [`crate::sema::ASTDumper`]) for this node, and also affects how we build the prefix for children.
+  ///   (e.g., `└──` and `├──` in [`ASTDumper`]) for this node, and also affects how we build the prefix for children.
   ///
   /// Usually, the implementation should:
-  /// 1. print the indent for **this** node. i.e., use [`Dumper::print_indent`] with the given `prefix` and `is_last`.
-  /// 2. print the node header info like type name, address, span, etc. using [`Dumper::write_fmt`].
-  /// 3. compute the prefix for children using [`Dumper::child_prefix`] and recurse into children with the new `prefix` and correct `is_last`.
+  /// 1. print the indent for **this** node. i.e., use [`RenderEngine::print_indent`] with the given `prefix` and `is_last`.
+  /// 2. print the node header info like type name, address, span, etc. using [`RenderEngine::write_fmt`].
+  /// 3. compute the prefix for children using [`RenderEngine::child_prefix`] and recurse into children with the new `prefix` and correct `is_last`.
   fn dump(
     &self,
     dumper: &mut impl Dumper<'c>,

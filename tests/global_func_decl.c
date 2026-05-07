@@ -18,8 +18,9 @@ void use() {
 }
 int main(void) {
   use();
-  extern int O;
-  int O;
+  // extern int O;
+  // // error
+  // int O;
 }
 
 // int redefined() {}

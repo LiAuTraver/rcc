@@ -1,4 +1,8 @@
-use ::std::{cell::RefCell, ops::Deref};
+use ::std::{
+  cell::RefCell,
+  mem::{MaybeUninit, needs_drop},
+  ops::Deref,
+};
 
 use crate::Bump;
 
@@ -13,12 +17,21 @@ pub struct Arena {
 impl Deref for Arena {
   type Target = Bump;
 
+  #[inline(always)]
   fn deref(&self) -> &Self::Target {
     &self.bump
   }
 }
 impl Arena {
+  #[inline]
+  #[must_use]
+  pub fn alloc_uninit<T>(&self) -> &mut MaybeUninit<T> {
+    self.alloc(MaybeUninit::<T>::uninit())
+  }
+
+  #[must_use]
   pub fn alloc<T: ::std::fmt::Debug>(&self, val: T) -> &mut T {
+    #[inline(always)]
     fn _print_meta<T: ::std::fmt::Debug>(val: &T) {
       println!("Alloc for {}:  {:?}", ::std::any::type_name::<T>(), val);
     }
@@ -27,7 +40,7 @@ impl Arena {
 
     let ptr = self.bump.alloc(val);
 
-    if const { ::std::mem::needs_drop::<T>() } {
+    if const { needs_drop::<T>() } {
       #[cfg(debug_assertions)]
       #[inline(always)]
       fn _check_threshold(arena: &Arena) {
@@ -65,7 +78,7 @@ impl Drop for Arena {
   fn drop(&mut self) {
     self
       .registry
-      .borrow_mut()
+      .borrow()
       .iter()
       .rev()
       .for_each(|(ptr, drop_fn)| unsafe {

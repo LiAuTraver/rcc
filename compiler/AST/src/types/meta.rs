@@ -1,17 +1,12 @@
 //! this file would be furthur split into multiple files when more impls are added.
 
-use ::rcc_utils::StrRef;
+use ::rcc_utils::{Opaque, StrRef};
 
 use super::{Primitive, QualifiedType, Type};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pointer<'c> {
   pub pointee: QualifiedType<'c>,
-}
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ExpressionId {
-  id: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ::strum_macros::Display)]
@@ -20,7 +15,7 @@ pub enum ArraySize {
   /// unsupported dynamic size, but i kept it here for the `full` type category
   ///
   /// TODO: if this holds an expression -- it's a cyclic reference. may use `ExpressionId` as a workaround.
-  Variable(ExpressionId),
+  Variable(Opaque),
   /// unspecified size
   Incomplete,
 }
@@ -93,6 +88,11 @@ impl<'c> Array<'c> {
   #[inline]
   pub fn size_opt(&self) -> Option<usize> {
     self.size.size_opt()
+  }
+
+  pub fn has_vla_dim(&self) -> bool {
+    matches!(self.size, ArraySize::Variable(_))
+      || (matches!(&**self.element_type, Type::Array(array) if array.has_vla_dim()))
   }
 }
 impl ArraySize {

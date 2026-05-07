@@ -24,68 +24,47 @@ pub type TypeRefMut<'c> = &'c mut Type<'c>;
 
 ensure_is_pod!(Type);
 ensure_is_pod!(TypeRef);
-impl<'c> Type<'c> {
-  // fn is_unsigned(&self) -> bool {
-  //   match self {
-  //     Type::Primitive(p) => p.is_unsigned(),
-  //     Type::Pointer(_) => true,
-  //     Type::Enum(e) => e.underlying_type.is_unsigned(),
-  //     _ => false,
-  //   }
-  // }
 
-  // fn is_signed(&self) -> bool {
-  //   match self {
-  //     Type::Primitive(p) => p.is_signed(),
-  //     Type::Enum(e) => e.underlying_type.is_signed(),
-  //     _ => false,
-  //   }
-  // }
-
-  // pub fn signedness(&self) -> Option<Signedness> {
-  //   use Signedness::*;
-  //   if self.is_signed() {
-  //     Some(Signed)
-  //   } else if self.is_unsigned() {
-  //     Some(Unsigned)
-  //   } else {
-  //     None
-  //   }
-  // }
-}
 impl<'c> Type<'c> {
+  pub fn has_vla_dim(&self) -> bool {
+    match self {
+      Self::Array(array) => array.has_vla_dim(),
+      _ => false,
+    }
+  }
+
   pub fn is_modifiable(&self, target_info: &TargetInfo) -> bool {
     if self.size(target_info).get() == 0 {
       false
     } else {
       match self {
-        Type::Array(_) => false,
+        Self::Array(_) => false,
         _ => true, // todo: struct/union with const member
       }
     }
   }
 
   pub fn is_void(&self) -> bool {
-    matches!(self, Type::Primitive(Primitive::Void))
+    matches!(self, Self::Primitive(Primitive::Void))
   }
 
   pub fn is_integer(&self) -> bool {
     match self {
-      Type::Primitive(p) => p.is_integer(),
+      Self::Primitive(p) => p.is_integer(),
       _ => false,
     }
   }
 
   pub fn is_floating_point(&self) -> bool {
     match self {
-      Type::Primitive(p) => p.is_floating_point(),
+      Self::Primitive(p) => p.is_floating_point(),
       _ => false,
     }
   }
 
   pub fn is_arithmetic(&self) -> bool {
     match self {
-      Type::Primitive(p) => p.is_arithmetic(),
+      Self::Primitive(p) => p.is_arithmetic(),
       _ => false,
     }
   }
