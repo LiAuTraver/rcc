@@ -312,6 +312,8 @@ mod data {
        main(void)) rather than leaving it empty."
     )]
     DeprecatedFunctionNoProto,
+    #[error("octal literals without a '0o' prefix are deprecated.")]
+    DeprecatedLeadingZeroAsOctalNumber,
     #[error(
     "Applying unary operator '{}' may cause overflow on constant '{}'", &.0.1, &.0.0
   )]

@@ -43,6 +43,10 @@ impl Number {
     suffix: Option<&str>,
     is_floating: bool,
   ) -> (Self, Option<DiagMeta<'c>>) {
+    let num = num.strip_suffix('.').unwrap_or(num);
+
+    use DiagData::*;
+
     macro_rules! int_conv {
       ($t:ty, $signess:ident) => {
         match <$t>::from_str_radix(num, base) {
@@ -55,7 +59,8 @@ impl Number {
             )
             .into(),
             Some(
-              DiagData::InvalidNumberFormat(e.to_string()) + Severity::Error,
+              InvalidNumberFormat(format!("{e} in number '{num}'"))
+                + Severity::Error,
             ),
           ),
         }
@@ -69,7 +74,8 @@ impl Number {
             Floating::new(<$t>::default().to_bits(), FloatFormat::$format)
               .into(),
             Some(
-              DiagData::InvalidNumberFormat(e.to_string()) + Severity::Error,
+              InvalidNumberFormat(format!("{e} in number '{num}'"))
+                + Severity::Error,
             ),
           ),
         }
@@ -77,11 +83,22 @@ impl Number {
     }
     match (suffix, is_floating) {
       // default to int
+      // FIXME: the size is not determined to be `int`.
       (None, false) => int_conv!(i32, Signed),
+      (_, true) if base != 10 => (
+        Floating::default().into(),
+        Some(
+          InvalidNumberFormat(format!(
+            "currently floating point literals only support decimal format, \
+             got {num}"
+          )) + Severity::Error,
+        ),
+      ),
       // default to double
       (None, true) => float_conv!(f64, IEEE64),
       // integer with suffix
       (Some(suf), false) => match suf {
+        // FIXME: `u`/`U` only indicates unsigned, and provide no information about the size.
         "u" | "U" => int_conv!(u32, Unsigned),
         "l" | "L" => int_conv!(i64, Signed),
         "ll" | "LL" => int_conv!(i64, Signed),
@@ -103,9 +120,8 @@ impl Number {
         _ => (
           Integral::default().into(),
           Some(
-            DiagData::InvalidNumberFormat(format!(
-              "unsupported integer literal suffix: {}",
-              suf
+            InvalidNumberFormat(format!(
+              "invalid or unsupported integer literal suffix: {suf}"
             )) + Severity::Error,
           ),
         ),
@@ -117,13 +133,124 @@ impl Number {
         _ => (
           Floating::default().into(),
           Some(
-            DiagData::InvalidNumberFormat(format!(
-              "unsupported floating literal suffix: {}",
-              suf
+            InvalidNumberFormat(format!(
+              "invalid or unsupported floating literal suffix: {suf}"
             )) + Severity::Error,
           ),
         ),
       },
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  #[test]
+  fn integer() {
+    assert_eq!(
+      Number::parse("42", 10, None, false).0,
+      Integral::from(42i32).into()
+    );
+    assert_eq!(
+      Number::parse("42", 10, Some("u"), false).0,
+      Integral::from(42u32).into()
+    );
+    assert_eq!(
+      Number::parse("42", 10, Some("l"), false).0,
+      Integral::from(42i64).into()
+    );
+    assert_eq!(
+      Number::parse("42", 10, Some("ul"), false).0,
+      Integral::from(42u64).into()
+    );
+    assert_eq!(
+      Number::parse("42", 10, Some("ull"), false).0,
+      Integral::from(42u64).into()
+    );
+    assert_eq!(
+      Number::parse("42", 10, Some("z"), false).0,
+      Integral::from(42isize).into()
+    );
+    assert_eq!(
+      Number::parse("42", 10, Some("uz"), false).0,
+      Integral::from(42usize).into()
+    );
+
+    assert_eq!(
+      Number::parse("-42", 10, None, false).0,
+      Integral::from(-42i32).into()
+    );
+    assert_eq!(
+      Number::parse("-42", 10, Some("ll"), false).0,
+      Integral::from(-42i64).into()
+    );
+  }
+  #[test]
+  fn floating() {
+    assert_eq!(
+      Number::parse("42.60", 10, None, true).0,
+      Floating::from(42.60f64).into()
+    );
+    assert_eq!(
+      Number::parse("42.60", 10, Some("f"), true).0,
+      Floating::from(42.60f32).into()
+    );
+    assert_eq!(
+      Number::parse("42.60", 10, Some("l"), true).0,
+      Floating::from(42.60f64).into()
+    );
+    assert_eq!(
+      Number::parse(".42", 10, None, true).0,
+      Floating::from(0.42f64).into()
+    );
+    assert!(Number::parse(".0", 10, None, true).1.is_none());
+    assert!(Number::parse("0.", 10, None, true).1.is_none());
+    assert!(Number::parse("0", 10, None, true).1.is_none());
+
+    assert_eq!(
+      Number::parse("-42.60", 10, None, true).0,
+      Floating::from(-42.60f64).into()
+    );
+    assert_eq!(
+      Number::parse("-42.60", 10, Some("f"), true).0,
+      Floating::from(-42.60f32).into()
+    );
+    assert!(Number::parse("-.42", 10, None, true).1.is_none());
+    assert!(Number::parse("-0.", 10, None, true).1.is_none());
+    assert!(Number::parse("-0", 10, None, true).1.is_none());
+  }
+  #[test]
+  fn invalid() {
+    // out of range.
+    assert!(
+      Number::parse("4294967296", 10, Some("u"), false)
+        .1
+        .is_some()
+    );
+    // invalid suffix
+    assert!(Number::parse("42", 10, Some("x"), false).1.is_some());
+    assert!(Number::parse("42.60", 10, Some("x"), true).1.is_some());
+    // pass negative number to unsigned type
+    assert!(Number::parse("-42", 10, Some("u"), false).1.is_some());
+  }
+  #[test]
+  fn exponent() {
+    assert_eq!(
+      Number::parse("1e10", 10, None, true).0,
+      Floating::from(1e10f64).into()
+    );
+    assert_eq!(
+      Number::parse("1e-10", 10, None, true).0,
+      Floating::from(1e-10f64).into()
+    );
+    assert_eq!(
+      Number::parse("-1e10", 10, None, true).0,
+      Floating::from(-1e10f64).into()
+    );
+    assert_eq!(
+      Number::parse("-1e-10", 10, None, true).0,
+      Floating::from(-1e-10f64).into()
+    );
   }
 }

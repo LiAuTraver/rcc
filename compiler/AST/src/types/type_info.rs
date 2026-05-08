@@ -55,13 +55,13 @@ impl<'c> TypeInfo<'c> for QualifiedType<'c> {
   }
 
   #[inline(always)]
-  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
-    self.unqualified_type.signedness(target_info)
+  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
+    self.unqualified_type.alignment(target_info)
   }
 
   #[inline(always)]
-  fn alignment(&self, target_info: &TargetInfo) -> Alignment {
-    self.unqualified_type.alignment(target_info)
+  fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
+    self.unqualified_type.signedness(target_info)
   }
 }
 impl<'c> TypeInfo<'c> for Type<'c> {

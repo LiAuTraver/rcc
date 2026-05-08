@@ -17,9 +17,12 @@ use ::rcc_utils::{
   not_implemented_feature,
 };
 use ::std::collections::{HashMap, HashSet};
+use rcc_parse::expression::Expression;
 
 use super::{declaration as sd, expression as se, statement as ss};
-use crate::{declref::DeclRef, initialization::Initialization};
+use crate::{
+  declref::DeclRef, expression::ExprRef, initialization::Initialization,
+};
 
 #[derive(Debug)]
 pub(crate) enum ScopeContext {
@@ -1859,10 +1862,10 @@ impl<'c> Sema<'c> {
         }
       },
 
-      (Type::Pointer(ptr), Type::Primitive(Primitive::Nullptr))
+      (Type::Pointer(_), Type::Primitive(Primitive::Nullptr))
         if matches!(operator, Operator::EqualEqual | Operator::NotEqual) =>
         ptr_with_nullptr(left, right),
-      (Type::Primitive(Primitive::Nullptr), Type::Pointer(ptr))
+      (Type::Primitive(Primitive::Nullptr), Type::Pointer(_))
         if matches!(operator, Operator::EqualEqual | Operator::NotEqual) =>
         ptr_with_nullptr(right, left),
       (l, r) => Err(
@@ -2277,14 +2280,8 @@ impl<'c> Sema<'c> {
     }
   }
 
-  fn ifstmt(&mut self, if_stmt: ps::If<'c>) -> Result<ss::If<'c>, Diag<'c>> {
-    let ps::If {
-      condition,
-      then_branch,
-      else_branch,
-      span,
-    } = if_stmt;
-    let analyzed_condition = self
+  fn condition(&mut self, condition: Expression<'c>) -> ExprRef<'c> {
+    self
       .expression(condition)
       .and_then(|e| {
         e.lvalue_conversion(self.context())
@@ -2297,7 +2294,17 @@ impl<'c> Sema<'c> {
           self.context(),
           self.context().converted_bool().into(),
         ),
-      );
+      )
+  }
+
+  fn ifstmt(&mut self, if_stmt: ps::If<'c>) -> Result<ss::If<'c>, Diag<'c>> {
+    let ps::If {
+      condition,
+      then_branch,
+      else_branch,
+      span,
+    } = if_stmt;
+    let analyzed_condition = self.condition(condition);
     let analyzed_then_branch = self.statement_or_default(*then_branch);
     let analyzed_else_branch =
       else_branch.map(|else_branch| self.statement_or_default(*else_branch));
@@ -2319,20 +2326,7 @@ impl<'c> Sema<'c> {
       body,
       span,
     } = while_stmt;
-    let analyzed_condition = self
-      .expression(condition)
-      .and_then(|e| {
-        e.lvalue_conversion(self.context())
-          .decay(self.context())
-          .is_contextually_convertible_to_bool()
-      })
-      .handle_with(
-        self,
-        se::Expression::new_error_node(
-          self.context(),
-          self.context().converted_bool().into(),
-        ),
-      );
+    let analyzed_condition = self.condition(condition);
     self.scope_context.push(ScopeContext::Loop);
     let analyzed_body = self.statement_or_default(*body);
     let _while = self.scope_context.pop();
@@ -2366,20 +2360,7 @@ impl<'c> Sema<'c> {
       "scope context stack corrupted: expected loop context"
     );
 
-    let analyzed_condition = self
-      .expression(condition)
-      .and_then(|e| {
-        e.lvalue_conversion(self.context())
-          .decay(self.context())
-          .is_contextually_convertible_to_bool()
-      })
-      .handle_with(
-        self,
-        se::Expression::new_error_node(
-          self.context(),
-          self.context().converted_bool().into(),
-        ),
-      );
+    let analyzed_condition = self.condition(condition);
     Ok(ss::DoWhile::new(
       self.context(),
       analyzed_body,

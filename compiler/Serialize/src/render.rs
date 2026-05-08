@@ -2,6 +2,7 @@ use ::rcc_shared::SourceManager;
 use ::termcolor::{ColorChoice, ColorSpec};
 
 use crate::Palette;
+#[allow(unused)]
 pub trait RenderEngineMixin<'c>: RenderEngine<'c> {
   #[inline(always)]
   fn write<T: ::std::fmt::Display>(&mut self, arg: T, spec: &ColorSpec) {
@@ -14,7 +15,11 @@ pub trait RenderEngineMixin<'c>: RenderEngine<'c> {
   }
 
   #[inline(always)]
-  #[allow(unused)]
+  fn write_ptr<T: ::std::fmt::Pointer>(&mut self, arg: T, spec: &ColorSpec) {
+    self.write_fmt(format_args!("{:p}", arg), spec)
+  }
+
+  #[inline(always)]
   fn quoted<T: ::std::fmt::Display, const QUOTE: &'static str>(
     &mut self,
     arg: T,
@@ -24,7 +29,6 @@ pub trait RenderEngineMixin<'c>: RenderEngine<'c> {
   }
 
   #[inline(always)]
-  #[allow(unused)]
   fn pre<T: ::std::fmt::Display, const PREFIX: &'static str>(
     &mut self,
     arg: T,
@@ -34,7 +38,6 @@ pub trait RenderEngineMixin<'c>: RenderEngine<'c> {
   }
 
   #[inline(always)]
-  #[allow(unused)]
   fn suf<T: ::std::fmt::Display, const SUFFIX: &'static str>(
     &mut self,
     arg: T,

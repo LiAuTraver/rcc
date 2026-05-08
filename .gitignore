@@ -1,12 +1,19 @@
-/target
+# Ignore Everything
+*
 
-# workaround
-test_compiler.ps1
+# folders to keep...
+!.vscode/
+!.vscode/**
+!compiler/
+!compiler/**
+!tests/
+!tests/**
+!utils/
+!utils/**
 
-# output 
-./test*.ll
-./test*.S
-./*.exe
-./*.out
-out.txt
-.idea/
+# files to keep...
+!.gitignore
+!Cargo.lock
+!Cargo.toml
+!rust-toolchain.toml
+!rustfmt.toml

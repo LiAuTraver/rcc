@@ -341,8 +341,7 @@ impl<'c> Context<'c> {
 
 impl<'c> Context<'c> {
   pub fn ir_type(&self, ast_type: ast::TypeRef<'c>) -> TypeRef<'c> {
-    use ::rcc_ast::types::{Primitive, TypeInfo};
-    use Primitive::*;
+    use ::rcc_ast::types::{Primitive::*, TypeInfo};
     match ast_type {
       ast::Type::Primitive(primitive) => match primitive {
         Float => self.float32_type,

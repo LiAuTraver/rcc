@@ -178,7 +178,7 @@ impl const From<f64> for Floating {
   }
 }
 
-impl ::std::default::Default for Floating {
+impl const ::std::default::Default for Floating {
   #[inline]
   fn default() -> Self {
     Self {

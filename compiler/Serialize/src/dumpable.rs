@@ -4,8 +4,8 @@ use ::rcc_ast::types::{
 };
 use ::rcc_sema::{
   declaration::{
-    Designator, ExternalDeclarationRef, Function, Initializer, InitializerList,
-    InitializerListEntry, TranslationUnit, VarDef,
+    DeclRef, Designator, ExternalDeclarationRef, Function, Initializer,
+    InitializerList, InitializerListEntry, TranslationUnit, VarDef,
   },
   expression::{Empty, Expression},
   statement::{
@@ -203,7 +203,7 @@ macro_rules! headers {
     $dumper.print_indent($prefix, $is_last);
     $dumper.write($name, &$palette.node);
     $dumper.write_fmt(format_args!(" {:p} ", $self), &$palette.dim);
-    $self.span.dump($dumper, $prefix, $is_last, &$palette);
+    $self.span.dump($dumper, &$palette);
     $dumper.newline()
   }};
 }
@@ -392,8 +392,8 @@ impl<'c> Dumpable<'c> for Goto<'_> {
     dumper.print_indent(prefix, is_last);
     dumper.write("Goto", &palette.node);
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-    self.span.dump(dumper, prefix, is_last, palette);
-    dumper.write_fmt(format_args!("'{}'", self.label), &palette.literal);
+    self.span.dump(dumper, palette);
+    dumper.write_fmt(format_args!(" '{}'", self.label), &palette.literal);
     dumper.newline()
   }
 }
@@ -410,7 +410,7 @@ impl<'c> Dumpable<'c> for Label<'_> {
     dumper.write("Label", &palette.node);
 
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-    self.span.dump(dumper, prefix, is_last, palette);
+    self.span.dump(dumper, palette);
     dumper.write_fmt(format_args!(" '{}'\n", self.name), &palette.literal);
 
     let subprefix = dumper.child_prefix(prefix, is_last);
@@ -462,9 +462,9 @@ impl<'c> Dumpable<'c> for Expression<'_> {
       ($name:expr, $raw:ident, $newline:literal) => {
         dumper.write($name, &palette.node);
         dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-        self.span().dump(dumper, prefix, is_last, palette);
+        self.span().dump(dumper, palette);
         dumper.write_fmt(
-          format_args!("'{}' ", self.qualified_type()),
+          format_args!(" '{}' ", self.qualified_type()),
           &palette.meta,
         );
         dumper.write_fmt(
@@ -480,9 +480,9 @@ impl<'c> Dumpable<'c> for Expression<'_> {
       Empty(_) => {
         dumper.write("Recovery", &palette.error);
         dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-        self.span().dump(dumper, prefix, is_last, palette);
+        self.span().dump(dumper, palette);
         dumper.write_fmt(
-          format_args!("'{}' ", self.qualified_type()),
+          format_args!(" '{}' ", self.qualified_type()),
           &palette.meta,
         );
         dumper.write_fmt(
@@ -494,9 +494,9 @@ impl<'c> Dumpable<'c> for Expression<'_> {
       Constant(constant) => {
         dumper.write("ConstantLiteral", &palette.node);
         dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-        self.span().dump(dumper, prefix, is_last, palette);
+        self.span().dump(dumper, palette);
         dumper.write_fmt(
-          format_args!("'{}' ", self.qualified_type()),
+          format_args!(" '{}' ", self.qualified_type()),
           &palette.meta,
         );
         // didnt print RValue.
@@ -505,8 +505,7 @@ impl<'c> Dumpable<'c> for Expression<'_> {
 
       Variable(variable) => {
         header!("Variable", variable);
-        dumper
-          .write_fmt(format_args!(" '{}'\n", (&**variable)), &palette.literal)
+        dumper.write_fmt(format_args!(" '{}'\n", &**variable), &palette.literal)
       },
 
       Unary(unary) => {
@@ -657,6 +656,52 @@ impl<'c> Dumpable<'c> for ExternalDeclarationRef<'_> {
   }
 }
 
+impl<'c> Dumpable<'c> for DeclRef<'_> {
+  fn dump(
+    &self,
+    dumper: &mut impl Dumper<'c>,
+    _prefix: &str,
+    _is_last: bool,
+    palette: &Palette,
+  ) {
+    // dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
+
+    if let Some(prev) = self.previous_decl() {
+      dumper.write_fmt(format_args!("prev {:p} ", prev,), &palette.skeleton);
+    }
+    if !self.is_canonical() {
+      dumper.write_fmt(
+        format_args!("can {:p} ", self.canonical_decl()),
+        &palette.skeleton,
+      );
+    } else {
+      dumper.write_fmt(
+        format_args!("last {:p} ", self.latest_decl()),
+        &palette.skeleton,
+      );
+    }
+    if let Some(def) = self.definition() {
+      dumper.write_fmt(format_args!("def {:p} ", def,), &palette.skeleton);
+    }
+    dumper.write("<", &palette.skeleton);
+    dumper.write(self.declkind(), &palette.kind);
+    dumper.write(">", &palette.skeleton);
+
+    dumper.write_fmt(format_args!(" '{}' ", self.name()), &palette.literal);
+
+    dumper.write("[", &palette.skeleton);
+    dumper.write(quoted!("'" => self.qualified_type()), &palette.meta);
+    // // dumper.write_fmt(
+    // //   format_args!(" {:p}", self.qualified_type().unqualified_type),
+    // //   &palette.skeleton,
+    // // );
+    // // dumper.write("]", &palette.skeleton);
+    dumper.write(", ", &palette.skeleton);
+    dumper.write(quoted!("'" => self.storage_class()), &palette.meta);
+    dumper.write("]", &palette.skeleton);
+  }
+}
+
 impl<'c> Dumpable<'c> for VarDef<'_> {
   fn dump(
     &self,
@@ -666,57 +711,22 @@ impl<'c> Dumpable<'c> for VarDef<'_> {
     palette: &Palette,
   ) {
     dumper.print_indent(prefix, is_last);
-    let decl = self.declaration;
     dumper.write(
-      if matches!(decl.storage_class(), ::rcc_shared::Storage::Typedef) {
+      if matches!(
+        self.declaration.storage_class(),
+        ::rcc_shared::Storage::Typedef
+      ) {
         "Typedef"
       } else {
         "VarDef"
       },
       &palette.node,
     );
-    dumper.write_fmt(format_args!(" {:p} ", decl), &palette.dim);
+    dumper.write(format_args!(" {:p} ", self), &palette.dim);
+    self.span.dump(dumper, palette);
+    dumper.write(" ", &palette.skeleton);
 
-    if let Some(prev) = decl.previous_decl() {
-      dumper.write_fmt(format_args!("prev {:p} ", prev,), &palette.skeleton);
-    }
-    if !decl.is_canonical() {
-      dumper.write_fmt(
-        format_args!("can {:p} ", decl.canonical_decl()),
-        &palette.skeleton,
-      );
-    } else {
-      dumper.write_fmt(
-        format_args!("last {:p} ", decl.latest_decl()),
-        &palette.skeleton,
-      );
-    }
-
-    if let Some(def) = decl.definition() {
-      dumper.write_fmt(format_args!("def {:p} ", def,), &palette.skeleton);
-    }
-    self.span.dump(dumper, prefix, is_last, palette);
-
-    dumper.write("<", &palette.skeleton);
-    dumper.write(decl.declkind(), &palette.kind);
-    dumper.write(">", &palette.skeleton);
-
-    dumper.write_fmt(format_args!(" '{}' ", decl.name()), &palette.literal);
-
-    dumper.write_fmt(
-      format_args!("'{}' ", decl.storage_class()),
-      &palette.literal,
-    );
-
-    // dumper.write("[", &palette.skeleton);
-    // dumper
-    //   .write_fmt(format_args!("'{}'", decl.qualified_type()), &palette.meta);
-
-    // dumper.write_fmt(
-    //   format_args!(" {:p}", decl.qualified_type().unqualified_type),
-    //   &palette.skeleton,
-    // );
-    // dumper.write("]", &palette.skeleton);
+    self.declaration.dump(dumper, prefix, is_last, palette);
 
     dumper.newline();
 
@@ -735,41 +745,14 @@ impl<'c> Dumpable<'c> for Function<'_> {
     palette: &Palette,
   ) {
     dumper.print_indent(prefix, is_last);
-    let decl = self.declaration;
 
     dumper.write("Function", &palette.node);
-    dumper.write_fmt(format_args!(" {:p} ", decl), &palette.dim);
 
-    if let Some(prev) = decl.previous_decl() {
-      dumper.write_fmt(format_args!("prev {:p} ", prev), &palette.skeleton);
-    }
-    dumper.write_fmt(
-      format_args!("can {:p} ", decl.canonical_decl()),
-      &palette.skeleton,
-    );
+    dumper.write(format_args!(" {:p} ", self), &palette.dim);
+    self.span.dump(dumper, palette);
+    dumper.write(" ", &palette.skeleton);
 
-    if let Some(def) = decl.definition() {
-      dumper.write_fmt(format_args!("def {:p} ", def), &palette.skeleton);
-    }
-
-    self.span.dump(dumper, prefix, is_last, palette);
-
-    dumper.write("<", &palette.skeleton);
-    dumper.write(decl.declkind(), &palette.kind);
-    dumper.write(">", &palette.skeleton);
-    dumper.write_fmt(quoted!(" '", decl.name(), "' "), &palette.literal);
-
-    dumper.write_fmt(
-      format_args!("'{}' ", decl.storage_class()),
-      &palette.literal,
-    );
-    // dumper.write("[", &palette.skeleton);
-    // dumper.write(quoted!("'" => decl.qualified_type()), &palette.meta);
-    // dumper.write_fmt(
-    //   format_args!(" {:p}", decl.qualified_type().unqualified_type),
-    //   &palette.skeleton,
-    // );
-    // dumper.write("]", &palette.skeleton);
+    self.declaration.dump(dumper, prefix, is_last, palette);
 
     dumper.newline();
 
@@ -788,11 +771,11 @@ impl<'c> Dumpable<'c> for Initializer<'_> {
     is_last: bool,
     palette: &Palette,
   ) {
-    match self {
-      Self::Scalar(expression) =>
-        expression.dump(dumper, prefix, is_last, palette),
-      Self::List(list) => list.dump(dumper, prefix, is_last, palette),
-    }
+    ::rcc_utils::static_dispatch!(
+      self,
+      |variant| variant.dump(dumper, prefix, is_last, palette) =>
+      Scalar List
+    )
   }
 }
 
@@ -808,15 +791,15 @@ impl<'c> Dumpable<'c> for InitializerList<'_> {
 
     dumper.write("InitializerList", &palette.node);
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
-    self.span.dump(dumper, prefix, is_last, palette);
+    self.span.dump(dumper, palette);
 
     if self.is_empty() {
-      dumper.write("zeroinit\n", &palette.info)
+      dumper.write("zeroinitializer\n", &palette.info)
     } else {
       dumper.newline();
       let subprefix = dumper.child_prefix(prefix, is_last);
       self.entries.iter().enumerate().for_each(|(i, entry)| {
-        entry.dump(dumper, &subprefix, i == self.entries.len() - 1, palette)
+        entry.dump(dumper, &subprefix, i + 1 == self.entries.len(), palette)
       });
     }
   }

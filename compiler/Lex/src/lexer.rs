@@ -55,26 +55,26 @@ impl<'c> Lexer<'c> {
   }
 
   /// Returns true if we are at the end
-  fn is_at_end(&mut self) -> bool {
+  pub(crate) fn is_at_end(&mut self) -> bool {
     self.chars.peek().is_none()
   }
 
   /// look ahead without consuming. returns '\0' if EOF
   #[inline]
-  fn peek(&mut self) -> &char {
+  pub(crate) fn peek(&mut self) -> &char {
     self.chars.peek().unwrap_or(&'\0')
   }
 
   /// double peek
   #[inline]
-  fn peek_next(&self) -> char {
+  pub(crate) fn peek_next(&self) -> char {
     let mut iter = self.chars.clone();
     iter.next();
     iter.next().unwrap_or('\0')
   }
 
   #[inline]
-  fn peek_n(&self, n: usize) -> char {
+  pub(crate) fn peek_n(&self, n: usize) -> char {
     let mut iter = self.chars.clone();
     for _ in 0..n {
       iter.next();
@@ -82,16 +82,16 @@ impl<'c> Lexer<'c> {
     iter.next().unwrap_or('\0')
   }
 
-  /// this is a worst case, but we only call this when we see a digit, so it should be fine in practice.
+  /// only called when we see a digit, so it should be fine in practice.
   ///
-  /// Assuming it is ascii.
+  /// *Assuming the previous [`char`] is ascii.*
   #[inline]
-  fn peek_back(&self) -> char {
-    self.source.as_bytes()[self.cursor.saturating_sub(1)] as char
+  pub(crate) fn peek_back(&self) -> u8 {
+    self.source.as_bytes()[self.cursor.saturating_sub(1)]
   }
 
   /// consumes the next character and updates position
-  fn advance(&mut self) -> char {
+  pub(crate) fn advance(&mut self) -> char {
     match self.chars.next() {
       Some(c) => {
         self.cursor += c.len_utf8();
@@ -109,23 +109,35 @@ impl<'c> Lexer<'c> {
   }
 
   #[inline]
-  fn advance_n(&mut self, offset: usize) {
+  pub(crate) fn advance_n(&mut self, offset: usize) {
     for _ in 0..offset {
       self.advance();
     }
   }
 
-  // /// match a specific char
-  // fn advance_if(&mut self, expected: char) -> bool {
-  //   if self.peek() == expected {
-  //     self.advance();
-  //     true
-  //   } else {
-  //     false
-  //   }
-  // }
+  /// match a specific char
+  pub(crate) fn advance_if_is(&mut self, expected: char) -> bool {
+    if self.peek() == &expected {
+      self.advance();
+      true
+    } else {
+      false
+    }
+  }
 
-  fn span(&self, start: usize) -> SourceSpan {
+  pub(crate) fn advance_if(
+    &mut self,
+    expected: impl FnOnce(&char) -> bool,
+  ) -> bool {
+    if expected(self.peek()) {
+      self.advance();
+      true
+    } else {
+      false
+    }
+  }
+
+  pub(crate) fn span(&self, start: usize) -> SourceSpan {
     debug_assert!(start != self.cursor, "{start}");
     SourceSpan {
       file_index: 0,
@@ -136,7 +148,7 @@ impl<'c> Lexer<'c> {
 
   /// this is random access, fast.
   #[inline(always)]
-  fn slice(&self, start: usize, end: usize) -> &'c str {
+  pub(crate) fn slice(&self, start: usize, end: usize) -> &'c str {
     &self.source[start..end]
   }
 
@@ -262,15 +274,17 @@ impl<'c> Lexer<'c> {
           (":>", RightBracket),
         ],
       ),
+      // FIXME: these is no use currently and causes issues similiar to `>>` in C++ templates.
       '[' => self.lex_compound_operator(
         start,
         LeftBracket,
-        &[("[[", DoubleLeftBracket)],
+        &[], // &[("[[", DoubleLeftBracket)],
       ),
+      // ditto.
       ']' => self.lex_compound_operator(
         start,
         RightBracket,
-        &[("]]", DoubleRightBracket)],
+        &[], // &[("]]", DoubleRightBracket)],
       ),
 
       '#' => self.lex_compound_operator(
@@ -312,9 +326,7 @@ impl<'c> Lexer<'c> {
   }
 
   fn identifier(&mut self, start: usize) -> Token<'c> {
-    while matches!(self.peek(), c if Self::is_ident_continue(c)) {
-      self.advance();
-    }
+    while self.advance_if(Self::is_ident_continue) {}
 
     let text = self.slice(start, self.cursor);
 
@@ -325,47 +337,43 @@ impl<'c> Lexer<'c> {
     }
   }
 
-  fn number(&mut self, start: usize, started_with_dot: bool) -> Token<'c> {
-    let (base, offset) = if !started_with_dot && self.cursor > 0 {
-      match (self.peek_back(), self.peek()) {
-        ('0', 'x' | 'X') => {
-          self.advance();
-          (16, 2)
-        },
-        ('0', 'b' | 'B') => {
-          self.advance();
-          (2, 2)
-        },
-        ('0', 'd' | 'D') => {
-          self.advance();
-          (10, 2)
-        },
-        ('0', '0'..'7') => {
-          self.advance();
-          (8, 2)
-        },
-        _ => (10, 0),
-      }
-    } else {
-      (10, 0)
+  fn number(&mut self, start: usize, mut is_floating: bool) -> Token<'c> {
+    let (base, offset) = match (self.peek_back(), self.peek()) {
+      (b'0', 'b' | 'B') => {
+        self.advance();
+        (2, 2)
+      },
+      (b'0', 'o' | 'O') => {
+        self.advance();
+        (8, 2)
+      },
+      (b'0', 'd' | 'D') => {
+        self.advance();
+        (10, 2)
+      },
+      (b'0', 'x' | 'X') => {
+        self.advance();
+        (16, 2)
+      },
+      (b'0', c) if c.is_ascii_digit() => {
+        if self.langopts() >= 23 {
+          self
+            .diag()
+            .add_warning(DeprecatedLeadingZeroAsOctalNumber, self.span(start));
+        }
+        (8, 1)
+      },
+      _ => (10, 0),
     };
 
-    // digits
-    while matches!(self.peek(), c if Self::is_digit_of_base(c, base)) {
-      self.advance();
-    }
-
-    let mut is_floating = false;
+    while self.advance_if(|c| c.is_digit(if base > 10 { base } else { 10 })) {}
 
     // decimal point for base-10 numbers
-    if base == 10
-      && matches!(self.peek(), '.')
-      && self.peek_next().is_ascii_digit()
-    {
-      self.advance(); // consume '.'
+    if is_floating {
+      // nothing.
+    } else if self.advance_if_is('.') {
       is_floating = true;
-      while self.peek().is_ascii_digit() {
-        self.advance();
+      while self.advance_if(|c| c.is_digit(if base > 10 { base } else { 10 })) {
       }
     }
 
@@ -380,8 +388,7 @@ impl<'c> Lexer<'c> {
       }
 
       // exponent digits, required
-      if !self.peek().is_ascii_digit() {
-        // self.add_error("Expected digits after exponent marker".to_string());
+      if !self.advance_if(char::is_ascii_digit) {
         self.diag().add_error(
           InvalidNumberFormat(
             "Expected digits after exponent marker".to_string(),
@@ -389,9 +396,7 @@ impl<'c> Lexer<'c> {
           self.span(start),
         );
       } else {
-        while self.peek().is_ascii_digit() {
-          self.advance();
-        }
+        while self.advance_if(char::is_ascii_digit) {}
       }
     }
 
@@ -405,7 +410,7 @@ impl<'c> Lexer<'c> {
         self.advance();
       }
 
-      if !self.peek().is_ascii_digit() {
+      if !self.advance_if(char::is_ascii_digit) {
         self.diag().add_error(
           InvalidNumberFormat(
             "Expected digits after hexadecimal exponent marker".to_string(),
@@ -413,19 +418,15 @@ impl<'c> Lexer<'c> {
           self.span(start),
         );
       } else {
-        while self.peek().is_ascii_digit() {
-          self.advance();
-        }
+        while self.advance_if(char::is_ascii_digit) {}
       }
     }
 
     let head = self.cursor;
-    let num = self.slice(start, head).to_string();
+    let num = self.slice(start, head);
 
-    let suffix = if matches!(self.peek(), c if Self::is_ident_start(c)) {
-      while matches!(self.peek(), c if Self::is_ident_start(c)) {
-        self.advance();
-      }
+    let suffix = if self.advance_if(Self::is_ident_start) {
+      while self.advance_if(Self::is_ident_continue) {}
       let s = self.slice(head, self.cursor);
       match is_floating {
         true =>
@@ -466,17 +467,6 @@ impl<'c> Lexer<'c> {
     }
 
     Token::number(constant, self.span(start))
-  }
-
-  #[inline]
-  fn is_digit_of_base(c: &char, base: u32) -> bool {
-    match base {
-      2 => matches!(c, '0' | '1'),
-      8 => matches!(c, '0'..='7'),
-      10 => c.is_ascii_digit(),
-      16 => c.is_ascii_hexdigit(),
-      _ => false,
-    }
   }
 
   fn line_escape(&mut self, start: usize) -> Option<Token<'c>> {
@@ -544,7 +534,7 @@ impl<'c> Lexer<'c> {
         .session
         .diag()
         .add_error(UnterminatedString, self.span(start));
-      return None;
+      None?
     }
 
     self.advance(); // consume closing quote
@@ -581,7 +571,7 @@ impl<'c> Lexer<'c> {
         .session
         .diag()
         .add_error(UnterminatedString, self.span(start));
-      return None;
+      None?
     }
 
     let end = self.cursor;

@@ -41,12 +41,12 @@ impl<'c> RenderEngine<'c> for ASTDumper<'c> {
     self.inner.palette()
   }
 
-  fn finalize(self) -> ::std::io::Result<()> {
-    self.inner.finalize()
-  }
-
   fn src(&self) -> &'c SourceManager {
     self.manager
+  }
+
+  fn finalize(self) -> ::std::io::Result<()> {
+    self.inner.finalize()
   }
 }
 
@@ -117,25 +117,13 @@ mod private {
   impl Sealed for SourceSpan {}
 }
 pub trait DumpSpan: private::Sealed {
-  fn dump<'c>(
-    &self,
-    dumper: &mut impl Dumper<'c>,
-    _prefix: &str,
-    _is_last: bool,
-    palette: &Palette,
-  );
+  fn dump<'c>(&self, dumper: &mut impl Dumper<'c>, palette: &Palette);
 }
 impl DumpSpan for SourceSpan {
-  fn dump<'c>(
-    &self,
-    dumper: &mut impl Dumper<'c>,
-    _prefix: &str,
-    _is_last: bool,
-    palette: &Palette,
-  ) {
+  fn dump<'c>(&self, dumper: &mut impl Dumper<'c>, palette: &Palette) {
     dumper.write("<", &palette.skeleton);
     let (l, c) = dumper.src().lookup_line_col(*self).destructure();
     dumper.write_fmt(format_args!("{}:{}", l, c), &palette.dim);
-    dumper.write("> ", &palette.skeleton)
+    dumper.write(">", &palette.skeleton)
   }
 }

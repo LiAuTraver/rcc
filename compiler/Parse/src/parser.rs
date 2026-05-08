@@ -1236,7 +1236,7 @@ impl<'c> Parser<'c> {
     match literal {
       Literal::Operator(operator) =>
         self.next_operator_expr(operator, location),
-      Literal::Number(num) => (num.into_with(self.eloc(location))).into(),
+      Literal::Number(num) => num.into_with(self.eloc(location)).into(),
       Literal::String(str) => (CL::String(str) + self.eloc(location)).into(),
       Literal::Identifier(ident) =>
         Variable::new(ident, self.eloc(location)).into(),

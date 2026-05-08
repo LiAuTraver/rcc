@@ -1,5 +1,5 @@
-*.ll
-*.S
-*.mir
-*.exe
-*.out
+*
+
+!.clangd
+!*.c
+!.gitignore
