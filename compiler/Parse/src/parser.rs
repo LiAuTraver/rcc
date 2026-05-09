@@ -558,13 +558,7 @@ impl<'c> Parser<'c> {
           },
           _ => {
             if self.parse_type_specifier().is_none() {
-              self.add_error(
-                UnclosedParameterList(
-                  "Expect ',', ')' or type specifier in parameter list"
-                    .to_string(),
-                ),
-                *self.peek_loc(),
-              );
+              self.add_error(UnclosedParameterList, *self.peek_loc());
               break;
             }
             // continuing parsing
@@ -769,33 +763,21 @@ impl<'c> Parser<'c> {
     Designator::Index(expression)
   }
 
-  fn next_vardef(
-    &mut self,
-    declspecs: DeclSpecs<'c>,
-    declarator: Declarator<'c>,
-  ) -> VarDef<'c> {
+  fn next_vardef(&mut self, declarator: Declarator<'c>) -> VarDef<'c> {
     let location = *self.peek_loc();
     let initializer = match self.peek_lit() {
-      Literal::Operator(Semicolon) => {
-        self.must_get_op::<{ Semicolon }>();
-        None
-      },
+      Literal::Operator(Semicolon | Comma) => None,
       Literal::Operator(Assign) => {
         self.must_get_op::<{ Assign }>();
         let initializer = self.next_initializer();
-        self.recoverable_get::<{ Semicolon }>();
         Some(initializer)
       },
       _ => {
-        self.add_error(
-          VarDeclUnclosed("Expect ';' or '=' after variable name".to_string()),
-          *self.peek_loc(),
-        );
-        self.get();
+        self.add_error(VarDeclUnclosed, *self.peek_loc());
         None
       },
     };
-    VarDef::new(declspecs, declarator, initializer, self.eloc(location))
+    VarDef::new(declarator, initializer, self.eloc(location))
   }
 
   fn next_declaration(&mut self) -> Declaration<'c> {
@@ -817,64 +799,106 @@ impl<'c> Parser<'c> {
       }
     }
     let location = *self.peek_loc();
-    let mut recovery = false;
+    // let mut recovery = false;
     // block definition is not allowed in top
     if self.peek_lit() == LeftBrace {
       self.add_error(InvalidBlockItem, *self.peek_loc());
       self.must_get_op::<{ LeftBrace }>();
-      recovery = true;
+      // recovery = true;
     }
 
     let declspecs = self.parse_declspecs();
-    let declarator = self.parse_declarator::<{ Maybe }, true>();
+    let mut init_declarators = Vec::with_capacity(1);
 
-    if matches!(declspecs.storage_class, Some(Storage::Typedef)) {
-      if let Some(name) = declarator.name {
-        self.typedefs.declare(name);
+    loop {
+      let mut can_continue = true;
+      let mut single = true;
+      let declarator = if single {
+        self.parse_declarator::<{ Maybe }, true>()
       } else {
-        self.add_warning(EmptyTypedef, declarator.span);
-      }
-      self.must_get_op::<{ Semicolon }>();
-      return VarDef::new(declspecs, declarator, None, self.eloc(location))
-        .into();
-    }
-    let declaration =
-      if matches!(declarator.modifiers.first(), Some(Modifier::Function(_))) {
+        self.parse_declarator::<{ Named }, false>()
+      };
+      if matches!(declspecs.storage_class, Some(Storage::Typedef)) {
+        if let Some(name) = declarator.name {
+          self.typedefs.declare(name);
+        } else {
+          self.add_warning(EmptyTypedef, declarator.span);
+          can_continue = false;
+        }
+        init_declarators
+          .push(VarDef::new(declarator, None, self.eloc(location)).into());
+      } else if matches!(
+        declarator.modifiers.first(),
+        Some(Modifier::Function(_))
+      ) {
         // int(void) is not allowed
         if declarator.name.is_none() {
           self.add_error(MissingFunctionName, *self.peek_loc());
         }
-        let (declspecs, declarator, body) =
-          self.next_function_body(declspecs, declarator);
-        Function::new(declspecs, declarator, body, self.eloc(location)).into()
+        let body = match self.peek_lit() {
+          Literal::Operator(LeftBrace) => Some(self.next_block()),
+          _ => None,
+        };
+        let c = body.is_some();
+        init_declarators
+          .push(Function::new(declarator, body, self.eloc(location)).into());
+        if c {
+          if !single {
+            self.add_error(
+              Custom(
+                "Expect a declaration, function definition cannot appear here"
+                  .to_string(),
+              ),
+              self.eloc(location),
+            );
+          }
+          break;
+        }
       } else {
+        if declarator.name.is_none() {
+          self.add_warning(EmptyDecl, declarator.span);
+          can_continue = false;
+        }
         // `int;` is allowed although useless
-        self.next_vardef(declspecs, declarator).into()
-      };
-    if recovery {
-      self.recoverable_get::<{ RightBrace }>();
+        init_declarators.push(self.next_vardef(declarator).into());
+      }
+
+      // #[allow(unused_assignments)]
+      // NOLINTNEXTLINE: this is used??? idk
+      single = false;
+
+      if self.peek_lit() == Comma {
+        self.must_get_op::<{ Comma }>();
+        continue;
+      } else if self.peek_lit() == Semicolon {
+        self.must_get_op::<{ Semicolon }>();
+        break;
+      }
+      if !can_continue {
+        // error.
+        self.add_error(
+          UnexpectedCharacter((self.peek_lit().to_string(), None).into()),
+          self.eloc(location),
+        );
+        while !self.is_at_end() && self.peek_lit() != Semicolon {
+          self.get();
+        }
+        if self.peek_lit() == Semicolon {
+          self.must_get_op::<{ Semicolon }>();
+        }
+        break;
+      }
     }
-    declaration
+
+    // if recovery {
+    //   self.recoverable_get::<{ RightBrace }>();
+    // }
+    init_declarators.shrink_to_fit();
+    Declaration::new(declspecs, init_declarators, self.eloc(location))
   }
 }
 /// statements
 impl<'c> Parser<'c> {
-  fn next_function_body(
-    &mut self,
-    declspecs: DeclSpecs<'c>,
-    declarator: Declarator<'c>,
-  ) -> (DeclSpecs<'c>, Declarator<'c>, Option<Compound<'c>>) {
-    let body = match self.peek_lit() {
-      Literal::Operator(LeftBrace) => Some(self.next_block()),
-      _ => {
-        self.recoverable_get::<{ Semicolon }>();
-        None
-      },
-    };
-
-    (declspecs, declarator, body)
-  }
-
   fn next_block(&mut self) -> Compound<'c> {
     let location = *self.peek_loc();
     self.must_get_op::<{ LeftBrace }>();
@@ -968,18 +992,7 @@ impl<'c> Parser<'c> {
           None
         },
         _ => match self.next_statement() {
-          Statement::Declaration(Declaration::Variable(vardef)) => {
-            if vardef.initializer.is_none() {
-              self.add_warning(
-                VariableUninitialized(
-                  "Variable declared in for loop without initializer"
-                    .to_string(),
-                ),
-                self.eloc(location),
-              );
-            }
-            Some(Statement::Declaration(vardef.into()))
-          },
+          Statement::Declaration(decl) => Some(Statement::Declaration(decl)),
           Statement::Expression(expr) => Some(expr.into()),
           _ => {
             self.add_error(

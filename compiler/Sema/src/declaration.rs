@@ -16,6 +16,9 @@ pub struct TranslationUnit<'c> {
 pub type FunctionRef<'c> = &'c Function<'c>;
 pub type VarDefRef<'c> = &'c VarDef<'c>;
 
+/// FIXME: make external decl a (intrusive-forwarding-)linked list, rather than vec.
+///
+/// should be copyable,,, but leave it there until we make it a list.
 #[derive(Debug)]
 pub enum ExternalDeclarationRef<'c> {
   Function(FunctionRef<'c>),
@@ -25,7 +28,7 @@ pub enum ExternalDeclarationRef<'c> {
 impl<'c> ExternalDeclarationRef<'c> {
   pub fn declref(&self) -> DeclRef<'c> {
     match self {
-      Self::Function(func) => func.declaration,
+      Self::Function(func) => func.declref,
       Self::Variable(var) => var.declaration,
     }
   }
@@ -33,7 +36,7 @@ impl<'c> ExternalDeclarationRef<'c> {
 
 #[derive(Debug)]
 pub struct Function<'c> {
-  pub declaration: DeclRef<'c>,
+  pub declref: DeclRef<'c>,
   pub parameters: &'c [Parameter<'c>],
   pub specifier: FunctionSpecifier,
   pub body: Option<Compound<'c>>,
@@ -151,7 +154,7 @@ impl<'c> Function<'c> {
 
   pub fn new(
     context: &'c Context<'c>,
-    declaration: DeclRef<'c>,
+    declref: DeclRef<'c>,
     parameters: impl IntoIterator<Item = Parameter<'c>>,
     specifier: FunctionSpecifier,
     body: Option<Compound<'c>>,
@@ -162,7 +165,7 @@ impl<'c> Function<'c> {
       .collect_in::<ArenaVec<_>>(context.arena())
       .into_bump_slice();
     Self {
-      declaration,
+      declref,
       parameters,
       specifier,
       body,
@@ -276,9 +279,9 @@ mod fmt {
 
   impl<'c> Display for Function<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      match self.declaration.qualified_type().unqualified_type {
+      match self.declref.qualified_type().unqualified_type {
         Type::FunctionProto(proto) => {
-          write!(f, "{} {}(", proto.return_type, self.declaration.name())?;
+          write!(f, "{} {}(", proto.return_type, self.declref.name())?;
           for (index, param) in self.parameters.iter().enumerate() {
             if index > 0 {
               write!(f, ", ")?;
@@ -291,8 +294,8 @@ mod fmt {
           write!(
             f,
             "{} {}",
-            self.declaration.qualified_type(),
-            self.declaration.name()
+            self.declref.qualified_type(),
+            self.declref.name()
           )?;
         },
       }

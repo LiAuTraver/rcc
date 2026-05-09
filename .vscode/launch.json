@@ -14,17 +14,23 @@
       "preLaunchTask": "rust: cargo build",
       "cargo": {
         "args": [
-          "build"
+          "run"
         ],
         "filter": {
           "name": "rcc",
           "kind": "bin"
         }
       },
+      "env": {
+        "RUST_BACKTRACE": "short",
+        "RUSTC_TOOLCHAIN": "Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
+      },
       "console": "internalConsole",
       "stopOnEntry": false,
       "sourceLanguages": [
-        "rust"
+        "rust",
+        "C++",
+        "C"
       ],
     },
     {

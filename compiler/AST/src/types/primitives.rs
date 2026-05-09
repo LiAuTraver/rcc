@@ -44,10 +44,10 @@ pub enum Primitive {
   Double,
   #[strum(serialize = "long double")]
   LongDouble,
-  /// 6.2.5.24: The void type comprises an empty set of values; it is an incomplete object type that cannot be completed.
+  /// 6.2.5p24: The void type comprises an empty set of values; it is an incomplete object type that cannot be completed.
   #[strum(serialize = "void")]
   Void,
-  /// 6.5.5.4: `nullptr`. The type `nullptr_t` shall not be converted to any type other than `void`, `bool` or a pointer type.
+  /// 6.5.5p4: `nullptr`. The type `nullptr_t` shall not be converted to any type other than `void`, `bool` or a pointer type.
   #[strum(serialize = "nullptr_t")]
   Nullptr,
   // ignore below for now: __STDC_NO_COMPLEX__
@@ -58,6 +58,10 @@ pub enum Primitive {
   ComplexDouble,
   #[strum(serialize = "_Complex long double")]
   ComplexLongDouble,
+
+  /// FIXME.
+  #[strum(serialize = "__auto_type")]
+  __AutoType,
   /// This represent a bit -- 1/8 of byte for IR's `i1` type -- merely a workaround to fix my design.
   ///
   /// # Warning:

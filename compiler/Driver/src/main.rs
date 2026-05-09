@@ -79,6 +79,7 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
   let mut parser = Parser::new(tokens, &ast_session);
   let program = parser.parse();
   if ast_session.diag().has_errors() {
+    println!("{program}");
     eprintln!("Parser errors:");
     ast_session
       .diag()

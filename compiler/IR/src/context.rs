@@ -353,6 +353,7 @@ impl<'c> Context<'c> {
           self.make_integer(integer.size_bits(self.ast_target_info)),
         placeholder @ (LongDouble | ComplexFloat | ComplexDouble
         | ComplexLongDouble) => todo!("{placeholder:#?} not implemented"),
+        __AutoType => panic!("sema shall resolve this"),
       },
       ast::Type::Pointer(_) => self.pointer_type,
       ast::Type::Array(array) => self.make_array(

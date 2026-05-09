@@ -213,7 +213,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     target_type: Option<QualifiedType<'c>>,
   ) -> (sd::Initializer<'c>, QualifiedType<'c>) {
     let scalar =
-      self.scalar(expr, target_type.unwrap_or(self.ast().void_type().into()));
+      self.scalar(expr, target_type.unwrap_or(self.void_type().into()));
     let qualified_type = match target_type {
       None => *scalar.qualified_type(),
       Some(target_type) => self.complete_type_if_eligible(target_type, scalar),
@@ -239,7 +239,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
         },
       None => {
         self.add_error(DeducedTypeWithBracedInitializer, list.span);
-        (self.__empty_expr.into(), self.ast().void_type().into())
+        (self.__empty_expr.into(), self.void_type().into())
       },
     }
   }
@@ -268,12 +268,11 @@ impl<'i, 'c> Initialization<'i, 'c> {
         span,
       );
       // ik the code here is a mess but idc this unimpltmtend amatch arm
-      let pesudo_entry =
-        self.ast().arena().alloc([sd::InitializerListEntry::new(
-          sd::Designator::Array(npos),
-          sd::Initializer::Scalar(self.__empty_expr),
-          true,
-        )]);
+      let pesudo_entry = self.arena().alloc([sd::InitializerListEntry::new(
+        sd::Designator::Array(npos),
+        sd::Initializer::Scalar(self.__empty_expr),
+        true,
+      )]);
       (sd::InitializerList::new(pesudo_entry, span), target_type)
     }
   }

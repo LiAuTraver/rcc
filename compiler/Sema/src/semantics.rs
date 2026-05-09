@@ -94,7 +94,7 @@ pub struct Sema<'c> {
 impl<'a> ::std::ops::Deref for Sema<'a> {
   type Target = Session<'a, OpDiag<'a>>;
 
-  fn deref(&self) -> &Self::Target {
+  fn deref(&self) -> &'a Self::Target {
     self.session
   }
 }
@@ -108,13 +108,14 @@ impl<'c> Sema<'c> {
       current_gotos: Default::default(),
       scope_context: Default::default(),
       __empty_expr: se::Expression::new_error_node(
-        session.ast(),
-        session.ast().int_type().into(),
+        session,
+        session.int_type().into(),
       ),
       __empty_stmt: ss::Statement::alloc(session.ast(), Default::default()),
     }
   }
 
+  #[inline(always)]
   pub fn context(&self) -> &'c Context<'c> {
     self.ast()
   }
@@ -145,6 +146,9 @@ impl<'c> Sema<'c> {
     translation_unit
   }
 }
+pub type ParsedDeclspecs<'c> =
+  (FunctionSpecifier, Option<Storage>, QualifiedType<'c>);
+
 impl<'c> Sema<'c> {
   /// IMPORTANT: currently, caller shoould check:
   /// 1. whether the `restrict` is valid; (it's only valid for pointers and non-static local variable.)
@@ -177,7 +181,7 @@ impl<'c> Sema<'c> {
               match self.expression(expr) {
                 Ok(analyzed_expr)
                   if analyzed_expr.qualified_type().is_scalar() =>
-                  match analyzed_expr.fold(self.session) {
+                  match analyzed_expr.fold(self) {
                     Success(value) =>
                       if value.is_integer_constant() {
                         ArraySize::Constant(
@@ -218,7 +222,7 @@ impl<'c> Sema<'c> {
               }
             },
           };
-          if !qualified_type.is_complete(self.ast()) {
+          if !qualified_type.is_complete(self.context()) {
             self.add_error(
               ArrayHasIncompleteType(qualified_type.to_string()),
               array_modifier.span,
@@ -235,7 +239,7 @@ impl<'c> Sema<'c> {
             is_variadic,
           } = function_signature;
           let analyzed_parameter_types = self.parse_parameter_types(parameters);
-          let p = self.context().intern(FunctionProto::<'c>::new(
+          let p = self.intern(FunctionProto::new(
             qualified_type,
             analyzed_parameter_types.into_bump_slice(),
             is_variadic,
@@ -276,7 +280,7 @@ impl<'c> Sema<'c> {
       .iter()
       .map(|param| {
         let qualified_type = param.declaration.qualified_type();
-        if !qualified_type.is_complete(self.ast()) {
+        if !qualified_type.is_complete(self.context()) {
           self.add_error(
             VariableIncompleteType(
               param.declaration.name(),
@@ -287,7 +291,7 @@ impl<'c> Sema<'c> {
         }
         qualified_type
       })
-      .collect_in::<ArenaVec<_>>(self.context().arena());
+      .collect_in::<ArenaVec<_>>(self.arena());
     Ok((
       self
         .context()
@@ -313,9 +317,7 @@ impl<'c> Sema<'c> {
           declspecs,
           span: _,
         } = parameter;
-        let (_, storage, base_type) = self
-          .parse_declspecs(declspecs)
-          .shall_ok("Failed to parse declspecs for parameter");
+        let (_, storage, base_type) = self.parse_declspecs(declspecs);
         contract_assert!(
           storage.is_none() || storage.is_some_and(|s| s.is_register())
         );
@@ -329,7 +331,7 @@ impl<'c> Sema<'c> {
           .apply_modifiers_for_varty(base_type, modifiers)
           .parameter_adjustment(self.context())
       })
-      .collect_in(&**(self.context().arena()))
+      .collect_in(&**(self.arena()))
   }
 
   fn parse_parameters(
@@ -344,9 +346,7 @@ impl<'c> Sema<'c> {
           declspecs,
           span,
         } = parameter;
-        let (_, storage, base_type) = self
-          .parse_declspecs(declspecs)
-          .shall_ok("Failed to parse declspecs for parameter");
+        let (_, storage, base_type) = self.parse_declspecs(declspecs);
         contract_assert!(
           storage.is_none() || storage.is_some_and(|s| s.is_register())
         );
@@ -362,7 +362,7 @@ impl<'c> Sema<'c> {
           self.context(),
           qualified_type,
           Storage::Automatic,
-          name.unwrap_or_else(|| self.ast().unnamed_str()),
+          name.unwrap_or_else(|| self.unnamed_str()),
           None,
         );
         sd::Parameter::new(declaration, span)
@@ -373,16 +373,15 @@ impl<'c> Sema<'c> {
   fn parse_declspecs(
     &self,
     declspecs: pd::DeclSpecs<'c>,
-  ) -> Result<(FunctionSpecifier, Option<Storage>, QualifiedType<'c>), Diag<'c>>
-  {
+  ) -> ParsedDeclspecs<'c> {
     let qualified_type = self
       .get_type(declspecs.type_specifiers)
-      .handle_with(self, self.context().int_type().into())
+      .handle_with(self, self.int_type().into())
       .with_qualifiers(declspecs.qualifiers);
     let storage_class = declspecs.storage_class;
     let function_specifier = declspecs.function_specifiers;
 
-    Ok((function_specifier, storage_class, qualified_type))
+    (function_specifier, storage_class, qualified_type)
   }
 
   fn get_type(
@@ -391,60 +390,54 @@ impl<'c> Sema<'c> {
   ) -> Result<QualifiedType<'c>, Diag<'c>> {
     assert!(!type_specifiers.is_empty());
     assert!(type_specifiers.len() <= 5); // unsigned long long int complex (integer complex not in standard) is the max
-    type_specifiers.sort_by_key(|s| s.sort_key());
+    type_specifiers.sort_by_key(pd::TypeSpecifier::sort_key);
     use pd::TypeSpecifier::*;
     // 6.7.3.1
     match type_specifiers.as_slice() {
-      [Nullptr] => Ok(self.context().nullptr_type().into()),
-      [Void] => Ok(self.context().void_type().into()),
+      [AutoType] => Ok(self.auto_type().into()),
+      [Nullptr] => Ok(self.nullptr_type().into()),
+      [Void] => Ok(self.void_type().into()),
 
-      [Bool] => Ok(self.context().i8_bool_type().into()),
+      [Bool] => Ok(self.i8_bool_type().into()),
 
-      [Char] => Ok(self.context().char_type().into()),
-      [Signed, Char] => Ok(self.context().schar_type().into()),
-      [Unsigned, Char] => Ok(self.context().uchar_type().into()),
+      [Char] => Ok(self.char_type().into()),
+      [Signed, Char] => Ok(self.schar_type().into()),
+      [Unsigned, Char] => Ok(self.uchar_type().into()),
 
       [Short] | [Short, Int] | [Signed, Short] | [Signed, Short, Int] =>
-        Ok(self.context().short_type().into()),
+        Ok(self.short_type().into()),
       [Unsigned, Short] | [Unsigned, Short, Int] =>
-        Ok(self.context().ushort_type().into()),
+        Ok(self.ushort_type().into()),
 
-      [Int] | [Signed] | [Signed, Int] => Ok(self.context().int_type().into()),
-      [Unsigned] | [Unsigned, Int] => Ok(self.context().uint_type().into()),
+      [Int] | [Signed] | [Signed, Int] => Ok(self.int_type().into()),
+      [Unsigned] | [Unsigned, Int] => Ok(self.uint_type().into()),
 
       [Long] | [Long, Int] | [Signed, Long] | [Signed, Long, Int] =>
-        Ok(self.context().long_type().into()),
-      [Unsigned, Long] | [Unsigned, Long, Int] =>
-        Ok(self.context().ulong_type().into()),
+        Ok(self.long_type().into()),
+      [Unsigned, Long] | [Unsigned, Long, Int] => Ok(self.ulong_type().into()),
 
       [Long, Long]
       | [Long, Long, Int]
       | [Signed, Long, Long]
-      | [Signed, Long, Long, Int] => Ok(self.context().long_long_type().into()),
+      | [Signed, Long, Long, Int] => Ok(self.long_long_type().into()),
       [Unsigned, Long, Long] | [Unsigned, Long, Long, Int] =>
-        Ok(self.context().ulong_long_type().into()),
+        Ok(self.ulong_long_type().into()),
 
-      [Float] => Ok(self.context().float32_type().into()),
-      [Double] => Ok(self.context().float64_type().into()),
-      [Long, Double] => Ok(
-        Type::Primitive(Primitive::LongDouble)
-          .lookup(self.context())
-          .into(),
-      ),
+      [Float] => Ok(self.float32_type().into()),
+      [Double] => Ok(self.float64_type().into()),
+      [Long, Double] =>
+        Ok(Type::Primitive(Primitive::LongDouble).lookup(self).into()),
 
-      [Float, Complex] => Ok(
-        Type::Primitive(Primitive::ComplexFloat)
-          .lookup(self.context())
-          .into(),
-      ),
+      [Float, Complex] =>
+        Ok(Type::Primitive(Primitive::ComplexFloat).lookup(self).into()),
       [Double, Complex] => Ok(
         Type::Primitive(Primitive::ComplexDouble)
-          .lookup(self.context())
+          .lookup(self)
           .into(),
       ),
       [Long, Double, Complex] => Ok(
         Type::Primitive(Primitive::ComplexLongDouble)
-          .lookup(self.context())
+          .lookup(self)
           .into(),
       ),
 
@@ -490,43 +483,60 @@ impl<'c> Sema<'c> {
   fn externaldecl(
     &mut self,
     program: pd::Program<'c>,
+  ) -> impl IntoIterator<Item = sd::ExternalDeclarationRef<'c>> {
+    program.declarations.into_iter().flat_map(|declaration| {
+      self.declarations(declaration.declspecs, declaration.init_declarators)
+    })
+  }
+
+  pub fn declarations(
+    &mut self,
+    declspecs: pd::DeclSpecs<'c>,
+    init_declarators: Vec<pd::InitDeclarator<'c>>,
   ) -> Vec<sd::ExternalDeclarationRef<'c>> {
-    let mut declarations = Vec::new();
-    program.declarations.into_iter().for_each(|decl| {
-      match self.declaration(decl) {
-        Ok(declaration) => declarations.push(declaration),
-        Err(e) => self.add_diag(e),
-      }
-    });
-    declarations
+    let parsed_declspecs = self.parse_declspecs(declspecs);
+    init_declarators
+      .into_iter()
+      .filter_map(|init_declarator| {
+        match self.declaration(parsed_declspecs, init_declarator) {
+          Ok(declaration) => Some(declaration),
+          Err(diag) => {
+            self.add_diag(diag);
+            None
+          },
+        }
+      })
+      .collect()
   }
 
   pub fn declaration(
     &mut self,
-    declaration: pd::Declaration<'c>,
+    parsed_declspecs: ParsedDeclspecs<'c>,
+    init_declarator: pd::InitDeclarator<'c>,
   ) -> Result<sd::ExternalDeclarationRef<'c>, Diag<'c>> {
-    match declaration {
-      pd::Declaration::Function(function) => Ok(
-        sd::ExternalDeclarationRef::Function(self.functiondecl(function)?),
-      ),
-      pd::Declaration::Variable(vardef) =>
-        Ok(sd::ExternalDeclarationRef::Variable(self.vardef(vardef)?)),
+    match init_declarator {
+      pd::InitDeclarator::Function(function) =>
+        Ok(sd::ExternalDeclarationRef::Function(
+          self.functiondecl(parsed_declspecs, function)?,
+        )),
+      pd::InitDeclarator::Variable(vardef) =>
+        Ok(sd::ExternalDeclarationRef::Variable(
+          self.vardef(parsed_declspecs, vardef)?,
+        )),
     }
   }
 
   pub fn functiondecl(
     &mut self,
+    parsed_declspecs: ParsedDeclspecs<'c>,
     function: pd::Function<'c>,
   ) -> Result<sd::FunctionRef<'c>, Diag<'c>> {
     let pd::Function {
       body,
       declarator,
-      declspecs,
       span,
     } = function;
-    let (function_specifier, storage, base_return_type) = self
-      .parse_declspecs(declspecs)
-      .shall_ok("current implementation shall not return Err here");
+    let (function_specifier, storage, base_return_type) = parsed_declspecs;
     let pd::Declarator {
       modifiers,
       name,
@@ -610,7 +620,7 @@ impl<'c> Sema<'c> {
       declkind,
       previous_decl,
     );
-    if !declaration.qualified_type().is_complete(self.ast()) {
+    if !declaration.qualified_type().is_complete(self.context()) {
       self.add_error(
         VariableIncompleteType(name, declaration.qualified_type().to_string()),
         span,
@@ -637,8 +647,8 @@ impl<'c> Sema<'c> {
           Also: this may occur if the `current_function` is not properly \
            cleared 
           after an `Err` returned of the previous function definition analysis",
-          self.current_function.as_ref().unwrap().declaration.name(),
-          function.declaration.name()
+          self.current_function.as_ref().unwrap().declref.name(),
+          function.declref.name()
         ),
         None => self.function_with_body(body, function),
       },
@@ -700,13 +710,13 @@ impl<'c> Sema<'c> {
       .current_labels
       .iter()
       .copied()
-      .collect_in::<ArenaVec<_>>(self.context().arena())
+      .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice();
     let gotos = self
       .current_gotos
       .iter()
       .copied()
-      .collect_in::<ArenaVec<_>>(self.context().arena())
+      .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice();
     let analyzed_body =
       ss::Compound::new(self.context(), statements, body.span);
@@ -730,11 +740,11 @@ impl<'c> Sema<'c> {
 
   pub fn vardef(
     &mut self,
+    parsed_declspecs: ParsedDeclspecs<'c>,
     vardef: pd::VarDef<'c>,
   ) -> Result<sd::VarDefRef<'c>, Diag<'c>> {
     let pd::VarDef {
       declarator,
-      declspecs,
       initializer,
       span,
     } = vardef;
@@ -746,23 +756,17 @@ impl<'c> Sema<'c> {
 
     use Storage::*;
 
-    let name = name
-      .shall_ok("variable must have a name; it should be handled in parser");
+    let name = name.unwrap_or("<unnamed>");
 
-    let (storage, qualified_type, initializer) =
-      if declspecs.type_specifiers.len() == 1
-        && matches!(
-          unsafe { declspecs.type_specifiers.first().unwrap_unchecked() },
-          ::rcc_parse::declaration::TypeSpecifier::AutoType
-        )
-      {
-        let storage = declspecs.storage_class;
-        let function_specifier = declspecs.function_specifiers;
-        contract_assert!(
-          function_specifier.is_empty(),
-          "variable cannot have function specifier; this should be handled in \
-           parser"
-        );
+    let (_function_specifier, storage, raw_qualified_type) = parsed_declspecs;
+    debug_assert!(
+      _function_specifier.is_empty(),
+      "variable cannot have function specifier; this should be handled in \
+       parser"
+    );
+
+    let (qualified_type, initializer) =
+      if RefEq::ref_eq(&**raw_qualified_type, self.auto_type()) {
         let out = initializer.map(|initializer| {
           self.initializer(
             initializer,
@@ -772,37 +776,30 @@ impl<'c> Sema<'c> {
           )
         });
         if let Some((initializer, qualified_type)) = out {
-          (storage, qualified_type, Some(initializer))
+          (qualified_type, Some(initializer))
         } else {
           Err(DeducedTypeWithNoInitializer(name) + Severity::Error + span)?
         }
       } else {
-        let (function_specifier, storage, raw_qualified_type) =
-          self.parse_declspecs(declspecs).shall_ok("vardef");
-        contract_assert!(
-          function_specifier.is_empty(),
-          "variable cannot have function specifier; this should be handled in \
-           parser"
-        );
-        let raw_qualified_type =
+        let qualified_type =
           self.apply_modifiers_for_varty(raw_qualified_type, modifiers);
-        if self.environment.is_global() && raw_qualified_type.has_vla_dim() {
+        if self.environment.is_global() && qualified_type.has_vla_dim() {
           self.add_error(TopLevelVLA(name), span);
           // skip init part...
-          (storage, raw_qualified_type, None)
+          (qualified_type, None)
         } else if let Some((initializer, qualified_type)) =
           initializer.map(|initializer| {
             self.initializer(
               initializer,
-              Some(raw_qualified_type),
+              Some(qualified_type),
               self.environment.is_global()
                 || matches!(storage, Some(Constexpr | Static | ThreadLocal)),
             )
           })
         {
-          (storage, qualified_type, Some(initializer))
+          (qualified_type, Some(initializer))
         } else {
-          (storage, raw_qualified_type, None)
+          (qualified_type, None)
         }
       };
     let previous_decl = self.environment.shallow_find(name);
@@ -856,7 +853,8 @@ impl<'c> Sema<'c> {
         (qualified_type, storage)
       };
     // arr can have 1st extend incomplete, handled downstream at init
-    if !qualified_type.is_complete(self.ast()) && !qualified_type.is_array() {
+    if !qualified_type.is_complete(self.context()) && !qualified_type.is_array()
+    {
       Err(
         DeclarationTyIncomplete(name.into(), qualified_type.to_string())
           + Severity::Error
@@ -885,7 +883,10 @@ impl<'c> Sema<'c> {
       ),
     };
 
-    if !vardef.declaration.qualified_type().is_complete(self.ast())
+    if !vardef
+      .declaration
+      .qualified_type()
+      .is_complete(self.context())
       && !vardef.declaration.storage_class().is_extern()
     {
       self.add_error(
@@ -1031,7 +1032,7 @@ impl<'c> Sema<'c> {
     }
     if (qualified_type
       .as_array()
-      .is_some_and(|array| !array.is_complete(self.ast())))
+      .is_some_and(|array| !array.is_complete(self.context())))
       && initializer.is_none()
     {
       self.add_error(
@@ -1089,16 +1090,16 @@ impl<'c> Sema<'c> {
           self,
           se::Expression::new_error_node(
             self.context(),
-            self.context().uintptr_type().into(),
+            self.uintptr_type().into(),
           ),
         );
-        let size = analyzed_expr.unqualified_type().size(self.ast());
+        let size = analyzed_expr.unqualified_type().size(self.context());
         Ok(se::Expression::new_rvalue(
           self.context(),
           se::RawExpr::Constant(se::Constant::Integral(Integral::from(
             size.to_builtin::<usize>(),
           ))),
-          self.context().uintptr_type().into(),
+          self.uintptr_type().into(),
           SourceSpan {
             end: analyzed_expr.span().end,
             ..sizeof.span
@@ -1111,16 +1112,15 @@ impl<'c> Sema<'c> {
           declarator,
         } = *unprocessed_type;
         let qualified_type = {
-          let (_, _, base_type) =
-            self.parse_declspecs(declspecs).shall_ok("sizeof type");
+          let (_, _, base_type) = self.parse_declspecs(declspecs);
           self.apply_modifiers_for_varty(base_type, declarator.modifiers)
         };
         Ok(se::Expression::new_rvalue(
           self.context(),
           se::RawExpr::Constant(se::Constant::Integral(Integral::from(
-            qualified_type.size(self.ast()).to_builtin::<usize>(),
+            qualified_type.size(self.context()).to_builtin::<usize>(),
           ))),
-          self.context().uintptr_type().into(),
+          self.uintptr_type().into(),
           sizeof.span,
         ))
       },
@@ -1171,8 +1171,7 @@ impl<'c> Sema<'c> {
           .decay(self.context())
           .assignment_conversion(self.context(), formal)
           .handle_with(self, actual)
-      })
-      .collect::<Vec<_>>();
+      });
     Ok(se::Expression::new_rvalue(
       self.context(),
       se::Call::new(
@@ -1337,7 +1336,7 @@ impl<'c> Sema<'c> {
               se::Expression::void_conversion(then_expr, self.context()),
               se::Expression::void_conversion(else_expr, self.context()),
             ),
-            self.ast().void_type().into(),
+            self.void_type().into(),
             span,
           )),
         // both arithmetic -> usual arithmetic conversion
@@ -1496,7 +1495,7 @@ impl<'c> Sema<'c> {
     kind: se::UnaryKind,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    if !operand.is_modifiable_lvalue(self.ast()) {
+    if !operand.is_modifiable_lvalue(self.context()) {
       Err(ExprNotAssignable(operand.to_string()) + Severity::Error + span)
     } else if !operand.qualified_type().is_scalar() {
       Err(
@@ -1567,7 +1566,7 @@ impl<'c> Sema<'c> {
     Ok(se::Expression::new_rvalue(
       self.context(),
       se::Unary::prefix(operator, converted_operand),
-      self.context().converted_bool().into(),
+      self.converted_bool().into(),
       span,
     ))
   }
@@ -1626,8 +1625,7 @@ impl<'c> Sema<'c> {
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
-    if RefEq::ref_eq(pointee_type.unqualified_type, self.context().void_type())
-    {
+    if RefEq::ref_eq(pointee_type.unqualified_type, self.void_type()) {
       Err(DerefVoidPtr(operand.to_string()) + Severity::Error + span)
     } else {
       // If the operand points to a function, the result is a function designator; -- which means the we don't need to perform decay here
@@ -1656,7 +1654,7 @@ impl<'c> Sema<'c> {
     let expr_type = *left.qualified_type();
 
     match operator.associated_operator() {
-      _ if !left.is_modifiable_lvalue(self.ast()) => {
+      _ if !left.is_modifiable_lvalue(self.context()) => {
         self.add_error(ExprNotAssignable(left.to_string()), span);
         Ok(left)
       },
@@ -1751,7 +1749,7 @@ impl<'c> Sema<'c> {
     Ok(se::Expression::new_rvalue(
       self.context(),
       se::Binary::new(operator, lhs, rhs),
-      self.context().converted_bool().into(),
+      self.converted_bool().into(),
       span,
     ))
   }
@@ -1782,7 +1780,7 @@ impl<'c> Sema<'c> {
         Ok(se::Expression::new_rvalue(
           self.context(),
           se::Binary::new(operator, lhs, rhs),
-          self.context().converted_bool().into(),
+          self.converted_bool().into(),
           span,
         ))
       },
@@ -1793,7 +1791,7 @@ impl<'c> Sema<'c> {
         Ok(se::Expression::new_rvalue(
           self.context(),
           se::Binary::from_operator_unchecked(operator, left, right),
-          self.context().converted_bool().into(),
+          self.converted_bool().into(),
           span,
         )),
 
@@ -1833,7 +1831,7 @@ impl<'c> Sema<'c> {
       Ok(se::Expression::new_rvalue(
         self.context(),
         se::Binary::from_operator_unchecked(operator, ptr, casted_nullptr),
-        self.context().converted_bool().into(),
+        self.converted_bool().into(),
         span,
       ))
     };
@@ -1847,7 +1845,7 @@ impl<'c> Sema<'c> {
           Ok(se::Expression::new_rvalue(
             self.context(),
             se::Binary::new(operator, left, right),
-            self.context().converted_bool().into(),
+            self.converted_bool().into(),
             span,
           ))
         } else {
@@ -1973,7 +1971,7 @@ impl<'c> Sema<'c> {
           true => Ok(se::Expression::new_rvalue(
             self.context(),
             se::Binary::new(operator, left, right),
-            self.context().ptrdiff_type().into(), // no qual for pointer differences
+            self.ptrdiff_type().into(), // no qual for pointer differences
             span,
           )),
           // -> error
@@ -2231,8 +2229,17 @@ impl<'c> Sema<'c> {
   fn declstmt(
     &mut self,
     declaration: pd::Declaration<'c>,
-  ) -> Result<sd::ExternalDeclarationRef<'c>, Diag<'c>> {
-    self.declaration(declaration)
+  ) -> Result<ss::DeclStmt<'c>, Diag<'c>> {
+    let pd::Declaration {
+      declspecs,
+      init_declarators,
+      span,
+    } = declaration;
+    Ok(ss::DeclStmt::new(
+      self.context(),
+      self.declarations(declspecs, init_declarators),
+      span,
+    ))
   }
 
   fn returnstmt(
@@ -2249,9 +2256,8 @@ impl<'c> Sema<'c> {
       .current_function
       .as_ref()
       .shall_ok("return statement outside function should be handled in parser")
-      .declaration
+      .declref
       .qualified_type()
-      .unqualified_type
       .as_functionproto_unchecked()
       .return_type;
 
@@ -2292,7 +2298,7 @@ impl<'c> Sema<'c> {
         self,
         se::Expression::new_error_node(
           self.context(),
-          self.context().converted_bool().into(),
+          self.converted_bool().into(),
         ),
       )
   }
@@ -2387,17 +2393,14 @@ impl<'c> Sema<'c> {
         self,
         se::Expression::new_error_node(
           self.context(),
-          self.context().converted_bool().into(),
+          self.converted_bool().into(),
         ),
       )
     });
     let analyzed_increment = increment.map(|inc| {
       self.expression(inc).handle_with(
         self,
-        se::Expression::new_error_node(
-          self.context(),
-          self.context().int_type().into(),
-        ),
+        se::Expression::new_error_node(self.context(), self.int_type().into()),
       )
     });
 
@@ -2443,10 +2446,7 @@ impl<'c> Sema<'c> {
       },
       Err(e) => {
         self.add_diag(e);
-        se::Expression::new_error_node(
-          self.context(),
-          self.context().int_type().into(),
-        )
+        se::Expression::new_error_node(self.context(), self.int_type().into())
       },
     };
     let analyzed_cases = cases
@@ -2476,16 +2476,13 @@ impl<'c> Sema<'c> {
     let ps::Case { body, value, span } = case;
     let analyzed_value = self.expression(value).handle_with(
       self,
-      se::Expression::new_error_node(
-        self.context(),
-        self.context().int_type().into(),
-      ),
+      se::Expression::new_error_node(self.context(), self.int_type().into()),
     );
     let analyzed_body = self.statements(body);
 
     Ok(ss::Case::new(
       self.context(),
-      analyzed_value.fold(self.session).transform(|expr| {
+      analyzed_value.fold(self).transform(|expr| {
         if let se::RawExpr::Constant(constant) = &**expr {
           if constant.is_integral() {
             constant.clone()

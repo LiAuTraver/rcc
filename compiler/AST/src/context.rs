@@ -50,6 +50,8 @@ pub struct Context<'c> {
   langopts: u8,
 
   target_info: TargetInfo,
+
+  __unresolved_auto_type: TypeRef<'c>,
 }
 
 impl Deref for Context<'_> {
@@ -236,6 +238,11 @@ impl<'c> Context<'c> {
   pub fn langopts(&self) -> u8 {
     self.langopts
   }
+
+  #[must_use]
+  pub fn auto_type(&self) -> TypeRef<'c> {
+    self.__unresolved_auto_type
+  }
 }
 impl<'c> Context<'c> {
   pub fn new(arena: &'c Arena, triple: Triple) -> Self {
@@ -275,6 +282,7 @@ impl<'c> Context<'c> {
       unnamed_str: arena.alloc_str("<unnamed>"),
       langopts: 23,
       target_info: TargetInfo::new(triple),
+      __unresolved_auto_type: arena.alloc(__AutoType.into()),
     };
     {
       let mut refmut = this.ast_type_interner.borrow_mut();

@@ -77,7 +77,7 @@ impl<'c> ASTDumper<'c> {
     session: &'c Session<'c, D>,
   ) -> ::std::io::Result<()> {
     let mut dumper = Self::new(
-      session.ast(),
+      session,
       session.src(),
       StickyWriter::new(FlushOnDropRAII::new(BufferedStandardStream::stdout(
         Self::auto_color(),

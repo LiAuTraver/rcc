@@ -9,8 +9,8 @@ use ::rcc_sema::{
   },
   expression::{Empty, Expression},
   statement::{
-    self, Break, Case, Compound, Continue, DoWhile, For, Goto, If, Label,
-    Return, Statement, Switch, While,
+    self, Break, Case, Compound, Continue, DeclStmt, DoWhile, For, Goto, If,
+    Label, Return, Statement, Switch, While,
   },
 };
 
@@ -752,7 +752,7 @@ impl<'c> Dumpable<'c> for Function<'_> {
     self.span.dump(dumper, palette);
     dumper.write(" ", &palette.skeleton);
 
-    self.declaration.dump(dumper, prefix, is_last, palette);
+    self.declref.dump(dumper, prefix, is_last, palette);
 
     dumper.newline();
 
@@ -794,7 +794,7 @@ impl<'c> Dumpable<'c> for InitializerList<'_> {
     self.span.dump(dumper, palette);
 
     if self.is_empty() {
-      dumper.write("zeroinitializer\n", &palette.info)
+      dumper.write(" zeroinitializer\n", &palette.info)
     } else {
       dumper.newline();
       let subprefix = dumper.child_prefix(prefix, is_last);
@@ -869,7 +869,29 @@ impl<'c> Dumpable<'c> for Statement<'_> {
     ::rcc_utils::static_dispatch!(
       self,
       |variant| variant.dump(dumper, prefix, is_last, palette) =>
-      Empty Return Expression Declaration Compound If While DoWhile For Switch Goto Label Break Continue
+      Empty Return Expression Declarations Compound If While DoWhile For Switch Goto Label Break Continue
     )
+  }
+}
+impl<'c> Dumpable<'c> for DeclStmt<'_> {
+  fn dump(
+    &self,
+    dumper: &mut impl Dumper<'c>,
+    prefix: &str,
+    is_last: bool,
+    palette: &Palette,
+  ) {
+    dumper.print_indent(prefix, is_last);
+    dumper.write("DeclStmt", &palette.node);
+    dumper.write_fmt(format_args!(" {:p}\n", self), &palette.dim);
+    let subprefix = dumper.child_prefix(prefix, is_last);
+    self.declarations.iter().enumerate().for_each(|(i, decl)| {
+      decl.dump(
+        dumper,
+        &subprefix,
+        i + 1 == self.declarations.len(),
+        palette,
+      )
+    })
   }
 }

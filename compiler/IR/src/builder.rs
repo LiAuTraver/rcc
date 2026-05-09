@@ -296,7 +296,7 @@ impl<'c> Builder<'c> {
       sd::ExternalDeclarationRef::Function(function) =>
         match function.is_definition() {
           true => self.global_funcdef(function),
-          false => self.funcdecl(function.declaration),
+          false => self.funcdecl(function.declref),
         },
       sd::ExternalDeclarationRef::Variable(variable) =>
         match variable.declaration.is_definition() {
@@ -333,14 +333,14 @@ impl<'c> Builder<'c> {
   fn global_funcdef(&mut self, function: sd::FunctionRef<'c>) {
     debug_assert!(function.is_definition());
 
-    let latest_decl = function.declaration.latest_decl();
+    let latest_decl = function.declref.latest_decl();
     let parameters = function.parameters;
 
     let function_name = latest_decl.name();
     let ast_type = latest_decl.qualified_type().unqualified_type;
 
     self.current_function = if let Some(&value_id) =
-      self.globals.get(&function.declaration.canonical_decl())
+      self.globals.get(&function.declref.canonical_decl())
     {
       // should be function and declaration-only
       debug_assert!(
@@ -374,7 +374,7 @@ impl<'c> Builder<'c> {
 
       self
         .globals
-        .insert(function.declaration.canonical_decl(), function_id);
+        .insert(function.declref.canonical_decl(), function_id);
       function_id
     };
 
@@ -647,11 +647,18 @@ impl<'c> Builder<'c> {
     }
   }
 
+  fn local_decls(&mut self, declarations: &ss::DeclStmt<'c>) {
+    declarations
+      .declarations
+      .iter()
+      .for_each(|decl| self.local_decl(decl));
+  }
+
   fn local_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
     debug_assert!(!self.current_block.is_null());
     match declaration {
       sd::ExternalDeclarationRef::Function(function_decl) =>
-        self.funcdecl(function_decl.declaration),
+        self.funcdecl(function_decl.declref),
       sd::ExternalDeclarationRef::Variable(var_def) =>
         self.local_vardef(var_def),
     }
@@ -700,7 +707,7 @@ impl<'c> Builder<'c> {
       Empty(_) => (),
       Return(return_stmt) => self.return_stmt(return_stmt),
       Expression(expression) => self.exprstmt(expression),
-      Declaration(declaration) => self.local_decl(declaration),
+      Declarations(declaration) => self.local_decls(declaration),
       Compound(compound) => self.compound(compound),
       If(if_stmt) => self.if_stmt(if_stmt),
       While(while_stmt) => self.while_stmt(while_stmt),

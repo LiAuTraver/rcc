@@ -99,16 +99,16 @@ mod data {
     VoidVariableDecl(CustomMessage),
     #[error("Storage class specifier '{0}' is not allowed here")]
     ExtraneousStorageSpecs(Storage),
-    #[error("{0}")]
-    UnclosedParameterList(CustomMessage),
+    #[error("Expect ',', ')' or type specifier in parameter list")]
+    UnclosedParameterList,
     #[error("Expect '(' after {0}")]
     MissingOpenParen(Literal<'c>),
     #[error("Expect ')' after {0}")]
     MissingCloseParen(Literal<'c>),
     #[error("{0}")]
     ExprNotConstant(CustomMessage),
-    #[error("{0}")]
-    VarDeclUnclosed(CustomMessage),
+    #[error("Expect ';', ',', or '=' after variable name")]
+    VarDeclUnclosed,
     #[error("Block definition is not allowed here")]
     InvalidBlockItem,
     #[error("Expect function name")]
@@ -361,6 +361,8 @@ mod data {
     ExcessBraceAroundScalarInitializer,
     #[error("Typedef defines nothing")]
     EmptyTypedef,
+    #[error("Declaration defines nothing")]
+    EmptyDecl,
     #[error("Empty statement")]
     EmptyStatement,
     #[error("non void function does not return a value")]

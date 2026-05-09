@@ -140,7 +140,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
       ComplexFloat => (target_info.float.size.get() * 2).into(),
       ComplexDouble => (target_info.double.size.get() * 2).into(),
       ComplexLongDouble => (target_info.long_double.size.get() * 2).into(),
-      __IRBit => panic!("invalid call"),
+      __IRBit | __AutoType => panic!("invalid call"),
     }
   }
 
@@ -196,6 +196,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
       ComplexDouble => target_info.double.alignment, // FIXME: may be different
       ComplexLongDouble => target_info.long_double.alignment, // FIXME: may be different
       __IRBit => Alignment::O0,
+      __AutoType => panic!("shall be resolved at sema"),
     }
   }
 
@@ -210,6 +211,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
       | ComplexFloat | ComplexDouble | ComplexLongDouble => Some(Signed),
       __IRBit =>
         panic!("ir bit i1 is unsigned, but you probably should not call this"),
+      __AutoType => panic!("shall be resolved at sema"),
     }
   }
 }

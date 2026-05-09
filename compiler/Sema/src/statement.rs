@@ -2,18 +2,20 @@ use ::rcc_ast::{Context, blueprints::Placeholder};
 use ::rcc_shared::{ArenaVec, CollectIn, SourceSpan};
 use ::rcc_utils::{StrRef, interconvert};
 
-use super::{
-  declaration::ExternalDeclarationRef as Declaration, expression::ExprRef,
+use crate::{
+  declaration::ExternalDeclarationRef,
+  expression::{Constant, ExprRef},
 };
-use crate::expression::Constant;
 
 pub type StmtRef<'c> = &'c Statement<'c>;
 
+/// TODO: remove this?
 pub trait IntoStmtRef<'c> {
   fn into_stmt_ref(self, context: &'c Context<'c>) -> StmtRef<'c>;
 }
 
 impl<'c> IntoStmtRef<'c> for StmtRef<'c> {
+  #[inline]
   fn into_stmt_ref(self, _: &'c Context<'c>) -> StmtRef<'c> {
     self
   }
@@ -26,7 +28,7 @@ pub enum Statement<'c> {
   Empty(Empty),
   Return(Return<'c>),
   Expression(ExprRef<'c>),
-  Declaration(Declaration<'c>),
+  Declarations(DeclStmt<'c>),
   Compound(Compound<'c>),
   If(If<'c>),
   While(While<'c>),
@@ -39,7 +41,7 @@ pub enum Statement<'c> {
   Continue(Continue),
 }
 
-interconvert!(Declaration, Statement, 'c);
+interconvert!(DeclStmt, Statement, 'c, Declarations);
 interconvert!(ExprRef, Statement, 'c, Expression);
 interconvert!(Return, Statement, 'c);
 interconvert!(Compound, Statement, 'c);
@@ -52,6 +54,11 @@ interconvert!(Goto, Statement, 'c);
 interconvert!(Label, Statement, 'c);
 interconvert!(Break, Statement<'c>);
 interconvert!(Continue, Statement<'c>);
+#[derive(Debug)]
+pub struct DeclStmt<'c> {
+  pub declarations: &'c [ExternalDeclarationRef<'c>],
+  pub span: SourceSpan,
+}
 
 #[derive(Debug)]
 pub struct Return<'c> {
@@ -141,6 +148,21 @@ pub struct Continue {
 }
 
 ::rcc_utils::ensure_is_pod!(Statement<'_>);
+impl<'c> DeclStmt<'c> {
+  pub fn new(
+    context: &'c Context<'c>,
+    declarations: impl IntoIterator<Item = ExternalDeclarationRef<'c>>,
+    span: SourceSpan,
+  ) -> Self {
+    Self {
+      declarations: declarations
+        .into_iter()
+        .collect_in::<ArenaVec<_>>(context.arena())
+        .into_bump_slice(),
+      span,
+    }
+  }
+}
 
 impl<'c> Goto<'c> {
   pub fn new(label: StrRef<'c>, span: SourceSpan) -> Self {
@@ -488,12 +510,21 @@ mod fmt {
     }
   }
 
+  impl<'c> Display for DeclStmt<'c> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      self
+        .declarations
+        .iter()
+        .try_for_each(|decl| write!(f, "{}\n", decl))
+    }
+  }
+
   impl<'c> Display for Statement<'c> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       ::rcc_utils::static_dispatch!(
         self,
         |variant| variant.fmt(f) =>
-        Empty Return Expression Declaration Compound If While DoWhile For Switch Goto Label Break Continue
+        Empty Return Expression Declarations Compound If While DoWhile For Switch Goto Label Break Continue
       )
     }
   }

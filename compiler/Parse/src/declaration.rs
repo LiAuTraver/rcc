@@ -14,13 +14,33 @@ pub struct Program<'c> {
 ///       - static_assert-declaration (don't care)
 ///       - attribute-declaration (don't care)
 #[derive(Debug)]
-pub enum Declaration<'c> {
+pub struct Declaration<'c> {
+  pub declspecs: DeclSpecs<'c>,
+  /// if any of [`InitDeclarator`] contains a function body, it should be rejected.
+  pub init_declarators: Vec<InitDeclarator<'c>>,
+  pub span: SourceSpan,
+}
+
+impl<'c> Declaration<'c> {
+  pub fn new(
+    declspecs: DeclSpecs<'c>,
+    init_declarators: Vec<InitDeclarator<'c>>,
+    span: SourceSpan,
+  ) -> Self {
+    Self {
+      declspecs,
+      init_declarators,
+      span,
+    }
+  }
+}
+#[derive(Debug)]
+pub enum InitDeclarator<'c> {
   Function(Function<'c>),
   Variable(VarDef<'c>),
 }
-
-interconvert!(Function, Declaration, 'c);
-interconvert!(VarDef, Declaration, 'c, Variable);
+interconvert!(Function, InitDeclarator, 'c);
+interconvert!(VarDef, InitDeclarator, 'c, Variable);
 
 /// abstract declarator: no variable name/identifier
 ///
@@ -156,14 +176,12 @@ pub struct DeclSpecs<'c> {
 }
 #[derive(Debug)]
 pub struct Function<'c> {
-  pub declspecs: DeclSpecs<'c>,
   pub declarator: Declarator<'c>,
   pub body: Option<Compound<'c>>,
   pub span: SourceSpan,
 }
 #[derive(Debug)]
 pub struct VarDef<'c> {
-  pub declspecs: DeclSpecs<'c>,
   pub declarator: Declarator<'c>,
   pub initializer: Option<Initializer<'c>>,
   pub span: SourceSpan,
@@ -336,13 +354,11 @@ impl<'c> ArrayModifier<'c> {
 }
 impl<'c> Function<'c> {
   pub fn new(
-    declspecs: DeclSpecs<'c>,
     declarator: Declarator<'c>,
     body: Option<Compound<'c>>,
     span: SourceSpan,
   ) -> Self {
     Self {
-      declspecs,
       declarator,
       body,
       span,
@@ -416,32 +432,15 @@ impl<'c> Declarator<'c> {
 }
 impl<'c> VarDef<'c> {
   pub fn new(
-    declspecs: DeclSpecs<'c>,
     declarator: Declarator<'c>,
     initializer: Option<Initializer<'c>>,
     span: SourceSpan,
   ) -> Self {
     Self {
-      declspecs,
       declarator,
       initializer,
       span,
     }
-  }
-
-  pub fn is_typedef(&self) -> bool {
-    let maybe = matches!(self.declspecs.storage_class, Some(Storage::Typedef));
-    if maybe {
-      debug_assert!(
-        self.initializer.is_none(),
-        "typedef variable cannot have initializer"
-      );
-    }
-    maybe
-  }
-
-  pub fn is_vardef(&self) -> bool {
-    !self.is_typedef()
   }
 }
 mod cvt {
@@ -485,15 +484,32 @@ mod fmt {
 
   use super::{
     ArrayModifier, DeclSpecs, Declaration, Declarator, Designated, Designator,
-    EnumSpecifier, Function, FunctionSignature, Initializer, InitializerList,
-    InitializerListEntry, Modifier, Program, Struct, TypeSpecifier, VarDef,
+    EnumSpecifier, Function, FunctionSignature, InitDeclarator, Initializer,
+    InitializerList, InitializerListEntry, Modifier, Program, Struct,
+    TypeSpecifier, VarDef,
   };
 
   impl<'c> Display for Declaration<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+      write!(
+        f,
+        "{} {}",
+        self.declspecs,
+        self
+          .init_declarators
+          .iter()
+          .map(|d| d.to_string())
+          .collect::<Vec<_>>()
+          .join(", ")
+      )
+    }
+  }
+
+  impl<'c> Display for InitDeclarator<'c> {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       match self {
-        Declaration::Function(func) => <Function as Display>::fmt(func, f),
-        Declaration::Variable(var) => <VarDef as Display>::fmt(var, f),
+        Self::Function(func) => <Function as Display>::fmt(func, f),
+        Self::Variable(var) => <VarDef as Display>::fmt(var, f),
       }
     }
   }
@@ -510,11 +526,7 @@ mod fmt {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
       write!(
         f,
-        "<{} {}: {} -> {}> {}",
-        match &self.body {
-          Some(_) => "function",
-          None => "functiondecl",
-        },
+        "{}: {} {}",
         match &self.declarator.name {
           Some(name) => name,
           None => "<anonymous>",
@@ -526,15 +538,8 @@ mod fmt {
           .map(|m| m.to_string())
           .collect::<Vec<_>>()
           .join(", "),
-        self
-          .declspecs
-          .type_specifiers
-          .iter()
-          .map(|s| s.to_string())
-          .collect::<Vec<_>>()
-          .join(" "),
         match &self.body {
-          Some(block) => format!("{}", block),
+          Some(block) => block.to_string(),
           None => ";".to_string(),
         }
       )
@@ -627,7 +632,7 @@ mod fmt {
   }
   impl<'c> Display for VarDef<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      write!(f, "{} {}", self.declspecs, self.declarator)?;
+      write!(f, "{}", self.declarator)?;
       match self.initializer {
         Some(ref initializer) => {
           write!(f, " = ")?;
