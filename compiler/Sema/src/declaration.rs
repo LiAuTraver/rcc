@@ -121,7 +121,7 @@ impl Designator<'_> {
 
 impl<'c> TranslationUnit<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declarations: impl IntoIterator<Item = ExternalDeclarationRef<'c>>,
   ) -> Self {
     Self {
@@ -135,7 +135,7 @@ impl<'c> TranslationUnit<'c> {
 
 impl<'c> Function<'c> {
   pub fn alloc(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     function: Function<'c>,
   ) -> FunctionRef<'c> {
     context.arena().alloc(function)
@@ -143,7 +143,7 @@ impl<'c> Function<'c> {
 
   #[inline]
   pub fn new_decl(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declaration: DeclRef<'c>,
     parameters: impl IntoIterator<Item = Parameter<'c>>,
     specifier: FunctionSpecifier,
@@ -153,7 +153,7 @@ impl<'c> Function<'c> {
   }
 
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declref: DeclRef<'c>,
     parameters: impl IntoIterator<Item = Parameter<'c>>,
     specifier: FunctionSpecifier,
@@ -184,7 +184,7 @@ impl<'c> Function<'c> {
 impl<'c> VarDef<'c> {
   #[inline]
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declaration: DeclRef<'c>,
     initializer: Option<Initializer<'c>>,
     span: SourceSpan,
@@ -198,7 +198,7 @@ impl<'c> VarDef<'c> {
 
   #[inline]
   pub fn decl(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declaration: DeclRef<'c>,
     span: SourceSpan,
   ) -> VarDefRef<'c> {
@@ -207,7 +207,7 @@ impl<'c> VarDef<'c> {
 
   #[inline]
   pub fn def(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declaration: DeclRef<'c>,
     initializer: Initializer<'c>,
     span: SourceSpan,

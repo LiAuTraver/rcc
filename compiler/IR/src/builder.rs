@@ -162,20 +162,16 @@ impl<'c> Builder<'c> {
     match ir_type {
       Void() | Label() | Struct(_) | Array(_) | Function(_) => unreachable!(),
       Pointer() => self.emit(
-        ICmp::new(ICmpPredicate::Ne, value_id, self.ir().nullptr()),
+        ICmp::new(ICmpPredicate::Ne, value_id, self.nullptr()),
         self.ast().i1_bool_type(),
       ),
       Floating(format) => self.emit(
-        FCmp::new(
-          FCmpPredicate::Une,
-          value_id,
-          self.ir().floating_zero(*format),
-        ),
+        FCmp::new(FCmpPredicate::Une, value_id, self.floating_zero(*format)),
         self.ast().i1_bool_type(),
       ),
       Integer(SizeBit::U1) => value_id,
       Integer(width) => self.emit(
-        ICmp::new(ICmpPredicate::Ne, value_id, self.ir().integer_zero(*width)),
+        ICmp::new(ICmpPredicate::Ne, value_id, self.integer_zero(*width)),
         self.ast().i1_bool_type(),
       ),
     }
@@ -223,9 +219,9 @@ impl<'c> Builder<'c> {
 
   #[must_use]
   fn new_empty_block(&mut self) -> ValueID {
-    self.ir().insert(Value::new(
+    self.insert(Value::new(
       self.ast().void_type(),
-      self.ir().label_type(),
+      self.label_type(),
       BasicBlock::default(),
       self.current_function,
     ))
@@ -246,8 +242,8 @@ impl<'c> Builder<'c> {
       branch.set_else_branch(else_block_id);
       branch.set_then_branch(then_block_id);
     });
-    self.ir().add_user_for(branch_id, then_block_id);
-    self.ir().add_user_for(branch_id, else_block_id);
+    self.add_user_for(branch_id, then_block_id);
+    self.add_user_for(branch_id, else_block_id);
     branch_id
   }
 
@@ -261,7 +257,7 @@ impl<'c> Builder<'c> {
         .as_jump_mut()
         .map(|j| j.set_target(to_block_id))
     });
-    self.ir().add_user_for(jump_id, to_block_id);
+    self.add_user_for(jump_id, to_block_id);
     jump_id
   }
 }
@@ -465,7 +461,7 @@ impl<'c> Builder<'c> {
     };
 
     let this_is_the_only_block = || {
-      !self.ir().get_use_list(self.current_block).is_empty()
+      !self.get_use_list(self.current_block).is_empty()
         || self.visit(self.current_function, |value| {
           value
             .data
@@ -506,8 +502,7 @@ impl<'c> Builder<'c> {
       // if the current blobk is not empty but it does not have a terminator, insert an unreachable and take it.
       (true, false) => make_unreachable_block(),
       // if current block is not empty and is used by other blocks, it probably means the block just missing a terminator,
-      (false, false)
-        if !self.ir().get_use_list(self.current_block).is_empty() =>
+      (false, false) if !self.get_use_list(self.current_block).is_empty() =>
         make_unreachable_block(),
       // if the current block is empty, and is not used by any other blocks,
       // it prob means the previous one is return stmt
@@ -942,7 +937,7 @@ impl<'c> Builder<'c> {
     let boolean_condition = condition
       .map(|cond| self.expression(cond))
       .map(|cond| self.contextual_convert_to_i1(cond))
-      .unwrap_or_else(|| self.ir().i1_true()); // if condition is omitted, it is treated as true.
+      .unwrap_or_else(|| self.i1_true()); // if condition is omitted, it is treated as true.
     let _cond_block_terminator = self.emit(
       inst::Branch::new(boolean_condition, body_block_id, immediate_block_id),
       self.ast().void_type(),
@@ -1041,7 +1036,7 @@ impl<'c> Builder<'c> {
   fn expression(&mut self, expression: se::ExprRef<'c>) -> ValueID {
     // FIXME: dont fold here, fold in the passes.
     // // the fold here contains partial fold. e.g. `3 + 6 + func(4 + 5)` would be folded to `9 + func(9)`.
-    // let expression = expression.fold(&self.session().as_ast_session()).take();
+    // let expression = expression.fold(&self.as_ast_session()).take();
     // let unqualified_type = expression.unqualified_type();
     // let span = expression.span();
     let unqualified_type = expression.unqualified_type();
@@ -1396,7 +1391,7 @@ impl<'c> Builder<'c> {
     let compared = self.do_floating_relational(
       inst::FCmpPredicate::Une,
       operand,
-      self.ir().floating_zero(format),
+      self.floating_zero(format),
       self.ast().i1_bool_type(),
       SourceSpan::default(), // doesn't matter.
     );
@@ -1415,7 +1410,7 @@ impl<'c> Builder<'c> {
     let compared = self.do_integral_relational(
       inst::ICmpPredicate::Ne,
       operand,
-      self.ir().integer_zero(width),
+      self.integer_zero(width),
       self.ast().i1_bool_type(),
       SourceSpan::default(),
     );
@@ -1432,7 +1427,7 @@ impl<'c> Builder<'c> {
     let compared = self.do_pointer_relational(
       inst::ICmpPredicate::Ne,
       operand,
-      self.ir().nullptr(),
+      self.nullptr(),
       self.ast().i1_bool_type(),
       SourceSpan::default(), // ditto.
     );
@@ -1698,12 +1693,7 @@ impl<'c> Builder<'c> {
     let _last_block_of_rhs_block = self.push_block(immediate_block_id);
 
     let i1_res = self.emit(
-      inst::Phi::new(vec![
-        self.ir().i1_false(),
-        now_block_id,
-        rhs,
-        rhs_block_id,
-      ]),
+      inst::Phi::new(vec![self.i1_false(), now_block_id, rhs, rhs_block_id]),
       self.ast().i1_bool_type(),
     );
 
@@ -1745,12 +1735,7 @@ impl<'c> Builder<'c> {
 
     let _last_block_of_rhs_block = self.push_block(immediate_block_id);
     let i1_res = self.emit(
-      inst::Phi::new(vec![
-        self.ir().i1_true(),
-        now_block_id,
-        rhs,
-        rhs_block_id,
-      ]),
+      inst::Phi::new(vec![self.i1_true(), now_block_id, rhs, rhs_block_id]),
       self.ast().i1_bool_type(),
     );
 
@@ -2159,21 +2144,21 @@ impl<'c> Builder<'c> {
       Pointer() => self.do_pointer_relational(
         inst::ICmpPredicate::Ne,
         operand,
-        self.ir().nullptr(),
+        self.nullptr(),
         ast_type,
         span,
       ),
       Integer(width) => self.do_integral_relational(
         inst::ICmpPredicate::Ne,
         operand,
-        self.ir().integer_zero(*width),
+        self.integer_zero(*width),
         ast_type,
         span,
       ),
       Floating(format) => self.do_floating_relational(
         inst::FCmpPredicate::Une,
         operand,
-        self.ir().floating_zero(*format),
+        self.floating_zero(*format),
         ast_type,
         span,
       ),
@@ -2226,7 +2211,7 @@ impl<'c> Builder<'c> {
           Some(integral) =>
             self.emit(ConstantData::Integral(-integral), ast_type),
           None => {
-            let zero = self.ir().integer_zero(width);
+            let zero = self.integer_zero(width);
             self.emit(
               inst::Binary::new(inst::BinaryOp::Sub, zero, casted),
               ast_type,
@@ -2260,8 +2245,8 @@ impl<'c> Builder<'c> {
     let calculated = match ast_type {
       Primitive(p) => {
         let one = match p {
-          i if i.is_integer() => self.ir().integer_one(i.size_bits(self.ast())),
-          &f if f.is_floating_point() => self.ir().floating_one(f.into()),
+          i if i.is_integer() => self.integer_one(i.size_bits(self.ast())),
+          &f if f.is_floating_point() => self.floating_one(f.into()),
           _ => unreachable!("not a proper arithematic type"),
         };
         self.do_arithmetic_operands(

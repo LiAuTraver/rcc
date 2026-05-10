@@ -115,11 +115,6 @@ impl<'c> Sema<'c> {
     }
   }
 
-  #[inline(always)]
-  pub fn context(&self) -> &'c Context<'c> {
-    self.ast()
-  }
-
   pub fn add_diag(&self, diag: Diag<'c>) {
     self.diag().add_diag(diag);
   }
@@ -138,7 +133,7 @@ impl<'c> Sema<'c> {
   ) -> sd::TranslationUnit<'c> {
     self.environment.enter();
     let translation_unit =
-      sd::TranslationUnit::new(self.context(), self.externaldecl(program));
+      sd::TranslationUnit::new(self.ast(), self.externaldecl(program));
 
     self.environment.exit();
     debug_assert!(self.environment.scopes.is_empty());
@@ -187,7 +182,7 @@ impl<'c> Sema<'c> {
   ) -> QualifiedType<'c> {
     QualifiedType::new(
       qualifiers,
-      Type::Pointer(Pointer::new(qualified_type)).lookup(self.context()),
+      Type::Pointer(Pointer::new(qualified_type)).lookup(self),
     )
   }
 
@@ -268,14 +263,14 @@ impl<'c> Sema<'c> {
         }
       },
     };
-    if !qualified_type.is_complete(self.context()) {
+    if !qualified_type.is_complete(self) {
       self.add_error(
         ArrayHasIncompleteType(qualified_type.to_string()),
         array_modifier.span,
       );
     }
     Type::Array(Array::new(qualified_type, size))
-      .lookup(self.context())
+      .lookup(self)
       .into()
   }
 
@@ -308,7 +303,7 @@ impl<'c> Sema<'c> {
       .iter()
       .map(|param| {
         let qualified_type = param.declaration.qualified_type();
-        if !qualified_type.is_complete(self.context()) {
+        if !qualified_type.is_complete(self) {
           self.add_error(
             VariableIncompleteType(
               param.declaration.name(),
@@ -322,7 +317,6 @@ impl<'c> Sema<'c> {
       .collect_in::<ArenaVec<_>>(self.arena());
     Ok((
       self
-        .context()
         .make_function_proto(
           return_type,
           parameter_types.into_bump_slice(),
@@ -357,7 +351,7 @@ impl<'c> Sema<'c> {
         } = declarator;
         self
           .apply_modifiers_for_varty(base_type, modifiers)
-          .parameter_adjustment(self.context())
+          .parameter_adjustment(self)
       })
       .collect_in(&**(self.arena()))
   }
@@ -385,9 +379,9 @@ impl<'c> Sema<'c> {
         } = declarator;
         let qualified_type = self
           .apply_modifiers_for_varty(base_type, modifiers)
-          .parameter_adjustment(self.context());
+          .parameter_adjustment(self);
         let declaration = DeclRef::decl(
-          self.context(),
+          self,
           qualified_type,
           Storage::Automatic,
           name.unwrap_or("<unnamed>"),
@@ -579,7 +573,7 @@ impl<'c> Sema<'c> {
 
     if name == "main" {
       Context::main_proto_validate(
-        self.context(),
+        self,
         qualified_type.as_functionproto_unchecked(),
         function_specifier,
       )
@@ -625,7 +619,7 @@ impl<'c> Sema<'c> {
         Compatibility::composite_unchecked(
           &previous_decl.qualified_type(),
           &qualified_type,
-          self.context(),
+          self,
         ),
         Storage::try_merge(
           previous_decl.storage_class(),
@@ -641,14 +635,14 @@ impl<'c> Sema<'c> {
     };
 
     let declaration = DeclRef::new(
-      self.context(),
+      self,
       declaration_type,
       storage,
       name,
       declkind,
       previous_decl,
     );
-    if !declaration.qualified_type().is_complete(self.context()) {
+    if !declaration.qualified_type().is_complete(self) {
       self.add_error(
         VariableIncompleteType(name, declaration.qualified_type().to_string()),
         span,
@@ -658,7 +652,7 @@ impl<'c> Sema<'c> {
     }
 
     let function = sd::Function::new_decl(
-      self.context(),
+      self,
       declaration,
       parameters,
       function_specifier,
@@ -680,7 +674,7 @@ impl<'c> Sema<'c> {
         ),
         None => self.function_with_body(body, function),
       },
-      None => Ok(sd::Function::alloc(self.context(), function)),
+      None => Ok(sd::Function::alloc(self, function)),
     }
   }
 
@@ -746,8 +740,7 @@ impl<'c> Sema<'c> {
       .copied()
       .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice();
-    let analyzed_body =
-      ss::Compound::new(self.context(), statements, body.span);
+    let analyzed_body = ss::Compound::new(self, statements, body.span);
 
     {
       let function = self
@@ -763,7 +756,7 @@ impl<'c> Sema<'c> {
     self.current_gotos.clear();
     let function =
       std::mem::take(&mut self.current_function).shall_ok("never fails");
-    Ok(sd::Function::alloc(self.context(), function))
+    Ok(sd::Function::alloc(self, function))
   }
 
   pub fn vardef(
@@ -866,7 +859,7 @@ impl<'c> Sema<'c> {
             Compatibility::composite_unchecked(
               &prev_qtype,
               &qualified_type,
-              self.context(),
+              self,
             ),
             storage.map(|s| {
               Storage::try_merge(prev_decl_ref.storage_class(), s)
@@ -881,8 +874,7 @@ impl<'c> Sema<'c> {
         (qualified_type, storage)
       };
     // arr can have 1st extend incomplete, handled downstream at init
-    if !qualified_type.is_complete(self.context()) && !qualified_type.is_array()
-    {
+    if !qualified_type.is_complete(self) && !qualified_type.is_array() {
       Err(
         DeclarationTyIncomplete(name.into(), qualified_type.to_string())
           + Severity::Error
@@ -911,10 +903,7 @@ impl<'c> Sema<'c> {
       ),
     };
 
-    if !vardef
-      .declaration
-      .qualified_type()
-      .is_complete(self.context())
+    if !vardef.declaration.qualified_type().is_complete(self)
       && !vardef.declaration.storage_class().is_extern()
     {
       self.add_error(
@@ -954,9 +943,9 @@ impl<'c> Sema<'c> {
 
     let ten = || {
       sd::VarDef::decl(
-        self.context(),
+        self,
         DeclRef::tentative(
-          self.context(),
+          self,
           qualified_type,
           merged_storage,
           name,
@@ -967,9 +956,9 @@ impl<'c> Sema<'c> {
     };
     let decl = || {
       sd::VarDef::decl(
-        self.context(),
+        self,
         DeclRef::decl(
-          self.context(),
+          self,
           qualified_type,
           merged_storage,
           name,
@@ -980,14 +969,8 @@ impl<'c> Sema<'c> {
     };
     let def = |init| {
       sd::VarDef::def(
-        self.context(),
-        DeclRef::def(
-          self.context(),
-          qualified_type,
-          merged_storage,
-          name,
-          previous_decl,
-        ),
+        self,
+        DeclRef::def(self, qualified_type, merged_storage, name, previous_decl),
         init,
         span,
       )
@@ -1059,7 +1042,7 @@ impl<'c> Sema<'c> {
     }
     if (qualified_type
       .as_array()
-      .is_some_and(|array| !array.is_complete(self.context())))
+      .is_some_and(|array| !array.is_complete(self)))
       && initializer.is_none()
     {
       self.add_error(
@@ -1068,14 +1051,8 @@ impl<'c> Sema<'c> {
       );
     }
     sd::VarDef::new(
-      self.context(),
-      DeclRef::def(
-        self.context(),
-        qualified_type,
-        merged_storage,
-        name,
-        previous_decl,
-      ),
+      self,
+      DeclRef::def(self, qualified_type, merged_storage, name, previous_decl),
       initializer,
       span,
     )
@@ -1115,14 +1092,11 @@ impl<'c> Sema<'c> {
       pe::SizeOfKind::Expression(expression) => {
         let analyzed_expr = self.expression(*expression).handle_with(
           self,
-          se::Expression::new_error_node(
-            self.context(),
-            self.uintptr_type().into(),
-          ),
+          se::Expression::new_error_node(self, self.uintptr_type().into()),
         );
-        let size = analyzed_expr.unqualified_type().size(self.context());
+        let size = analyzed_expr.unqualified_type().size(self);
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::RawExpr::Constant(se::Constant::Integral(Integral::from(
             size.to_builtin::<usize>(),
           ))),
@@ -1143,9 +1117,9 @@ impl<'c> Sema<'c> {
           self.apply_modifiers_for_varty(base_type, declarator.modifiers)
         };
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::RawExpr::Constant(se::Constant::Integral(Integral::from(
-            qualified_type.size(self.context()).to_builtin::<usize>(),
+            qualified_type.size(self).to_builtin::<usize>(),
           ))),
           self.uintptr_type().into(),
           sizeof.span,
@@ -1160,8 +1134,7 @@ impl<'c> Sema<'c> {
       callee,
       span,
     } = call;
-    let analyzed_callee =
-      self.expression(*callee)?.lvalue_conversion(self.context());
+    let analyzed_callee = self.expression(*callee)?.lvalue_conversion(self);
 
     let function_proto = match analyzed_callee.unqualified_type() {
       Type::FunctionProto(proto) => proto,
@@ -1194,18 +1167,14 @@ impl<'c> Sema<'c> {
       .zip(function_proto.parameter_types)
       .map(|(actual, formal)| {
         actual
-          .lvalue_conversion(self.context())
-          .decay(self.context())
-          .assignment_conversion(self.context(), formal)
+          .lvalue_conversion(self)
+          .decay(self)
+          .assignment_conversion(self, formal)
           .handle_with(self, actual)
       });
     Ok(se::Expression::new_rvalue(
-      self.context(),
-      se::Call::new(
-        self.context(),
-        analyzed_callee,
-        converted_analyzed_arguments,
-      ),
+      self,
+      se::Call::new(self, analyzed_callee, converted_analyzed_arguments),
       expr_type,
       span,
     ))
@@ -1216,7 +1185,7 @@ impl<'c> Sema<'c> {
     let analyzed_expr = self.expression(*expr)?;
     let expr_type = *analyzed_expr.qualified_type();
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Paren::new(analyzed_expr),
       expr_type,
       span,
@@ -1240,7 +1209,7 @@ impl<'c> Sema<'c> {
       );
     } else {
       Ok(se::Expression::new_lvalue(
-        self.context(),
+        self,
         se::Variable::new(declaration),
         declaration.qualified_type(),
         variable.span,
@@ -1256,7 +1225,7 @@ impl<'c> Sema<'c> {
       inner: constant,
       span,
     } = constant;
-    let unqualified_type = constant.unqualified_type(self.context());
+    let unqualified_type = constant.unqualified_type(self.ast());
     let value_category = if constant.is_char_array() {
       // 6.5.2p5: A string literal is [...] an lvalue [...].
       se::ValueCategory::LValue
@@ -1264,7 +1233,7 @@ impl<'c> Sema<'c> {
       se::ValueCategory::RValue
     };
     Ok(se::Expression::new(
-      self.context(),
+      self,
       constant,
       unqualified_type.into(),
       value_category,
@@ -1345,8 +1314,8 @@ impl<'c> Sema<'c> {
     } = ternary;
     let condition = self
       .expression(*pe_condition)?
-      .lvalue_conversion(self.context())
-      .decay(self.context())
+      .lvalue_conversion(self)
+      .decay(self)
       .is_contextually_convertible_to_bool()?;
 
     if let Some(then) = pe_then_expr {
@@ -1357,11 +1326,11 @@ impl<'c> Sema<'c> {
         (left_type, right_type)
           if left_type.is_void() || right_type.is_void() =>
           Ok(se::Expression::new_rvalue(
-            self.context(),
+            self,
             se::Ternary::new(
               condition,
-              se::Expression::void_conversion(then_expr, self.context()),
-              se::Expression::void_conversion(else_expr, self.context()),
+              se::Expression::void_conversion(then_expr, self),
+              se::Expression::void_conversion(else_expr, self),
             ),
             self.void_type().into(),
             span,
@@ -1372,12 +1341,10 @@ impl<'c> Sema<'c> {
         {
           let (then_converted, else_converted, result_type) =
             se::Expression::usual_arithmetic_conversion(
-              then_expr,
-              else_expr,
-              self.context(),
+              then_expr, else_expr, self,
             )?;
           Ok(se::Expression::new_rvalue(
-            self.context(),
+            self,
             se::Ternary::new(condition, then_converted, else_converted),
             result_type,
             span,
@@ -1388,14 +1355,14 @@ impl<'c> Sema<'c> {
           match Compatibility::composite(
             &left_ptr.pointee,
             &right_ptr.pointee,
-            self.context(),
+            self,
           ) {
             Some(qualified_type) => {
               let result_type = Type::Pointer(Pointer::new(qualified_type))
-                .lookup(self.context())
+                .lookup(self)
                 .into();
               Ok(se::Expression::new_rvalue(
-                self.context(),
+                self,
                 se::Ternary::new(condition, then_expr, else_expr),
                 result_type,
                 span,
@@ -1429,22 +1396,16 @@ impl<'c> Sema<'c> {
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     // a[i] = *(a + i)
     let pe::ArraySubscript { array, index, span } = array_subscript;
-    let lhs = self
-      .expression(*array)?
-      .lvalue_conversion(self.context())
-      .decay(self.context());
-    let rhs = self
-      .expression(*index)?
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let lhs = self.expression(*array)?.lvalue_conversion(self).decay(self);
+    let rhs = self.expression(*index)?.lvalue_conversion(self).decay(self);
 
     let doit = |array_side: se::ExprRef<'c>, index_side: se::ExprRef<'c>| {
-      let analyzed_index = index_side; // .ptrdiff_conversion_unchecked(self.context());
+      let analyzed_index = index_side; // .ptrdiff_conversion_unchecked(self);
       let elem_type =
         array_side.unqualified_type().as_pointer_unchecked().pointee;
       // store the pointer(decayed array) and index here, not the array here... maybe a wrong idesa, idk for now.
       se::Expression::new_lvalue(
-        self.context(),
+        self,
         se::ArraySubscript::new(array_side, analyzed_index),
         elem_type,
         span,
@@ -1479,9 +1440,7 @@ impl<'c> Sema<'c> {
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     assert!(matches!(operator, Operator::Plus | Operator::Minus));
-    let operand = operand
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let operand = operand.lvalue_conversion(self).decay(self);
 
     if !operand.unqualified_type().is_arithmetic() {
       Err(
@@ -1491,10 +1450,10 @@ impl<'c> Sema<'c> {
       )
     } else {
       let converted_operand =
-        operand.usual_arithmetic_conversion_unary(self.context())?;
+        operand.usual_arithmetic_conversion_unary(self)?;
       let expr_type = *converted_operand.qualified_type();
       Ok(se::Expression::new_rvalue(
-        self.context(),
+        self,
         se::Unary::prefix(operator, converted_operand),
         expr_type,
         span,
@@ -1522,7 +1481,7 @@ impl<'c> Sema<'c> {
     kind: se::UnaryKind,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    if !operand.is_modifiable_lvalue(self.context()) {
+    if !operand.is_modifiable_lvalue(self) {
       Err(ExprNotAssignable(operand.to_string()) + Severity::Error + span)
     } else if !operand.qualified_type().is_scalar() {
       Err(
@@ -1533,7 +1492,7 @@ impl<'c> Sema<'c> {
     } else {
       let operand_type = *operand.qualified_type();
       Ok(se::Expression::new_rvalue(
-        self.context(),
+        self,
         se::Unary::new(operator, operand, kind),
         operand_type,
         span,
@@ -1552,9 +1511,7 @@ impl<'c> Sema<'c> {
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     assert_eq!(operator, Operator::Tilde);
-    let operand = operand
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let operand = operand.lvalue_conversion(self).decay(self);
 
     if !operand.unqualified_type().is_integer() {
       Err(
@@ -1564,10 +1521,10 @@ impl<'c> Sema<'c> {
       )
     } else {
       let converted_operand =
-        operand.usual_arithmetic_conversion_unary(self.context())?;
+        operand.usual_arithmetic_conversion_unary(self)?;
       let expr_type = *converted_operand.qualified_type();
       Ok(se::Expression::new_rvalue(
-        self.context(),
+        self,
         se::Unary::prefix(operator, converted_operand),
         expr_type,
         span,
@@ -1587,11 +1544,11 @@ impl<'c> Sema<'c> {
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     assert_eq!(operator, Operator::Not);
     let converted_operand = operand
-      .lvalue_conversion(self.context())
-      .decay(self.context())
+      .lvalue_conversion(self)
+      .decay(self)
       .is_contextually_convertible_to_bool()?;
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Unary::prefix(operator, converted_operand),
       self.converted_bool().into(),
       span,
@@ -1620,11 +1577,9 @@ impl<'c> Sema<'c> {
     } else {
       let pointee = *operand.qualified_type();
       Ok(se::Expression::new_rvalue(
-        self.context(),
+        self,
         se::Unary::prefix(operator, operand),
-        Type::Pointer(Pointer::new(pointee))
-          .lookup(self.context())
-          .into(),
+        Type::Pointer(Pointer::new(pointee)).lookup(self).into(),
         span,
       ))
     }
@@ -1642,9 +1597,7 @@ impl<'c> Sema<'c> {
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     assert_eq!(operator, Operator::Star);
 
-    let operand = operand
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let operand = operand.lvalue_conversion(self).decay(self);
 
     if !operand.unqualified_type().is_pointer() {
       Err(DerefNonPtr(operand.to_string()) + Severity::Error + span)?
@@ -1661,7 +1614,7 @@ impl<'c> Sema<'c> {
       // If an invalid value has been assigned to the pointer, the behavior is undefined.
       let expr_type = *pointee_type;
       Ok(se::Expression::new_lvalue(
-        self.context(),
+        self,
         se::Unary::prefix(operator, operand),
         expr_type,
         span,
@@ -1681,18 +1634,18 @@ impl<'c> Sema<'c> {
     let expr_type = *left.qualified_type();
 
     match operator.associated_operator() {
-      _ if !left.is_modifiable_lvalue(self.context()) => {
+      _ if !left.is_modifiable_lvalue(self) => {
         self.add_error(ExprNotAssignable(left.to_string()), span);
         Ok(left)
       },
       // plain operator `=`.
       None => {
         let assigned_expr = right
-          .lvalue_conversion(self.context())
-          .decay(self.context())
-          .assignment_conversion(self.context(), &expr_type)?;
+          .lvalue_conversion(self)
+          .decay(self)
+          .assignment_conversion(self, &expr_type)?;
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::Binary::new(operator, left, assigned_expr),
           expr_type,
           span,
@@ -1736,7 +1689,7 @@ impl<'c> Sema<'c> {
         }
 
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::CompoundAssign::new(
             operator,
             left,
@@ -1764,17 +1717,17 @@ impl<'c> Sema<'c> {
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
     let lhs = left
-      .lvalue_conversion(self.context())
-      .decay(self.context())
+      .lvalue_conversion(self)
+      .decay(self)
       .is_contextually_convertible_to_bool()?;
 
     let rhs = right
-      .lvalue_conversion(self.context())
-      .decay(self.context())
+      .lvalue_conversion(self)
+      .decay(self)
       .is_contextually_convertible_to_bool()?;
 
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Binary::new(operator, lhs, rhs),
       self.converted_bool().into(),
       span,
@@ -1791,21 +1744,15 @@ impl<'c> Sema<'c> {
     right: se::ExprRef<'c>,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    let left = left.lvalue_conversion(self.context()).decay(self.context());
-    let right = right
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let left = left.lvalue_conversion(self).decay(self);
+    let right = right.lvalue_conversion(self).decay(self);
     match (left.unqualified_type(), right.unqualified_type()) {
       (l, r) if l.is_arithmetic() && r.is_arithmetic() => {
         let (lhs, rhs, _common_type) =
-          se::Expression::usual_arithmetic_conversion(
-            left,
-            right,
-            self.context(),
-          )?;
+          se::Expression::usual_arithmetic_conversion(left, right, self)?;
 
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::Binary::new(operator, lhs, rhs),
           self.converted_bool().into(),
           span,
@@ -1816,7 +1763,7 @@ impl<'c> Sema<'c> {
         Type::Primitive(Primitive::Nullptr),
       ) if matches!(operator, Operator::EqualEqual | Operator::NotEqual) =>
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::Binary::from_operator_unchecked(operator, left, right),
           self.converted_bool().into(),
           span,
@@ -1849,13 +1796,13 @@ impl<'c> Sema<'c> {
     let ptr_with_nullptr = |ptr: se::ExprRef<'c>, nullptr: se::ExprRef<'c>| {
       let ptr_type = *ptr.qualified_type();
       let casted_nullptr = se::Expression::new_rvalue(
-        self.context(),
+        self,
         se::ImplicitCast::new(nullptr, NullptrToPointer),
         ptr_type,
         span,
       );
       Ok(se::Expression::new_rvalue(
-        self.context(),
+        self,
         se::Binary::from_operator_unchecked(operator, ptr, casted_nullptr),
         self.converted_bool().into(),
         span,
@@ -1869,7 +1816,7 @@ impl<'c> Sema<'c> {
         let right_pointee = &right_ptr.pointee;
         if Compatibility::compatible(left_pointee, right_pointee) {
           Ok(se::Expression::new_rvalue(
-            self.context(),
+            self,
             se::Binary::new(operator, left, right),
             self.converted_bool().into(),
             span,
@@ -1907,10 +1854,8 @@ impl<'c> Sema<'c> {
     right: se::ExprRef<'c>,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    let left = left.lvalue_conversion(self.context()).decay(self.context());
-    let right = right
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let left = left.lvalue_conversion(self).decay(self);
+    let right = right.lvalue_conversion(self).decay(self);
 
     match (left.unqualified_type(), right.unqualified_type()) {
       (l, r) if l.is_arithmetic() && r.is_arithmetic() =>
@@ -1945,10 +1890,10 @@ impl<'c> Sema<'c> {
     );
 
     let (lhs, rhs, result_type) =
-      se::Expression::usual_arithmetic_conversion(left, right, self.context())?;
+      se::Expression::usual_arithmetic_conversion(left, right, self)?;
 
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Binary::new(operator, lhs, rhs),
       result_type,
       span,
@@ -1995,7 +1940,7 @@ impl<'c> Sema<'c> {
         match Compatibility::compatible(&left_ptr.pointee, &right_ptr.pointee) {
           // -> ptrdiff
           true => Ok(se::Expression::new_rvalue(
-            self.context(),
+            self,
             se::Binary::new(operator, left, right),
             self.ptrdiff_type().into(), // no qual for pointer differences
             span,
@@ -2016,9 +1961,9 @@ impl<'c> Sema<'c> {
       (Type::Primitive(lhs), Type::Pointer(_))
         if lhs.is_integer() && operator == Operator::Plus =>
       {
-        let ptrty = right.unqualified_type().clone().lookup(self.context());
+        let ptrty = right.unqualified_type().clone().lookup(self);
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::Binary::new(operator, right, left),
           ptrty.into(),
           span,
@@ -2028,9 +1973,9 @@ impl<'c> Sema<'c> {
       (Type::Pointer(_), Type::Primitive(rhs))
         if rhs.is_integer() && operator == Operator::Plus =>
       {
-        let ptrty = left.unqualified_type().clone().lookup(self.context());
+        let ptrty = left.unqualified_type().clone().lookup(self);
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::Binary::new(operator, left, right),
           ptrty.into(),
           span,
@@ -2040,11 +1985,11 @@ impl<'c> Sema<'c> {
       (Type::Pointer(_), Type::Primitive(rhs))
         if rhs.is_integer() && operator == Operator::Minus =>
       {
-        let ptrty = left.unqualified_type().clone().lookup(self.context());
-        let right = right.ptrdiff_conversion_unchecked(self.context());
+        let ptrty = left.unqualified_type().clone().lookup(self);
+        let right = right.ptrdiff_conversion_unchecked(self);
 
         Ok(se::Expression::new_rvalue(
-          self.context(),
+          self,
           se::Binary::new(operator, left, right),
           ptrty.into(),
           span,
@@ -2071,10 +2016,8 @@ impl<'c> Sema<'c> {
     right: se::ExprRef<'c>,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    let lhs = left.lvalue_conversion(self.context()).decay(self.context());
-    let rhs = right
-      .lvalue_conversion(self.context())
-      .decay(self.context());
+    let lhs = left.lvalue_conversion(self).decay(self);
+    let rhs = right.lvalue_conversion(self).decay(self);
 
     if !lhs.unqualified_type().is_integer()
       || !rhs.unqualified_type().is_integer()
@@ -2086,10 +2029,10 @@ impl<'c> Sema<'c> {
     }
 
     let (left, right, result_type) =
-      se::Expression::usual_arithmetic_conversion(lhs, rhs, self.context())?;
+      se::Expression::usual_arithmetic_conversion(lhs, rhs, self)?;
 
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Binary::new(operator, left, right),
       result_type,
       span,
@@ -2106,14 +2049,8 @@ impl<'c> Sema<'c> {
     right: se::ExprRef<'c>,
     span: SourceSpan,
   ) -> Result<se::ExprRef<'c>, Diag<'c>> {
-    let left = left
-      .lvalue_conversion(self.context())
-      .decay(self.context())
-      .promote(self.context());
-    let right = right
-      .lvalue_conversion(self.context())
-      .decay(self.context())
-      .promote(self.context());
+    let left = left.lvalue_conversion(self).decay(self).promote(self);
+    let right = right.lvalue_conversion(self).decay(self).promote(self);
 
     if !left.unqualified_type().is_integer()
       || !right.unqualified_type().is_integer()
@@ -2129,7 +2066,7 @@ impl<'c> Sema<'c> {
 
     let expr_type = *left.qualified_type();
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Binary::new(operator, left, right),
       expr_type,
       span,
@@ -2149,7 +2086,7 @@ impl<'c> Sema<'c> {
     // the result is the right expression, and the left is void converted, that's it. done.
     let expr_type = *right.qualified_type();
     Ok(se::Expression::new_rvalue(
-      self.context(),
+      self,
       se::Binary::new(operator, left, right),
       expr_type,
       span,
@@ -2201,7 +2138,7 @@ impl<'c> Sema<'c> {
       ps::Statement::Continue(continue_stmt) =>
         self.continuestmt(continue_stmt).map(Into::into),
     }
-    .map(|statement| ss::Statement::alloc(self.context(), statement))
+    .map(|statement| ss::Statement::alloc(self, statement))
   }
 
   fn statement_or_default(
@@ -2241,7 +2178,7 @@ impl<'c> Sema<'c> {
 
     self.environment.exit();
 
-    Ok(ss::Compound::new(self.context(), statements, compound.span))
+    Ok(ss::Compound::new(self, statements, compound.span))
   }
 
   fn exprstmt(
@@ -2262,7 +2199,7 @@ impl<'c> Sema<'c> {
       span,
     } = declaration;
     Ok(ss::DeclStmt::new(
-      self.context(),
+      self.ast(),
       self.declarations(declspecs, init_declarators),
       span,
     ))
@@ -2304,9 +2241,9 @@ impl<'c> Sema<'c> {
 
       (Some(analyzed_expr), _) => {
         let a = analyzed_expr
-          .lvalue_conversion(self.context())
-          .decay(self.context())
-          .assignment_conversion(self.context(), &return_type)?;
+          .lvalue_conversion(self)
+          .decay(self)
+          .assignment_conversion(self, &return_type)?;
         Ok(ss::Return::new(Some(a), span))
       },
     }
@@ -2316,16 +2253,13 @@ impl<'c> Sema<'c> {
     self
       .expression(condition)
       .and_then(|e| {
-        e.lvalue_conversion(self.context())
-          .decay(self.context())
+        e.lvalue_conversion(self)
+          .decay(self)
           .is_contextually_convertible_to_bool()
       })
       .handle_with(
         self,
-        se::Expression::new_error_node(
-          self.context(),
-          self.converted_bool().into(),
-        ),
+        se::Expression::new_error_node(self, self.converted_bool().into()),
       )
   }
 
@@ -2341,7 +2275,7 @@ impl<'c> Sema<'c> {
     let analyzed_else_branch =
       else_branch.map(|else_branch| self.statement_or_default(*else_branch));
     Ok(ss::If::new(
-      self.context(),
+      self,
       analyzed_condition,
       analyzed_then_branch,
       analyzed_else_branch,
@@ -2368,7 +2302,7 @@ impl<'c> Sema<'c> {
     );
 
     Ok(ss::While::new(
-      self.context(),
+      self,
       analyzed_condition,
       analyzed_body,
       span,
@@ -2394,7 +2328,7 @@ impl<'c> Sema<'c> {
 
     let analyzed_condition = self.condition(condition);
     Ok(ss::DoWhile::new(
-      self.context(),
+      self,
       analyzed_body,
       analyzed_condition,
       span,
@@ -2417,16 +2351,13 @@ impl<'c> Sema<'c> {
     let analyzed_condition = condition.map(|cond| {
       self.expression(cond).handle_with(
         self,
-        se::Expression::new_error_node(
-          self.context(),
-          self.converted_bool().into(),
-        ),
+        se::Expression::new_error_node(self, self.converted_bool().into()),
       )
     });
     let analyzed_increment = increment.map(|inc| {
       self.expression(inc).handle_with(
         self,
-        se::Expression::new_error_node(self.context(), self.int_type().into()),
+        se::Expression::new_error_node(self, self.int_type().into()),
       )
     });
 
@@ -2439,7 +2370,7 @@ impl<'c> Sema<'c> {
     );
 
     Ok(ss::For::new(
-      self.context(),
+      self,
       analyzed_initializer,
       analyzed_condition,
       analyzed_increment,
@@ -2472,7 +2403,7 @@ impl<'c> Sema<'c> {
       },
       Err(e) => {
         self.add_diag(e);
-        se::Expression::new_error_node(self.context(), self.int_type().into())
+        se::Expression::new_error_node(self, self.int_type().into())
       },
     };
     let analyzed_cases = cases
@@ -2490,7 +2421,7 @@ impl<'c> Sema<'c> {
     );
 
     Ok(ss::Switch::new(
-      self.context(),
+      self,
       analyzed_condition,
       analyzed_cases,
       analyzed_default,
@@ -2502,12 +2433,12 @@ impl<'c> Sema<'c> {
     let ps::Case { body, value, span } = case;
     let analyzed_value = self.expression(value).handle_with(
       self,
-      se::Expression::new_error_node(self.context(), self.int_type().into()),
+      se::Expression::new_error_node(self, self.int_type().into()),
     );
     let analyzed_body = self.statements(body);
 
     Ok(ss::Case::new(
-      self.context(),
+      self,
       analyzed_value.fold(self).transform(|expr| {
         if let se::RawExpr::Constant(constant) = &**expr {
           if constant.is_integral() {
@@ -2534,7 +2465,7 @@ impl<'c> Sema<'c> {
   ) -> Result<ss::Default<'c>, Diag<'c>> {
     let ps::Default { body, span } = default;
     let analyzed_body = self.statements(body);
-    Ok(ss::Default::new(self.context(), analyzed_body, span))
+    Ok(ss::Default::new(self, analyzed_body, span))
   }
 
   fn labelstmt(
@@ -2553,7 +2484,7 @@ impl<'c> Sema<'c> {
         } = label;
         match self.current_labels.insert((*name).into()) {
           true => Ok(ss::Label::new(
-            self.context(),
+            self.ast(),
             name,
             self.statement_or_default(*statement),
             span,

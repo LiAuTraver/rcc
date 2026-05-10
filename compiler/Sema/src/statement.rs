@@ -11,12 +11,12 @@ pub type StmtRef<'c> = &'c Statement<'c>;
 
 /// TODO: remove this?
 pub trait IntoStmtRef<'c> {
-  fn into_stmt_ref(self, context: &'c Context<'c>) -> StmtRef<'c>;
+  fn into_stmt_ref(self, context: &Context<'c>) -> StmtRef<'c>;
 }
 
 impl<'c> IntoStmtRef<'c> for StmtRef<'c> {
   #[inline]
-  fn into_stmt_ref(self, _: &'c Context<'c>) -> StmtRef<'c> {
+  fn into_stmt_ref(self, _: &Context<'c>) -> StmtRef<'c> {
     self
   }
 }
@@ -150,7 +150,7 @@ pub struct Continue {
 ::rcc_utils::ensure_is_pod!(Statement<'_>);
 impl<'c> DeclStmt<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     declarations: impl IntoIterator<Item = ExternalDeclarationRef<'c>>,
     span: SourceSpan,
   ) -> Self {
@@ -172,7 +172,7 @@ impl<'c> Goto<'c> {
 
 impl<'c> Compound<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     statements: impl IntoIterator<Item = impl IntoStmtRef<'c>>,
     span: SourceSpan,
   ) -> Self {
@@ -189,7 +189,7 @@ impl<'c> Compound<'c> {
 
 impl<'c> Switch<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     condition: ExprRef<'c>,
     cases: impl IntoIterator<Item = Case<'c>>,
     default: Option<Default<'c>>,
@@ -209,7 +209,7 @@ impl<'c> Switch<'c> {
 
 impl<'c> Label<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     name: StrRef<'c>,
     statement: impl IntoStmtRef<'c>,
     span: SourceSpan,
@@ -224,7 +224,7 @@ impl<'c> Label<'c> {
 
 impl<'c> Case<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     value: Constant<'c>,
     body: impl IntoIterator<Item = impl IntoStmtRef<'c>>,
     span: SourceSpan,
@@ -243,7 +243,7 @@ impl<'c> Case<'c> {
 
 impl<'c> If<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     condition: ExprRef<'c>,
     then_branch: impl IntoStmtRef<'c>,
     else_branch: Option<StmtRef<'c>>,
@@ -266,7 +266,7 @@ impl<'c> Return<'c> {
 
 impl<'c> While<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     condition: ExprRef<'c>,
     body: impl IntoStmtRef<'c>,
     span: SourceSpan,
@@ -281,7 +281,7 @@ impl<'c> While<'c> {
 
 impl<'c> DoWhile<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     body: impl IntoStmtRef<'c>,
     condition: ExprRef<'c>,
     span: SourceSpan,
@@ -296,7 +296,7 @@ impl<'c> DoWhile<'c> {
 
 impl<'c> For<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     initializer: Option<StmtRef<'c>>,
     condition: Option<ExprRef<'c>>,
     increment: Option<ExprRef<'c>>,
@@ -315,7 +315,7 @@ impl<'c> For<'c> {
 
 impl<'c> Default<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     body: impl IntoIterator<Item = impl IntoStmtRef<'c>>,
     span: SourceSpan,
   ) -> Self {
@@ -349,15 +349,12 @@ impl<'c> ::std::default::Default for Statement<'c> {
 }
 
 impl<'c> Statement<'c> {
-  pub fn alloc(
-    context: &'c Context<'c>,
-    statement: Statement<'c>,
-  ) -> StmtRef<'c> {
+  pub fn alloc(context: &Context<'c>, statement: Statement<'c>) -> StmtRef<'c> {
     context.arena().alloc(statement)
   }
 
   pub fn alloc_slice<I, S>(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     statements: I,
   ) -> &'c [StmtRef<'c>]
   where

@@ -206,7 +206,7 @@ impl<'c> SizeOf<'c> {
 
 impl<'c> Call<'c> {
   pub fn new<I>(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     callee: ExprRef<'c>,
     arguments: I,
   ) -> Self
@@ -258,7 +258,7 @@ impl<'c> ::std::ops::Deref for Expression<'c> {
 
 impl<'c> Expression<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
     value_category: ValueCategory,
@@ -273,7 +273,7 @@ impl<'c> Expression<'c> {
   }
 
   pub fn new_rvalue(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
     span: SourceSpan,
@@ -287,7 +287,7 @@ impl<'c> Expression<'c> {
   }
 
   pub fn new_lvalue(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
     span: SourceSpan,
@@ -301,7 +301,7 @@ impl<'c> Expression<'c> {
   }
 
   pub fn new_error_node(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     expr_type: QualifiedType<'c>,
   ) -> ExprRef<'c> {
     context.arena().alloc(Self {

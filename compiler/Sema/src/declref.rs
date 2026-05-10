@@ -31,7 +31,7 @@ pub struct DeclRef<'c> {
 
 impl<'c> DeclRef<'c> {
   pub fn new(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     qualified_type: QualifiedType<'c>,
     storage_class: Storage,
     name: StrRef<'c>,
@@ -198,7 +198,7 @@ impl PtrEq for DeclRef<'_> {
 impl<'c> DeclRef<'c> {
   #[inline]
   pub fn decl(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     qualified_type: QualifiedType<'c>,
     storage_class: Storage,
     name: StrRef<'c>,
@@ -216,7 +216,7 @@ impl<'c> DeclRef<'c> {
 
   #[inline]
   pub fn def(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     qualified_type: QualifiedType<'c>,
     storage_class: Storage,
     name: StrRef<'c>,
@@ -234,7 +234,7 @@ impl<'c> DeclRef<'c> {
 
   #[inline]
   pub fn tentative(
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     qualified_type: QualifiedType<'c>,
     storage_class: Storage,
     name: StrRef<'c>,

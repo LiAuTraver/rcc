@@ -19,7 +19,7 @@ impl<'c> Expression<'c> {
   pub fn usual_arithmetic_conversion(
     lhs: ExprRef<'c>,
     rhs: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<(ExprRef<'c>, ExprRef<'c>, QualifiedType<'c>), Diag<'c>> {
     debug_assert!(
       !lhs.is_lvalue() && !rhs.is_lvalue(),
@@ -42,7 +42,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn usual_arithmetic_conversion_unary(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
     debug_assert!(
@@ -75,7 +75,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn boolean_conversion(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     debug_assert!(
       !matches!(
@@ -117,7 +117,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn void_conversion(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     match self.unqualified_type().is_void() {
       true => self,
@@ -139,7 +139,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn assignment_conversion(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
     target_type: &QualifiedType<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     debug_assert!(
@@ -161,7 +161,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   pub fn lvalue_conversion(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     if self.unqualified_type().is_array()
       || self.unqualified_type().is_functionproto()
@@ -186,7 +186,7 @@ impl<'c> Expression<'c> {
 
   #[must_use]
   #[inline]
-  pub fn decay(self: ExprRef<'c>, context: &'c Context<'c>) -> ExprRef<'c> {
+  pub fn decay(self: ExprRef<'c>, context: &Context<'c>) -> ExprRef<'c> {
     match self.unqualified_type() {
       Type::Array(_) => self.array_to_pointer_decay(context),
       Type::FunctionProto(_) => self.function_to_pointer_decay(context),
@@ -201,7 +201,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   pub fn function_to_pointer_decay(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     debug_assert!(
       self.qualifiers().is_empty(),
@@ -228,7 +228,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   pub fn array_to_pointer_decay(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     let array_type = match self.unqualified_type() {
       Type::Array(a) => a,
@@ -258,7 +258,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn uintptr_conversion(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
     debug_assert!(
@@ -284,7 +284,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn ptrdiff_conversion(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     debug_assert!(!self.is_lvalue(), "perform lvalue conversion first");
     debug_assert!(
@@ -312,7 +312,7 @@ impl<'c> Expression<'c> {
   fn assignment_conversion_unchecked(
     self: ExprRef<'c>,
     target_type: &QualifiedType<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     let span = self.span();
 
@@ -415,7 +415,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   fn boolean_conversion_unchecked(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     let span = self.span();
 
@@ -485,7 +485,7 @@ impl<'c> Expression<'c> {
   fn usual_arithmetic_conversion_unchecked(
     lhs: ExprRef<'c>,
     rhs: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<(ExprRef<'c>, ExprRef<'c>, QualifiedType<'c>), Diag<'c>> {
     let lhs = lhs.promote(context);
     let rhs = rhs.promote(context);
@@ -519,7 +519,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   pub(super) fn usual_arithmetic_conversion_unary_unchecked(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     let promoted = self.promote(context);
     match promoted.unqualified_type() {
@@ -537,7 +537,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   pub(super) fn uintptr_conversion_unchecked(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     let cast_type =
       Self::get_cast_type(self.unqualified_type(), context.uintptr_type());
@@ -547,7 +547,7 @@ impl<'c> Expression<'c> {
   #[must_use]
   pub(super) fn ptrdiff_conversion_unchecked(
     self: ExprRef<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     debug_assert!(self.unqualified_type().is_integer());
     let cast_type = Self::get_cast_type(
@@ -598,7 +598,7 @@ impl<'c> Expression<'c> {
     self: ExprRef<'c>,
     cast_type: CastType,
     target_type: &QualifiedType<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     match cast_type {
       CastType::Noop => self,
@@ -618,7 +618,7 @@ impl<'c> Expression<'c> {
   fn cast_if_needed(
     self: ExprRef<'c>,
     target_type: &QualifiedType<'c>,
-    context: &'c Context<'c>,
+    context: &Context<'c>,
   ) -> ExprRef<'c> {
     let cast_type = Self::get_cast_type(
       self.unqualified_type(),
@@ -628,7 +628,7 @@ impl<'c> Expression<'c> {
   }
 
   #[must_use]
-  pub fn promote(self: ExprRef<'c>, context: &'c Context<'c>) -> ExprRef<'c> {
+  pub fn promote(self: ExprRef<'c>, context: &Context<'c>) -> ExprRef<'c> {
     let (promoted_type, cast_type) = self.unqualified_type().clone().promote();
     match cast_type {
       CastType::Noop => self,

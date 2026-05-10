@@ -1,7 +1,7 @@
 use ::rcc_ast::{Session, SessionRef};
 use ::rcc_shared::{
   Coordinate,
-  DiagData::*,
+  DiagData::{self, *},
   Diagnosis, Keyword, Number, OpDiag,
   Operator::{self, *},
   SourceSpan, Token,
@@ -52,6 +52,15 @@ impl<'c> Lexer<'c> {
       coords: Default::default(),
       session,
     }
+  }
+
+  fn add_error(&self, data: DiagData<'c>, span: SourceSpan) {
+    self.diag().add_error(data, span);
+  }
+
+  #[allow(unused)]
+  fn add_warning(&self, data: DiagData<'c>, span: SourceSpan) {
+    self.diag().add_warning(data, span);
   }
 
   /// Returns true if we are at the end
@@ -306,7 +315,7 @@ impl<'c> Lexer<'c> {
       '\\' => self.line_escape(start),
 
       ch => {
-        self.diag().add_error(
+        self.add_error(
           UnexpectedCharacter((ch.to_string(), None).into()),
           self.span(start),
         );
@@ -389,7 +398,7 @@ impl<'c> Lexer<'c> {
 
       // exponent digits, required
       if !self.advance_if(char::is_ascii_digit) {
-        self.diag().add_error(
+        self.add_error(
           InvalidNumberFormat(
             "Expected digits after exponent marker".to_string(),
           ),
@@ -411,7 +420,7 @@ impl<'c> Lexer<'c> {
       }
 
       if !self.advance_if(char::is_ascii_digit) {
-        self.diag().add_error(
+        self.add_error(
           InvalidNumberFormat(
             "Expected digits after hexadecimal exponent marker".to_string(),
           ),
@@ -433,7 +442,7 @@ impl<'c> Lexer<'c> {
           if Number::FLOATING_SUFFIXES.contains(&s) {
             Some(s)
           } else {
-            self.diag().add_error(
+            self.add_error(
               InvalidNumberFormat(format!(
                 "Invalid floating point literal suffix '{}', ignoring",
                 s
@@ -446,7 +455,7 @@ impl<'c> Lexer<'c> {
           if Number::INTEGER_SUFFIXES.contains(&s) {
             Some(s)
           } else {
-            self.diag().add_error(
+            self.add_error(
               InvalidNumberFormat(format!(
                 "Invalid integer literal suffix '{}', ignoring",
                 s

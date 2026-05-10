@@ -305,7 +305,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     element_type: QualifiedType<'c>,
   ) -> QualifiedType<'c> {
     Type::Array(Array::new(element_type, Constant(1)))
-      .lookup(self.context())
+      .lookup(self)
       .into()
   }
 
@@ -539,7 +539,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     };
 
     Type::Array(Array::new(element_type, size))
-      .lookup(self.context())
+      .lookup(self)
       .into()
   }
 
@@ -843,7 +843,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           entry.is_implicit,
         )
       })
-      .collect_in::<ArenaVec<_>>(self.context().arena())
+      .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice()
   }
 
@@ -894,7 +894,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     };
 
     Type::Array(Array::new(element_type, size))
-      .lookup(self.context())
+      .lookup(self)
       .into()
   }
 
@@ -960,7 +960,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     };
 
     Type::Array(Array::new(array.element_type, Constant(required_size)))
-      .lookup(self.context())
+      .lookup(self)
       .into()
   }
 
@@ -989,13 +989,13 @@ impl<'i, 'c> Initialization<'i, 'c> {
       return expr;
     }
 
-    let expr = expr.lvalue_conversion(self.context()).decay(self.context());
+    let expr: se::ExprRef<'c> = expr.lvalue_conversion(self).decay(self);
 
-    if RefEq::ref_eq(target_type.unqualified_type, self.context().void_type()) {
+    if RefEq::ref_eq(target_type.unqualified_type, self.void_type()) {
       expr
     } else {
       expr
-        .assignment_conversion(self.context(), &target_type)
+        .assignment_conversion(self, &target_type)
         .handle_with(self, self.__empty_expr)
     }
   }

@@ -593,13 +593,11 @@ impl<'c> Folding<'c, Variable<'c>> for Expression<'c> {
     //   return Success(Self::new(self, target_type, value_category));
     // }
 
+    let qualifiers: Qualifiers = variable.qualified_type().qualifiers;
+
     match variable.storage_class() {
-      Static
-        if variable
-          .qualified_type()
-          .qualifiers
-          .contains(Qualifiers::Const) =>
-      {
+      _ if qualifiers.contains(Qualifiers::Volatile) => Failure(expression),
+      Static if qualifiers.contains(Qualifiers::Const) => {
         session.diag().add_error(
           UnsupportedFeature(
             "static variable const initialization from const variable \

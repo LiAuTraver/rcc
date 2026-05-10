@@ -253,9 +253,7 @@ impl<'c> Parser<'c> {
 /// opt checks
 impl<'c> Parser<'c> {
   fn ios_c_strict_check_for_decl(&self, statement: &Statement) {
-    if self.ast().langopts() < 23
-      && matches!(statement, Statement::Declaration(_))
-    {
+    if self.langopts() < 23 && matches!(statement, Statement::Declaration(_)) {
       self.add_warning(DeprecatedStmtDeclCvt, *self.peek_loc());
     }
   }
@@ -276,7 +274,7 @@ impl<'c> Parser<'c> {
       Literal::Keyword(Keyword::Union) => todo!(),
       Literal::Keyword(Keyword::Enum) => todo!(),
       Literal::Keyword(Keyword::Auto) =>
-        if self.ast().langopts() >= 23 {
+        if self.langopts() >= 23 {
           Some(TypeSpecifier::AutoType)
         } else {
           None
@@ -344,7 +342,7 @@ impl<'c> Parser<'c> {
         }
       } else if let Ok(storage_class) = Storage::try_from(self.peek_lit())
         && (!matches!(storage_class, Storage::Automatic)
-          || (self.ast().langopts() >= 23
+          || (self.langopts() >= 23
             && self.parse_type_specifier_with_offset(1).is_some()))
       {
         match storage {
@@ -1170,15 +1168,15 @@ impl<'c> Parser<'c> {
         not_implemented_feature!("not implemented: {kw:#?}"),
 
       bool_constant @ (True | False) => Expression::Constant(
-        CL::Integral(if self.ast().langopts() >= 17 {
+        CL::Integral(if self.langopts() >= 17 {
           Integral::from_unsigned(
             bool_constant == True,
-            self.ast().i8_bool_type().size_bits(self.ast()),
+            self.i8_bool_type().size_bits(self),
           )
         } else {
           Integral::from_signed(
             bool_constant == True,
-            self.ast().int_type().size_bits(self.ast()),
+            self.int_type().size_bits(self),
           )
         }) + self.eloc(location),
       ),

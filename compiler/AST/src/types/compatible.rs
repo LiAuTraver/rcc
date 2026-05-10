@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use ::rcc_shared::{ArenaVec, CollectIn};
 use ::rcc_utils::RefEq;
 
@@ -58,7 +56,7 @@ impl<'c> Compatibility<'c> for ArraySize {
     }
   }
 
-  fn composite(lhs: &Self, rhs: &Self, context: &Context<'c>) -> Option<Self>
+  fn composite(lhs: &Self, rhs: &Self, _context: &Context<'c>) -> Option<Self>
   where
     Self: Sized,
   {
@@ -76,7 +74,7 @@ impl<'c> Compatibility<'c> for ArraySize {
     }
   }
 
-  fn composite_unchecked(lhs: &Self, rhs: &Self, context: &Context<'c>) -> Self
+  fn composite_unchecked(lhs: &Self, rhs: &Self, _context: &Context<'c>) -> Self
   where
     Self: Sized,
   {
@@ -89,7 +87,7 @@ impl<'c> Compatibility<'c> for ArraySize {
     }
   }
 }
-
+#[allow(unused)]
 impl<'c> Compatibility<'c> for Enum<'c> {
   fn compatible(lhs: &Self, rhs: &Self) -> bool {
     todo!()
@@ -109,7 +107,7 @@ impl<'c> Compatibility<'c> for Enum<'c> {
     todo!()
   }
 }
-
+#[allow(unused)]
 impl<'c> Compatibility<'c> for Record<'c> {
   fn compatible(lhs: &Self, rhs: &Self) -> bool {
     todo!()
@@ -425,6 +423,7 @@ impl<'c> Compatibility<'c> for Array<'c> {
   }
 }
 
+#[allow(unused)]
 impl<'c> Compatibility<'c> for Union<'c> {
   fn compatible(lhs: &Self, rhs: &Self) -> bool {
     todo!()
@@ -478,7 +477,7 @@ impl<'c> QualifiedType<'c> {
   /// are currently ignored.
   pub fn parameter_adjustment(self, context: &Context<'c>) -> Self {
     match self.unqualified_type {
-      Type::Array(Array { element_type, size }) => Self::new(
+      Type::Array(Array { element_type, .. }) => Self::new(
         element_type.qualifiers,
         Type::Pointer(Pointer::new(*element_type)).lookup(context),
       ),
