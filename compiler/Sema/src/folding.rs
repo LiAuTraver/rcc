@@ -84,7 +84,7 @@ fn retype_or_reuse<'c, D: Diagnosis<'c>>(
   target_type: QualifiedType<'c>,
   value_category: ValueCategory,
 ) -> ExprRef<'c> {
-  if QualifiedType::ref_eq_same(expression.qualified_type(), &target_type)
+  if RefEq::ref_eq(expression.qualified_type(), &target_type)
     && expression.value_category() == value_category
   {
     expression

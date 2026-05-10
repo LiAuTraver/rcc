@@ -211,9 +211,23 @@ impl<'c> Parser<'c> {
   }
 
   /// get if the next token is OP; otherwise, do nothing.
-  fn silent_get_if<const OP: Operator>(&mut self) {
+  #[inline]
+  fn get_if<const OP: Operator>(&mut self) -> bool {
     if self.peek_lit() == OP {
       self.must_get_op::<OP>();
+      true
+    } else {
+      false
+    }
+  }
+
+  #[inline]
+  fn get_key_if<const KEY: Keyword>(&mut self) -> bool {
+    if self.peek_lit() == KEY {
+      self.must_get_key::<KEY>();
+      true
+    } else {
+      false
     }
   }
 
@@ -403,9 +417,7 @@ impl<'c> Parser<'c> {
 
     let mut pointers = Vec::new();
 
-    while self.peek_lit() == Star {
-      self.must_get_op::<{ Star }>();
-
+    while self.get_if::<{ Star }>() {
       pointers.push(Modifier::Pointer(self.parse_qualifiers()));
     }
 
@@ -439,23 +451,20 @@ impl<'c> Parser<'c> {
       };
       (name, Vec::new())
     };
-    while matches!(
-      self.peek_lit(),
-      Literal::Operator(LeftParen) | Literal::Operator(LeftBracket)
-    ) {
-      if self.peek_lit() == LeftParen {
-        self.must_get_op::<{ LeftParen }>();
+    loop {
+      if self.get_if::<{ LeftParen }>() {
         let parameters = self.parse_function_params();
         self.recoverable_get::<{ RightParen }>();
         modifiers.push(Modifier::Function(parameters));
-      }
-      if self.peek_lit() == LeftBracket {
-        self.must_get_op::<{ LeftBracket }>();
+      } else if self.get_if::<{ LeftBracket }>() {
         let array_modifier = self.parse_array_declarator();
         self.recoverable_get::<{ RightBracket }>();
         modifiers.push(Modifier::Array(array_modifier));
+      } else {
+        break;
       }
     }
+
     modifiers.extend(pointers.into_iter().rev());
     Declarator::new(name, modifiers, self.eloc(location))
   }
@@ -471,15 +480,10 @@ impl<'c> Parser<'c> {
         self.eloc(location),
       );
     }
-    let mut is_static = false;
-    if self.peek_lit() == Keyword::Static {
-      self.must_get_key::<{ Keyword::Static }>();
-      is_static = true;
-    }
+    let mut is_static = self.get_key_if::<{ Keyword::Static }>();
     let qualifiers_front = self.parse_qualifiers();
 
-    if self.peek_lit() == Keyword::Static {
-      self.must_get_key::<{ Keyword::Static }>();
+    if self.get_key_if::<{ Keyword::Static }>() {
       if is_static {
         // clang chooses to report an error here directly, nonetheless I choose to warn only.
         self.add_warning(
@@ -495,10 +499,8 @@ impl<'c> Parser<'c> {
 
     // clang also reports error if both `front` and `back` qualifiers are present, I choose to merge them.
     let qualifiers = qualifiers_front | qualifiers_back;
-    let bound = if let Literal::Operator(Star) = self.peek_lit() {
-      self.must_get_op::<{ Star }>();
-      None
-    } else if self.peek_lit() == RightBracket {
+    let bound = if self.get_if::<{ Star }>() || self.peek_lit() == RightBracket
+    {
       None
     } else {
       let expr = self.next_expression(Operator::DEFAULT);
@@ -530,10 +532,10 @@ impl<'c> Parser<'c> {
         let location = *self.peek_loc();
         let mut declspecs = self.parse_declspecs();
         let declarator = self.parse_declarator::<{ Maybe }, false>();
-        if let Some(storage) = &declspecs.storage_class
+        if let Some(storage) = declspecs.storage_class
           && storage != Storage::Register
         {
-          self.add_error(ExtraneousStorageSpecs(*storage), self.eloc(location));
+          self.add_error(ExtraneousStorageSpecs(storage), self.eloc(location));
           declspecs.storage_class = None;
         }
         parameters.push(Parameter::new(
@@ -628,22 +630,18 @@ impl<'c> Parser<'c> {
   fn parse_paren_expression<const LMIN_PRECEDENCE: u8>(
     &mut self,
   ) -> Expression<'c> {
-    if self.peek_lit() != LeftParen {
+    if !self.get_if::<{ LeftParen }>() {
       self
         .add_error(MissingOpenParen(self.peek_lit().clone()), *self.peek_loc());
       // assume the left paren is missing, continue parsing
-    } else {
-      self.must_get_op::<{ LeftParen }>();
     }
     let expr = self.next_expression(LMIN_PRECEDENCE);
-    if self.peek_lit() != RightParen {
+    if !self.get_if::<{ RightParen }>() {
       self.add_error(
         MissingCloseParen(self.peek_lit().clone()),
         *self.peek_loc(),
       );
       self.get(); // get it otherwise infinite loop
-    } else {
-      self.must_get_op::<{ RightParen }>();
     }
     expr
   }
@@ -662,14 +660,14 @@ impl<'c> Parser<'c> {
   fn parse_case(&mut self) -> Case<'c> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Case }>();
-    let expression = if self.peek_lit() == Colon {
+    let expression = if self.get_if::<{ Colon }>() {
       self.add_error(
         ExprNotConstant(
           "Case label must have a constant expression".to_string(),
         ),
         self.eloc(location),
       );
-      self.must_get_op::<{ Colon }>();
+
       Expression::default()
     } else {
       let expr = self.next_expression(Operator::DEFAULT);
@@ -709,7 +707,7 @@ impl<'c> Parser<'c> {
         self.recoverable_get::<{ Comma }>();
       }
     }
-    self.silent_get_if::<{ Comma }>();
+    self.get_if::<{ Comma }>();
     self.must_get_op::<{ RightBrace }>();
 
     InitializerList::new(entries, self.eloc(location))
@@ -785,9 +783,8 @@ impl<'c> Parser<'c> {
       self.peek_lit(),
       Literal::Operator(Semicolon) | Literal::Operator(Hash)
     ) {
-      if self.peek_lit() == Semicolon {
+      if self.get_if::<{ Semicolon }>() {
         // Redundant ';', maybe a warning?
-        self.must_get_op::<{ Semicolon }>();
       } else {
         // // skip preprocessor directive
         // let line = self.tokens[self.cursor].location.line;
@@ -799,12 +796,11 @@ impl<'c> Parser<'c> {
       }
     }
     let location = *self.peek_loc();
-    // let mut recovery = false;
+    let mut block_item = false;
     // block definition is not allowed in top
-    if self.peek_lit() == LeftBrace {
+    if self.get_if::<{ LeftBrace }>() {
       self.add_error(InvalidBlockItem, *self.peek_loc());
-      self.must_get_op::<{ LeftBrace }>();
-      // recovery = true;
+      block_item = true;
     }
 
     let declspecs = self.parse_declspecs();
@@ -812,8 +808,7 @@ impl<'c> Parser<'c> {
 
     loop {
       let mut can_continue = true;
-      let mut single = true;
-      let declarator = if single {
+      let declarator = if init_declarators.is_empty() {
         self.parse_declarator::<{ Maybe }, true>()
       } else {
         self.parse_declarator::<{ Named }, false>()
@@ -843,7 +838,7 @@ impl<'c> Parser<'c> {
         init_declarators
           .push(Function::new(declarator, body, self.eloc(location)).into());
         if c {
-          if !single {
+          if init_declarators.len() != 1 {
             self.add_error(
               Custom(
                 "Expect a declaration, function definition cannot appear here"
@@ -863,36 +858,27 @@ impl<'c> Parser<'c> {
         init_declarators.push(self.next_vardef(declarator).into());
       }
 
-      // #[allow(unused_assignments)]
-      // NOLINTNEXTLINE: this is used??? idk
-      single = false;
-
-      if self.peek_lit() == Comma {
-        self.must_get_op::<{ Comma }>();
+      if self.get_if::<{ Comma }>() {
         continue;
-      } else if self.peek_lit() == Semicolon {
-        self.must_get_op::<{ Semicolon }>();
+      } else if self.get_if::<{ Semicolon }>() {
         break;
       }
       if !can_continue {
-        // error.
-        self.add_error(
-          UnexpectedCharacter((self.peek_lit().to_string(), None).into()),
-          self.eloc(location),
-        );
+        // self.add_error(
+        //   UnexpectedCharacter((self.peek_lit().to_string(), None).into()),
+        //   self.eloc(location),
+        // );
         while !self.is_at_end() && self.peek_lit() != Semicolon {
           self.get();
         }
-        if self.peek_lit() == Semicolon {
-          self.must_get_op::<{ Semicolon }>();
-        }
+        self.get_if::<{ Semicolon }>();
         break;
       }
     }
 
-    // if recovery {
-    //   self.recoverable_get::<{ RightBrace }>();
-    // }
+    if block_item {
+      self.get_if::<{ RightBrace }>();
+    }
     init_declarators.shrink_to_fit();
     Declaration::new(declspecs, init_declarators, self.eloc(location))
   }
@@ -933,8 +919,7 @@ impl<'c> Parser<'c> {
     let condition = self.parse_paren_expression::<{ Operator::DEFAULT }>();
     let then_branch = self.next_statement();
     self.ios_c_strict_check_for_decl(&then_branch);
-    let else_branch = if self.peek_lit() == Keyword::Else {
-      self.must_get_key::<{ Keyword::Else }>();
+    let else_branch = if self.get_key_if::<{ Keyword::Else }>() {
       let body = self.next_statement();
       self.ios_c_strict_check_for_decl(&body);
       Some(body)
@@ -977,14 +962,13 @@ impl<'c> Parser<'c> {
   fn next_for(&mut self) -> For<'c> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::For }>();
-    if self.peek_lit() != LeftParen {
+    if !self.get_if::<{ LeftParen }>() {
       self.add_error(
         MissingOpenParen(self.peek_prev_lit().clone()),
         self.eloc(location),
       );
       panic!() // workaound
     } else {
-      self.must_get_op::<{ LeftParen }>();
       // initializer
       let initializer = match self.peek_lit() {
         Literal::Operator(Semicolon) => {
@@ -1037,6 +1021,7 @@ impl<'c> Parser<'c> {
     }
   }
 
+  /// FIXME: C standard switch is quite relaxed and complicated, treated as error here...
   fn next_switch(&mut self) -> Switch<'c> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Switch }>();
@@ -1044,7 +1029,7 @@ impl<'c> Parser<'c> {
 
     self.recoverable_get::<{ LeftBrace }>();
     let mut cases = Vec::new();
-    let mut default: Option<Default> = None;
+    let mut default = None;
     while self.peek_lit() != RightBrace {
       match self.peek_lit() {
         Literal::Keyword(Keyword::Case) => {
@@ -1074,31 +1059,31 @@ impl<'c> Parser<'c> {
   }
 
   fn next_statement(&mut self) -> Statement<'c> {
+    use Keyword::*;
     match *self.peek_lit() {
-      Literal::Keyword(Keyword::If) => self.next_if().into(),
-      Literal::Keyword(Keyword::For) => self.next_for().into(),
-      Literal::Keyword(Keyword::Return) => self.next_return().into(),
-      Literal::Keyword(Keyword::While) => self.next_while().into(),
-      Literal::Keyword(Keyword::Do) => self.next_dowhile().into(),
-      Literal::Keyword(Keyword::Break) => self.next_break().into(),
-      Literal::Keyword(Keyword::Continue) => self.next_continue().into(),
-      Literal::Keyword(Keyword::Switch) => self.next_switch().into(),
+      Literal::Keyword(If) => self.next_if().into(),
+      Literal::Keyword(For) => self.next_for().into(),
+      Literal::Keyword(Return) => self.next_return().into(),
+      Literal::Keyword(While) => self.next_while().into(),
+      Literal::Keyword(Do) => self.next_dowhile().into(),
+      Literal::Keyword(Break) => self.next_break().into(),
+      Literal::Keyword(Continue) => self.next_continue().into(),
+      Literal::Keyword(Switch) => self.next_switch().into(),
       Literal::Operator(LeftBrace) => self.next_block().into(),
       Literal::Operator(Semicolon) => self.next_emptystmt(),
-      Literal::Keyword(Keyword::Case) => {
-        self.add_error(LabelNotWithinSwitch(Keyword::Case), *self.peek_loc());
+      Literal::Keyword(Case) => {
+        self.add_error(LabelNotWithinSwitch(Case), *self.peek_loc());
         // attempt to recover
         _ = self.parse_case();
         Statement::default()
       },
-      Literal::Keyword(Keyword::Default) => {
-        self
-          .add_error(LabelNotWithinSwitch(Keyword::Default), *self.peek_loc());
+      Literal::Keyword(Default) => {
+        self.add_error(LabelNotWithinSwitch(Default), *self.peek_loc());
         // ditto
         _ = self.parse_default();
         Statement::default()
       },
-      Literal::Keyword(Keyword::Goto) => self.next_gotostmt(),
+      Literal::Keyword(Goto) => self.next_gotostmt(),
       Literal::Keyword(_) => self.next_declaration().into(),
       Literal::Identifier(ident) if self.typedefs.contains(ident) =>
         self.next_declaration().into(),
@@ -1137,7 +1122,7 @@ impl<'c> Parser<'c> {
     } else {
       self.add_error(MissingLabelAfterGoto, self.eloc(location));
       // assume the label is missing, continue parsing
-      self.silent_get_if::<{ Semicolon }>();
+      self.get_if::<{ Semicolon }>();
       Statement::default()
     }
   }
@@ -1174,29 +1159,30 @@ impl<'c> Parser<'c> {
     keyword: Keyword,
     location: SourceSpan,
   ) -> Expression<'c> {
+    use Keyword::*;
     match keyword {
-      Keyword::Sizeof => {
+      Sizeof => {
         self.cursor -= 1;
         self.next_sizeof()
       },
 
-      kw @ (Keyword::Alignof | Keyword::Alignas | Keyword::Generic) =>
+      kw @ (Alignof | Alignas | Generic) =>
         not_implemented_feature!("not implemented: {kw:#?}"),
 
-      bool_constant @ (Keyword::True | Keyword::False) => Expression::Constant(
+      bool_constant @ (True | False) => Expression::Constant(
         CL::Integral(if self.ast().langopts() >= 17 {
           Integral::from_unsigned(
-            bool_constant == Keyword::True,
+            bool_constant == True,
             self.ast().i8_bool_type().size_bits(self.ast()),
           )
         } else {
           Integral::from_signed(
-            bool_constant == Keyword::True,
+            bool_constant == True,
             self.ast().int_type().size_bits(self.ast()),
           )
         }) + self.eloc(location),
       ),
-      Keyword::Nullptr => (CL::Nullptr() + self.eloc(location)).into(),
+      Nullptr => (CL::Nullptr() + self.eloc(location)).into(),
       _ => {
         self.add_error(
           UnexpectedCharacter((keyword.to_string(), None).into()),
@@ -1262,8 +1248,7 @@ impl<'c> Parser<'c> {
     let location = *self.peek_loc();
     self.must_get_key::<{ Keyword::Sizeof }>();
     // maybe type or expression
-    if self.peek_lit() == LeftParen {
-      self.must_get_op::<{ LeftParen }>();
+    if self.get_if::<{ LeftParen }>() {
       match self.parse_type_specifier() {
         Some(_) => {
           // type

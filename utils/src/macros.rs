@@ -291,6 +291,14 @@ macro_rules! ensure_is_pod {
     );
   };
 }
+
+#[macro_export]
+macro_rules! ensure_is_dyn_compatible {
+  ($ty:ident) => {
+    const _: Option<&dyn $ty> = None;
+  };
+}
+
 /// manually roll out the pesudo-`vtable` for enums.
 #[macro_export]
 macro_rules! static_dispatch {

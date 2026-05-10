@@ -132,10 +132,16 @@ impl<'c> QualifiedType<'c> {
   pub fn destructure(self) -> (Qualifiers, TypeRef<'c>) {
     (self.qualifiers, self.unqualified_type)
   }
+}
 
-  pub fn ref_eq_same(lhs: &QualifiedType, rhs: &QualifiedType) -> bool {
-    RefEq::ref_eq(lhs.unqualified_type, rhs.unqualified_type)
-      && lhs.qualifiers == rhs.qualifiers
+impl<'c> RefEq for QualifiedType<'c> {
+  /// [`RefEq`]-like [`QualifiedType::ref_eq`]. **NOT** actual ref-eq.
+  fn ref_eq(lhs: &Self, rhs: &Self) -> bool
+  where
+    Self: PartialEq + ::std::fmt::Debug,
+  {
+    PartialEq::eq(&lhs.qualifiers, &rhs.qualifiers)
+      && RefEq::ref_eq(lhs.unqualified_type, rhs.unqualified_type)
   }
 }
 impl<'c> From<TypeRef<'c>> for QualifiedType<'c> {

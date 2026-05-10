@@ -14,7 +14,7 @@ pub enum ArraySize {
   Constant(usize),
   /// unsupported dynamic size, but i kept it here for the `full` type category
   ///
-  /// TODO: if this holds an expression -- it's a cyclic reference. may use `ExpressionId` as a workaround.
+  /// TODO: if this holds an expression
   Variable(Opaque),
   /// unspecified size
   Incomplete,

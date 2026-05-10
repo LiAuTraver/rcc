@@ -2,8 +2,9 @@ use ::rcc_adt::Integral;
 use ::rcc_ast::{
   Context, Session, SessionRef, VarDeclKind,
   types::{
-    Array, ArraySize, Compatibility, FunctionProto, FunctionSpecifier, Pointer,
-    Primitive, QualifiedType, Type, TypeInfo, UnqualExt,
+    Array, ArraySize, CastType::*, Compatibility, FunctionProto,
+    FunctionSpecifier, Pointer, Primitive, QualifiedType, Qualifiers, Type,
+    TypeInfo, UnqualExt,
   },
 };
 use ::rcc_parse::{declaration as pd, expression as pe, statement as ps};
@@ -17,7 +18,6 @@ use ::rcc_utils::{
   not_implemented_feature,
 };
 use ::std::collections::{HashMap, HashSet};
-use rcc_parse::expression::Expression;
 
 use super::{declaration as sd, expression as se, statement as ss};
 use crate::{
@@ -163,92 +163,120 @@ impl<'c> Sema<'c> {
     I::IntoIter: DoubleEndedIterator,
   {
     // reverse order
-    modifiers.into_iter().rev().for_each(|modifier| {
-      match modifier {
-        pd::Modifier::Pointer(qualifiers) => {
-          qualified_type = QualifiedType::new(
-            qualifiers,
-            Type::Pointer(Pointer::new(qualified_type)).lookup(self.context()),
-          );
-        },
-        pd::Modifier::Array(array_modifier) => {
-          let size = match array_modifier.bound {
-            None => ArraySize::Incomplete,
-            Some(expr) => {
-              // check 1. it's a constant expression or not, 2. it's type should
-              // be integer type 3. should be non-negative
-              use super::folding::FoldingResult::*;
-              match self.expression(expr) {
-                Ok(analyzed_expr)
-                  if analyzed_expr.qualified_type().is_scalar() =>
-                  match analyzed_expr.fold(self) {
-                    Success(value) =>
-                      if value.is_integer_constant() {
-                        ArraySize::Constant(
-                          value
-                            .as_constant_unchecked()
-                            .as_integral_unchecked()
-                            .to_builtin(),
-                        )
-                      } else {
-                        self.add_error(
-                          NonIntegerInArraySubscript(value.to_string()),
-                          value.span(),
-                        );
-                        ArraySize::Constant(0)
-                      },
-                    Failure(expr) => {
-                      self.add_error(
-                        UnsupportedFeature(format!(
-                          "Expression {expr} could not be evaluated to a \
-                           constant; VLA is not supported currently."
-                        )),
-                        expr.span(),
-                      );
-                      ArraySize::Variable(Opaque::new(expr))
-                    },
-                  },
-                Ok(analyzed_expr) => {
-                  self.add_error(
-                    NonIntegerInArraySubscript(analyzed_expr.to_string()),
-                    analyzed_expr.span(),
-                  );
-                  ArraySize::Constant(0) // error case
-                },
-                Err(diag) => {
-                  self.add_diag(diag);
-                  ArraySize::Constant(0)
-                },
-              }
-            },
-          };
-          if !qualified_type.is_complete(self.context()) {
-            self.add_error(
-              ArrayHasIncompleteType(qualified_type.to_string()),
-              array_modifier.span,
-            );
-          }
-          qualified_type = Type::Array(Array::new(qualified_type, size))
-            .lookup(self.context())
-            .into();
-        },
-        pd::Modifier::Function(function_signature) => {
-          // func ptr or so
-          let pd::FunctionSignature {
-            parameters,
-            is_variadic,
-          } = function_signature;
-          let analyzed_parameter_types = self.parse_parameter_types(parameters);
-          let p = self.intern(FunctionProto::new(
-            qualified_type,
-            analyzed_parameter_types.into_bump_slice(),
-            is_variadic,
-          ));
-          qualified_type = p.into();
-        },
-      }
-    });
+    modifiers
+      .into_iter()
+      .rev()
+      .for_each(|modifier| match modifier {
+        pd::Modifier::Pointer(qualifiers) =>
+          qualified_type =
+            self.apply_pointer_modifier(qualified_type, qualifiers),
+        pd::Modifier::Array(array_modifier) =>
+          qualified_type =
+            self.apply_array_modifier(qualified_type, array_modifier),
+        pd::Modifier::Function(function_signature) =>
+          qualified_type =
+            self.apply_function_modifier(qualified_type, function_signature),
+      });
     qualified_type
+  }
+
+  fn apply_pointer_modifier(
+    &self,
+    qualified_type: QualifiedType<'c>,
+    qualifiers: Qualifiers,
+  ) -> QualifiedType<'c> {
+    QualifiedType::new(
+      qualifiers,
+      Type::Pointer(Pointer::new(qualified_type)).lookup(self.context()),
+    )
+  }
+
+  fn apply_function_modifier(
+    &self,
+    qualified_type: QualifiedType<'c>,
+    function_signature: pd::FunctionSignature<'c>,
+  ) -> QualifiedType<'c> {
+    let pd::FunctionSignature {
+      parameters,
+      is_variadic,
+    } = function_signature;
+    let analyzed_parameter_types = self.parse_parameter_types(parameters);
+    self
+      .intern(FunctionProto::new(
+        qualified_type,
+        analyzed_parameter_types.into_bump_slice(),
+        is_variadic,
+      ))
+      .into()
+  }
+
+  fn apply_array_modifier(
+    &self,
+    qualified_type: QualifiedType<'c>,
+    array_modifier: pd::ArrayModifier<'c>,
+  ) -> QualifiedType<'c> {
+    let size = match array_modifier.bound {
+      None => ArraySize::Incomplete,
+      Some(expr) => {
+        // check 1. it's a constant expression or not, 2. it's type should
+        // be integer type 3. should be non-negative
+        use super::folding::FoldingResult::*;
+        match self.expression(expr) {
+          Ok(analyzed_expr) if analyzed_expr.qualified_type().is_scalar() =>
+            match analyzed_expr.fold(self) {
+              Success(value) =>
+                if value.is_integer_constant() {
+                  ArraySize::Constant(
+                    value
+                      .as_constant_unchecked()
+                      .as_integral_unchecked()
+                      .to_builtin(),
+                  )
+                } else {
+                  self.add_error(
+                    NonIntegerInArraySubscript(value.to_string()),
+                    value.span(),
+                  );
+                  ArraySize::Constant(1)
+                },
+              Failure(expr) =>
+                if self.environment.is_global() {
+                  self.add_error(GlobalVLA, expr.span());
+                  ArraySize::Constant(1)
+                } else {
+                  self.add_error(
+                    UnsupportedFeature(format!(
+                      "Expression {expr} could not be evaluated to a \
+                       constant; VLA is not supported currently."
+                    )),
+                    expr.span(),
+                  );
+                  ArraySize::Variable(Opaque::new(expr))
+                },
+            },
+          Ok(analyzed_expr) => {
+            self.add_error(
+              NonIntegerInArraySubscript(analyzed_expr.to_string()),
+              analyzed_expr.span(),
+            );
+            ArraySize::Constant(1) // error case
+          },
+          Err(diag) => {
+            self.add_diag(diag);
+            ArraySize::Constant(1)
+          },
+        }
+      },
+    };
+    if !qualified_type.is_complete(self.context()) {
+      self.add_error(
+        ArrayHasIncompleteType(qualified_type.to_string()),
+        array_modifier.span,
+      );
+    }
+    Type::Array(Array::new(qualified_type, size))
+      .lookup(self.context())
+      .into()
   }
 
   fn apply_modifiers_for_functiondecl(
@@ -362,7 +390,7 @@ impl<'c> Sema<'c> {
           self.context(),
           qualified_type,
           Storage::Automatic,
-          name.unwrap_or_else(|| self.unnamed_str()),
+          name.unwrap_or("<unnamed>"),
           None,
         );
         sd::Parameter::new(declaration, span)
@@ -972,15 +1000,16 @@ impl<'c> Sema<'c> {
       (Some(Constexpr), None) => ten(),
       // tentative w/ errors.
       (Some(Register), None) => {
-        self.add_error(GlobalRegVar(name), span);
+        self.add_error(GlobalRegVar, span);
         ten()
       },
       (Some(Automatic), None) => {
-        self.add_error(GlobalAutoVar(name), span);
+        self.add_error(GlobalAutoVar, span);
         ten()
       },
       // declaration.
       (Some(Extern), None) => decl(),
+      (Some(Typedef), None) => decl(),
       // definition.
       (None, Some(init)) => def(init),
       (Some(Static), Some(init)) => def(init),
@@ -992,17 +1021,18 @@ impl<'c> Sema<'c> {
       },
       // definition w/ errors.
       (Some(Register), Some(init)) => {
-        self.add_error(GlobalRegVar(name), span);
+        self.add_error(GlobalRegVar, span);
         def(init)
       },
       (Some(Automatic), Some(init)) => {
-        self.add_error(GlobalAutoVar(name), span);
+        self.add_error(GlobalAutoVar, span);
         def(init)
       },
       // todos.
-      (Some(Typedef), _) => todo!(
-        "{Typedef} handling requires medium-refect of the vardef function."
-      ),
+      (Some(Typedef), Some(init)) => {
+        self.add_error(Custom("typedef with an initializer".to_string()), span);
+        def(init)
+      },
       (Some(ThreadLocal), _) =>
         unreachable!("{ThreadLocal} should not be handled here"),
     }
@@ -1021,13 +1051,10 @@ impl<'c> Sema<'c> {
   ) -> sd::VarDefRef<'c> {
     use Storage::*;
     match original_storage {
-      Automatic | Register => (),
+      Automatic | Register | Typedef => (),
       Extern if initializer.is_some() =>
         self.add_error(LocalExternVarWithInitializer(name), span),
       Extern | Static | Constexpr => todo!(),
-      Typedef => todo!(
-        "{Typedef} handling requires medium-refect of the vardef function."
-      ),
       ThreadLocal => unreachable!("{ThreadLocal} should not be handled here"),
     }
     if (qualified_type
@@ -1817,14 +1844,13 @@ impl<'c> Sema<'c> {
       left.unqualified_type().is_pointer()
         || right.unqualified_type().is_pointer()
     );
+    use Operator::*;
+
     let ptr_with_nullptr = |ptr: se::ExprRef<'c>, nullptr: se::ExprRef<'c>| {
       let ptr_type = *ptr.qualified_type();
       let casted_nullptr = se::Expression::new_rvalue(
         self.context(),
-        se::ImplicitCast::new(
-          nullptr,
-          ::rcc_ast::types::CastType::NullptrToPointer,
-        ),
+        se::ImplicitCast::new(nullptr, NullptrToPointer),
         ptr_type,
         span,
       );
@@ -1854,17 +1880,17 @@ impl<'c> Sema<'c> {
               left.qualified_type().to_string(),
               right.qualified_type().to_string(),
             )
-            +(Severity::Error) // should be warning
+            + Severity::Error // should be warning
             +span,
           )
         }
       },
 
       (Type::Pointer(_), Type::Primitive(Primitive::Nullptr))
-        if matches!(operator, Operator::EqualEqual | Operator::NotEqual) =>
+        if matches!(operator, EqualEqual | NotEqual) =>
         ptr_with_nullptr(left, right),
       (Type::Primitive(Primitive::Nullptr), Type::Pointer(_))
-        if matches!(operator, Operator::EqualEqual | Operator::NotEqual) =>
+        if matches!(operator, EqualEqual | NotEqual) =>
         ptr_with_nullptr(right, left),
       (l, r) => Err(
         InvalidComparison(l.to_string(), r.to_string(), operator)
@@ -2286,7 +2312,7 @@ impl<'c> Sema<'c> {
     }
   }
 
-  fn condition(&mut self, condition: Expression<'c>) -> ExprRef<'c> {
+  fn condition(&mut self, condition: pe::Expression<'c>) -> ExprRef<'c> {
     self
       .expression(condition)
       .and_then(|e| {

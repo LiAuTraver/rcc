@@ -203,9 +203,13 @@ mod data {
     )]
     AddressofOperandRegVar(Elem),
     #[error("Global variable cannot be declared with 'register'")]
-    GlobalRegVar(StrRef<'c>),
+    GlobalRegVar,
     #[error("Global variable cannot be declared with automatic storage")]
-    GlobalAutoVar(StrRef<'c>),
+    GlobalAutoVar,
+    #[error(
+      "Global variable cannot be declared with variable-length array type"
+    )]
+    GlobalVLA,
     #[error(
       "variable declared with 'register' can only have pointer type, got '{0}'"
     )]
@@ -369,6 +373,10 @@ mod data {
     MissingReturnValue,
     #[error("unreachable code")]
     UnreachableCode,
+
+    // warnings ^^^ / vvv still warnings, but for extensions/non-standards
+    #[error("Variable length array folded to constant array as an extension")]
+    ConstVLAFolds,
   }
   // TODO: reduce the size to 64 and lower vbytes.
   static_assert!(

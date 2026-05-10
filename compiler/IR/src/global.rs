@@ -27,19 +27,7 @@ impl From<Storage> for Linkage {
     }
   }
 }
-// impl Linkage {
-//   pub fn maybe_tentative(decl: DeclRef) -> Self {
-//     use Linkage::*;
-//     use Storage::*;
-//     use VarDeclKind::*;
-//     match (decl.storage_class(), decl.declkind()) {
-//       (_, Tentative) => Common,
-//       (Extern, _) => External,
-//       (Static, _) => Internal,
-//       _ => panic!("invalid call"),
-//     }
-//   }
-// }
+
 #[derive(Debug)]
 pub enum Global<'ir> {
   Function(Function<'ir>),

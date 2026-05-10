@@ -547,6 +547,9 @@ impl<'c> Builder<'c> {
       Declaration | Tentative
     ));
     debug_assert!(variable.initializer.is_none());
+    if variable.declaration.is_typedef() {
+      return;
+    }
     // not reached the end nor the node is not recorded, just record it and wait for the definition.
     let value_id = if let Some(value_id) = self
       .globals
@@ -605,6 +608,7 @@ impl<'c> Builder<'c> {
 
   fn global_vardef(&mut self, variable: sd::VarDefRef<'c>) {
     debug_assert!(variable.declaration.is_definition());
+    debug_assert!(!variable.declaration.is_typedef());
 
     let initializer = match variable.initializer {
       Some(sd::Initializer::Scalar(expr)) => Some(global::Initializer::Scalar(
@@ -666,20 +670,14 @@ impl<'c> Builder<'c> {
 
   fn local_vardef(&mut self, var_def: sd::VarDefRef<'c>) {
     use Storage::*;
-    debug_assert!(!matches!(
-      var_def.declaration.latest_decl().storage_class(),
-      Typedef | ThreadLocal
-    ));
-    if matches!(
-      var_def.declaration.latest_decl().storage_class(),
-      Static | Extern | Constexpr
-    ) {
-      todo!("local static/extern variable is not implemented yet!")
-    } else if matches!(
-      var_def.declaration.latest_decl().storage_class(),
-      Register
-    ) {
+    match var_def.declaration.latest_decl().storage_class() {
+      Static | Extern | Constexpr => {
+        todo!("local static/extern variable is not implemented yet!")
+      },
       // we just ignore the register storage classifier.
+      Register | Automatic => (),
+      ThreadLocal => unreachable!("not valid"),
+      Typedef => return,
     }
     let declaration = var_def.declaration;
     let value_id =
