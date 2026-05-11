@@ -1,18 +1,8 @@
-//! stands for *Unit of Measurement*. Type-Safe wrappers.
+//! stands for *Unit of Measurement*. Type-Safe wrappers. All Units are *immutable* and *trivially-copyable*.
 //!
 //! Type is all you need.
-
-mod alignment;
-mod size;
-
-pub use self::{
-  alignment::Alignment,
-  size::{Size, SizeBit},
-};
-
 #[macro_use]
 mod macros {
-  #[macro_export]
   macro_rules! impl_fmt {
     ($trait:ident, $class:ident) => {
       impl ::std::fmt::$trait for $class {
@@ -23,14 +13,12 @@ mod macros {
       }
     };
   }
-  #[macro_export]
   macro_rules! impl_all_fmt {
       ($class:ident => $($trait:ident),*) => {
-          $($crate::impl_fmt!($trait, $class);)*
+          $(impl_fmt!($trait, $class);)*
       };
   }
 
-  #[macro_export]
   macro_rules! impl_bin_ops {
     ($trait:ident:: $method:ident, $class:ident) => {
       impl const ::std::ops::$trait for $class {
@@ -44,10 +32,17 @@ mod macros {
     };
   }
 
-  #[macro_export]
   macro_rules! impl_all_bin_ops {
     ($class:ident => $($trait:ident:: $method:ident),*) => {
-      $($crate::impl_bin_ops!($trait::$method, $class);)*
+      $(impl_bin_ops!($trait::$method, $class);)*
     };
   }
 }
+
+mod alignment;
+mod size;
+
+pub use self::{
+  alignment::Alignment,
+  size::{Size, SizeBit},
+};

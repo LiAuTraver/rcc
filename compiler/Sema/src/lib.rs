@@ -4,7 +4,7 @@ pub mod statement;
 
 mod conversion;
 mod declref;
-mod folding;
+mod folder;
 mod initialization;
 mod semantics;
 

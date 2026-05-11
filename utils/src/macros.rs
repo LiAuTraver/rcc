@@ -226,6 +226,7 @@ macro_rules! make_trio_for_unit_tuple {
 }
 
 #[macro_export]
+#[collapse_debuginfo(yes)]
 #[cfg(debug_assertions)]
 macro_rules! breakpoint {
   () => {
@@ -246,6 +247,7 @@ macro_rules! breakpoint {
 }
 
 #[macro_export]
+#[collapse_debuginfo(yes)]
 #[cfg(not(debug_assertions))]
 macro_rules! breakpoint {
   () => {{}};
@@ -253,6 +255,7 @@ macro_rules! breakpoint {
 }
 
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! static_assert {
   ($condition:expr $(,)?) => {
     #[allow(clippy::bool_comparison)]
@@ -301,6 +304,7 @@ macro_rules! ensure_is_dyn_compatible {
 
 /// manually roll out the pesudo-`vtable` for enums.
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! static_dispatch {
     (
         $enum_type:ident:      // The Enum
@@ -327,6 +331,7 @@ macro_rules! static_dispatch {
 /// This macro acts like `assert!`,
 /// but with more clarification that it's the program's error, not the user's.
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! contract_assert {
   ($condition:expr) => {{
     if !$condition {
@@ -354,6 +359,7 @@ macro_rules! contract_assert {
 /// It acts like `panic!`,
 /// but with more clarification that it's the program's error, not the user's.
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! contract_violation {
   () => {{
     eprintln!(
@@ -376,6 +382,7 @@ macro_rules! contract_violation {
 
 /// like `todo!` or `unimplemented!`, but indicates a not implemented feature.
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! not_implemented_feature {
   () => {{
     panic!(
@@ -394,6 +401,7 @@ macro_rules! not_implemented_feature {
 
 /// [`assert`] in constant evaluation, [`debug_assert`] in runtime evaluation.
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! const_assert {
   ($cond:expr) => {
     ::core::intrinsics::const_eval_select(
@@ -411,6 +419,7 @@ macro_rules! const_assert {
   };
 }
 #[macro_export]
+#[collapse_debuginfo(yes)]
 macro_rules! const_assert_eq {
   ($left:expr, $right:expr) => {
     $crate::const_assert!($left == $right)

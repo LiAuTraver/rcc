@@ -182,7 +182,6 @@ mod ops {
   use ::std::ops::{Add, Div, Mul, Rem, Sub};
 
   use super::*;
-  use crate::impl_all_bin_ops;
 
   impl_all_bin_ops!(Size => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem);
   impl_all_bin_ops!(SizeBit => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem);
@@ -257,7 +256,6 @@ mod ops {
 }
 mod fmt {
   use super::*;
-  use crate::impl_all_fmt;
 
   impl_all_fmt!(Size => Debug, Display, Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp);
   impl_all_fmt!(SizeBit => Debug, Display, Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp);

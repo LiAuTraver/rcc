@@ -1004,20 +1004,16 @@ impl<'i, 'c> Initialization<'i, 'c> {
     if !self.requires_folding {
       expr
     } else {
-      expr
-        .fold(self.session)
-        .inspect_error(|&e| {
-          if !e.is_empty() {
-            // empty is error node currently
-            self.add_error(
-              ExprNotConstant(format!(
-                "Expression {e} cannot be evaluated to a constant value"
-              )),
-              e.span(),
-            )
-          };
-        })
-        .take()
+      expr.fold(self).unwrap_or_else(|| {
+        // empty is error node currently
+        self.add_error(
+          ExprNotConstant(
+            "Expression cannot be evaluated to a constant value".to_string(),
+          ),
+          expr.span(),
+        );
+        self.__empty_expr
+      })
     }
   }
 
@@ -1038,9 +1034,8 @@ impl<'i, 'c> Initialization<'i, 'c> {
       None?
     }
 
-    use super::folding::FoldingResult::*;
-    match analyzed.fold(self.session) {
-      Success(expr) => {
+    match analyzed.fold(self) {
+      Some(expr) => {
         if !expr.is_integer_constant() {
           self.add_error(
             ExprNotConstant(format!(
@@ -1074,13 +1069,13 @@ impl<'i, 'c> Initialization<'i, 'c> {
           },
         }
       },
-      Failure(expr) => {
+      None => {
         self.add_error(
           ExprNotConstant(format!(
             "array designator index '{}' is not an integer constant expression",
-            expr
+            analyzed
           )),
-          expr.span(),
+          analyzed.span(),
         );
         None?
       },

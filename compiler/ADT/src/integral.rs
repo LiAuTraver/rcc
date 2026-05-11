@@ -155,7 +155,7 @@ impl Integral {
     Self::new(value, width, Unsigned)
   }
 
-  /// give a i1 bool
+  /// give a i1 bool. FIXME: is it correct? i8, i1, or i32?
   #[inline]
   pub const fn from_bool(value: bool) -> Self {
     Self::new_unchecked(value, 1, Unsigned)

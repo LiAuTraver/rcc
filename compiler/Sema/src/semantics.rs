@@ -34,7 +34,7 @@ pub(crate) enum ScopeContext {
 type DeclScopeAssoc<'c> = HashMap<StrRef<'c>, sd::DeclRef<'c>>;
 
 #[derive(Debug, Default)]
-struct DeclEnvironment<'c> {
+pub(crate) struct DeclEnvironment<'c> {
   scopes: Vec<DeclScopeAssoc<'c>>,
 }
 
@@ -51,7 +51,7 @@ impl<'c> DeclEnvironment<'c> {
     self.scopes.len() == 1
   }
 
-  fn find(&self, name: StrRef<'c>) -> Option<sd::DeclRef<'c>> {
+  pub(crate) fn find(&self, name: StrRef<'c>) -> Option<sd::DeclRef<'c>> {
     for scope in self.scopes.iter().rev() {
       if let Some(&declaration) = scope.get(name) {
         return Some(declaration);
@@ -81,7 +81,7 @@ impl<'c> DeclEnvironment<'c> {
 }
 
 pub struct Sema<'c> {
-  environment: DeclEnvironment<'c>,
+  pub(crate) environment: DeclEnvironment<'c>,
   current_function: Option<sd::Function<'c>>,
   current_labels: HashSet<StrRef<'c>>,
   current_gotos: HashSet<StrRef<'c>>,
@@ -215,11 +215,10 @@ impl<'c> Sema<'c> {
       Some(expr) => {
         // check 1. it's a constant expression or not, 2. it's type should
         // be integer type 3. should be non-negative
-        use super::folding::FoldingResult::*;
         match self.expression(expr) {
           Ok(analyzed_expr) if analyzed_expr.qualified_type().is_scalar() =>
             match analyzed_expr.fold(self) {
-              Success(value) =>
+              Some(value) =>
                 if value.is_integer_constant() {
                   ArraySize::Constant(
                     value
@@ -234,19 +233,20 @@ impl<'c> Sema<'c> {
                   );
                   ArraySize::Constant(1)
                 },
-              Failure(expr) =>
+              None =>
                 if self.environment.is_global() {
-                  self.add_error(GlobalVLA, expr.span());
+                  self.add_error(GlobalVLA, analyzed_expr.span());
                   ArraySize::Constant(1)
                 } else {
                   self.add_error(
-                    UnsupportedFeature(format!(
-                      "Expression {expr} could not be evaluated to a \
-                       constant; VLA is not supported currently."
-                    )),
-                    expr.span(),
+                    UnsupportedFeature(
+                      "Expression could not be evaluated to a constant; VLA \
+                       is not supported currently."
+                        .to_string(),
+                    ),
+                    analyzed_expr.span(),
                   );
-                  ArraySize::Variable(Opaque::new(expr))
+                  ArraySize::Variable(Opaque::new(analyzed_expr))
                 },
             },
           Ok(analyzed_expr) => {
@@ -2439,21 +2439,17 @@ impl<'c> Sema<'c> {
 
     Ok(ss::Case::new(
       self,
-      analyzed_value.fold(self).transform(|expr| {
-        if let se::RawExpr::Constant(constant) = &**expr {
-          if constant.is_integral() {
+      analyzed_value
+        .fold(self)
+        .map(|expr| {
+          if let se::RawExpr::Constant(constant) = &**expr {
             constant.clone()
           } else {
-            self.add_error(
-              NonIntegerInCaseStmt(constant.to_string()),
-              expr.span(),
-            );
+            self.add_error(NonIntegerInCaseStmt(expr.to_string()), expr.span());
             Integral::default().into()
           }
-        } else {
-          contract_violation!("constant folding did not yield a constant")
-        }
-      }),
+        })
+        .unwrap(),
       analyzed_body,
       span,
     ))

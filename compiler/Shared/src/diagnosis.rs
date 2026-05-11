@@ -238,6 +238,8 @@ mod data {
     IncompatibleType(StrRef<'c>, QualTyStr, QualTyStr),
     #[error("Incompatible pointer types '{0}' and '{1}'")]
     IncompatiblePointerTypes(QualTyStr, QualTyStr),
+    #[error("Type '{0}' is incomplete")]
+    IncompleteType(QualTyStr),
     #[error("Cannot combine previous storage class '{0}' with '{1}'")]
     StorageSpecsUnmergeable(Storage, Storage),
     #[error("{0}")]

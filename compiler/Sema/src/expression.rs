@@ -257,6 +257,7 @@ impl<'c> ::std::ops::Deref for Expression<'c> {
 ::rcc_utils::ensure_is_pod!(Expression<'_>);
 
 impl<'c> Expression<'c> {
+  #[inline]
   pub fn new(
     context: &Context<'c>,
     variant: impl Into<RawExpr<'c>>,
@@ -272,44 +273,38 @@ impl<'c> Expression<'c> {
     })
   }
 
+  #[inline]
   pub fn new_rvalue(
     context: &Context<'c>,
     variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
     span: SourceSpan,
   ) -> ExprRef<'c> {
-    context.arena().alloc(Self {
-      raw_expr: variant.into(),
-      expr_type,
-      value_category: RValue,
-      span,
-    })
+    Self::new(context, variant, expr_type, RValue, span)
   }
 
+  #[inline]
   pub fn new_lvalue(
     context: &Context<'c>,
     variant: impl Into<RawExpr<'c>>,
     expr_type: QualifiedType<'c>,
     span: SourceSpan,
   ) -> ExprRef<'c> {
-    context.arena().alloc(Self {
-      raw_expr: variant.into(),
-      expr_type,
-      value_category: LValue,
-      span,
-    })
+    Self::new(context, variant, expr_type, LValue, span)
   }
 
+  #[inline]
   pub fn new_error_node(
     context: &Context<'c>,
     expr_type: QualifiedType<'c>,
   ) -> ExprRef<'c> {
-    context.arena().alloc(Self {
-      raw_expr: RawExpr::Empty(Empty::default()),
+    Self::new(
+      context,
+      Empty::default(),
       expr_type,
-      value_category: RValue,
-      ..Default::default()
-    })
+      RValue,
+      Default::default(),
+    )
   }
 
   pub fn unqualified_type(&self) -> TypeRef<'c> {
@@ -327,14 +322,6 @@ impl<'c> Expression<'c> {
   pub fn value_category(&self) -> ValueCategory {
     self.value_category
   }
-
-  // pub fn storage(&self) -> Option<Storage> {
-  //   if !self.is_lvalue() {
-  //     None?
-  //   } else {
-  //     use Storage::*;
-  //   }
-  // }
 }
 
 impl<'c> Expression<'c> {
@@ -342,19 +329,12 @@ impl<'c> Expression<'c> {
     matches!(self.value_category, LValue)
   }
 
-  /// 6.3.2.1:  A modifiable lvalue is an lvalue that does not have array type, does not have an incomplete
+  /// 6.3.2p1:  A modifiable lvalue is an lvalue that does not have array type, does not have an incomplete
   ///           type, does not have a const-qualified type, and if it is a structure or union, does not have any
   ///           member (including, recursively, any member or element of all contained aggregates or unions) with
   ///           a const-qualified type.
   pub fn is_modifiable_lvalue(&self, target_info: &TargetInfo) -> bool {
     self.is_lvalue() && self.qualified_type().is_modifiable(target_info)
-  }
-
-  pub fn into_rvalue(self) -> Self {
-    Self {
-      value_category: RValue,
-      ..self
-    }
   }
 
   pub fn span(&self) -> SourceSpan {
