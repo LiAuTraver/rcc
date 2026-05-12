@@ -2,7 +2,7 @@ use ::rcc_ast::{
   Context,
   types::{FunctionSpecifier, Type},
 };
-use ::rcc_shared::{ArenaVec, CollectIn, SourceSpan};
+use ::rcc_shared::{ArenaVec, Bumper, CollectIn, SourceSpan};
 use ::rcc_utils::StrRef;
 
 pub use crate::declref::DeclRef;
@@ -129,7 +129,7 @@ impl<'c> TranslationUnit<'c> {
     Self {
       declarations: declarations
         .into_iter()
-        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+        .collect_in::<ArenaVec<_>>(context.arena())
         .into_bump_slice(),
     }
   }
@@ -164,7 +164,7 @@ impl<'c> Function<'c> {
   ) -> Self {
     let parameters = parameters
       .into_iter()
-      .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+      .collect_in::<ArenaVec<_>>(context.arena())
       .into_bump_slice();
     Self {
       declref,

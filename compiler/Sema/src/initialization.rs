@@ -16,7 +16,7 @@
 
 use ::rcc_ast::types::{Array, ArraySize, QualifiedType, Type, TypeInfo};
 use ::rcc_parse::{declaration as pd, expression as pe};
-use ::rcc_shared::{ArenaVec, CollectIn, DiagData::*, SourceSpan};
+use ::rcc_shared::{ArenaVec, Bumper, CollectIn, DiagData::*, SourceSpan};
 use ::rcc_utils::RefEq;
 use ::std::{collections::HashMap, ops::Deref};
 use ArraySize::*;
@@ -843,7 +843,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           entry.is_implicit,
         )
       })
-      .collect_in::<ArenaVec<_>>(self.arena().raw_bump())
+      .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice()
   }
 

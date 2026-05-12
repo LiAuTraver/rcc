@@ -1,5 +1,5 @@
 use ::rcc_ast::{Context, blueprints::Placeholder};
-use ::rcc_shared::{ArenaVec, CollectIn, SourceSpan};
+use ::rcc_shared::{ArenaVec, Bumper, CollectIn, SourceSpan};
 use ::rcc_utils::{StrRef, interconvert};
 
 use crate::{
@@ -157,7 +157,7 @@ impl<'c> DeclStmt<'c> {
     Self {
       declarations: declarations
         .into_iter()
-        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+        .collect_in::<ArenaVec<_>>(context.arena())
         .into_bump_slice(),
       span,
     }
@@ -180,7 +180,7 @@ impl<'c> Compound<'c> {
       statements: statements
         .into_iter()
         .map(|statement| statement.into_stmt_ref(context))
-        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+        .collect_in::<ArenaVec<_>>(context.arena())
         .into_bump_slice(),
       span,
     }
@@ -199,7 +199,7 @@ impl<'c> Switch<'c> {
       condition,
       cases: cases
         .into_iter()
-        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+        .collect_in::<ArenaVec<_>>(context.arena())
         .into_bump_slice(),
       default,
       span,
@@ -234,7 +234,7 @@ impl<'c> Case<'c> {
       body: body
         .into_iter()
         .map(|statement| statement.into_stmt_ref(context))
-        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+        .collect_in::<ArenaVec<_>>(context.arena())
         .into_bump_slice(),
       span,
     }
@@ -323,7 +323,7 @@ impl<'c> Default<'c> {
       body: body
         .into_iter()
         .map(|statement| statement.into_stmt_ref(context))
-        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+        .collect_in::<ArenaVec<_>>(context.arena())
         .into_bump_slice(),
       span,
     }
@@ -364,7 +364,7 @@ impl<'c> Statement<'c> {
     statements
       .into_iter()
       .map(|statement| statement.into_stmt_ref(context))
-      .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+      .collect_in::<ArenaVec<_>>(context.arena())
       .into_bump_slice()
   }
 }

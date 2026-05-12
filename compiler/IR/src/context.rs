@@ -1,6 +1,6 @@
 use ::rcc_adt::{FloatFormat, Floating, Integral, SizeBit};
 use ::rcc_ast::{Context as ASTContext, TargetInfo, types as ast};
-use ::rcc_shared::{Arena, Diagnosis, SourceManager, Triple};
+use ::rcc_shared::{Arena, Bumper, Diagnosis, SourceManager, Triple};
 
 use super::{
   ConstantData, Type, TypeRef, Value, ValueID,

@@ -1,3 +1,4 @@
+use ::rcc_shared::{Arena, Bumper, DiagMeta, Severity, Triple};
 use ::rcc_utils::StrRef;
 use ::std::{cell::RefCell, collections::HashSet, ops::Deref};
 
@@ -314,7 +315,6 @@ impl<'c> Context<'c> {
     self.arena
   }
 }
-use ::rcc_shared::{Arena, DiagMeta, Severity, Triple};
 impl<'c> Context<'c> {
   pub fn main_proto_validate(
     &self,

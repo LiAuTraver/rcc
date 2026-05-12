@@ -3,7 +3,9 @@ use ::rcc_ast::{
   blueprints::Placeholder,
   types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeRef},
 };
-use ::rcc_shared::{ArenaVec, CollectIn, Operator, SourceSpan, Storage};
+use ::rcc_shared::{
+  ArenaVec, Bumper, CollectIn, Operator, SourceSpan, Storage,
+};
 use ::rcc_utils::{PtrEq, StrRef};
 
 use crate::declref::DeclRef;
@@ -215,7 +217,7 @@ impl<'c> Call<'c> {
   {
     let arguments = arguments
       .into_iter()
-      .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
+      .collect_in::<ArenaVec<_>>(context.arena())
       .into_bump_slice();
     Self { callee, arguments }
   }

@@ -6,7 +6,7 @@ use ::rcc_lex::Lexer;
 use ::rcc_parse::Parser;
 use ::rcc_sema::Sema;
 use ::rcc_serialize::{ASTDumper, IRPrinter};
-use ::rcc_shared::{Arena, Diagnosis, OpDiag, SourceManager, Triple};
+use ::rcc_shared::{Arena, Bumper, Diagnosis, OpDiag, SourceManager, Triple};
 use ::rcc_utils::DisplayWith;
 enum Stage {
   Lex,

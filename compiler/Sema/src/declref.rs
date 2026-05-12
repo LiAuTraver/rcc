@@ -1,5 +1,5 @@
 use ::rcc_ast::{Context, VarDeclKind, types::QualifiedType};
-use ::rcc_shared::Storage;
+use ::rcc_shared::{Bumper, Storage};
 use ::rcc_utils::{PtrEq, StrRef};
 use ::std::{cell::Cell, marker::PhantomData, ptr::NonNull};
 use VarDeclKind::*;

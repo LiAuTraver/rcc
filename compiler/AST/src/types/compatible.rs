@@ -2,10 +2,9 @@ use ::rcc_shared::{ArenaVec, CollectIn};
 use ::rcc_utils::RefEq;
 
 use super::{
-  Array, ArraySize, Enum, FunctionProto, Pointer, Primitive, QualifiedType,
-  Qualifiers, Record, Type, Union,
+  super::Context, Array, ArraySize, Enum, FunctionProto, Pointer, Primitive,
+  QualifiedType, Qualifiers, Record, Type, Union,
 };
-use crate::context::Context;
 
 /// rules about the `metadata`. used for declaration and definition.
 pub trait Compatibility<'c> {
@@ -263,7 +262,7 @@ impl<'c> Compatibility<'c> for FunctionProto<'c> {
           )),
         )
       })
-      .collect_in::<ArenaVec<_>>(context.arena().raw_bump());
+      .collect_in::<ArenaVec<_>>(context.arena());
     Self::new(
       return_type,
       parameter_types.into_bump_slice(),

@@ -4,7 +4,7 @@ use ::std::{
   ptr::drop_in_place,
 };
 
-use crate::Bump;
+use super::{Bumper, fwd::Bump};
 
 type DropFn = unsafe fn(*mut u8);
 #[derive(Debug, Default)]
@@ -15,30 +15,14 @@ pub struct Arena {
   counter: RefCell<usize>,
 }
 
-/// delibreately write wrappers rather than use [`std::ops::Deref`].
-impl Arena {
-  /// Allocates uninitialized memory for a value of type `T` and returns a mutable reference to it.
-  ///
-  /// # Safety
-  /// If the returned reference is casted to a pointer, **be aware of the provenance**
-  /// and ensure there only exists one (mut) pointer to the same memory.
-  ///
-  /// *always use `cargo miri test` to test code that uses this function to ensure safety!*
-  ///
-  /// Unsafe operations w.r.t. the pointer would easily violate
-  /// [Stacked Borrows](https://github.com/rust-lang/unsafe-code-guidelines/blob/master/wip/stacked-borrows.md).
-  ///
-  /// Note: `cargo miri` would sometimes fail on Windows since File APIs are unsupported.
-  #[inline]
-  #[must_use]
-  pub unsafe fn alloc_uninit<T>(&self) -> *mut T {
-    self.alloc(MaybeUninit::<T>::uninit()).as_mut_ptr()
+/// delibreately write wrappers rather than using [`std::ops::Deref`].
+impl Bumper for Arena {
+  #[inline(always)]
+  unsafe fn alloc_uninit<T>(&self) -> *mut T {
+    self.alloc(MaybeUninit::uninit()).as_mut_ptr()
   }
 
-  /// If the returned reference is casted to a pointer, **beaware of the provenance**.
-  #[must_use]
-  #[allow(clippy::mut_from_ref, reason = "allocator is meant to do this.")]
-  pub fn alloc<T: ::std::fmt::Debug>(&self, val: T) -> &mut T {
+  fn alloc<T: ::std::fmt::Debug>(&self, val: T) -> &mut T {
     #[inline(always)]
     fn _print_meta<T: ::std::fmt::Debug>(val: &T) {
       use ::std::any::type_name;
@@ -83,23 +67,18 @@ impl Arena {
     unsafe { &mut *ptr }
   }
 
-  #[inline]
-  pub fn alloc_slice_copy<T: Copy>(&self, values: &[T]) -> &mut [T] {
+  #[inline(always)]
+  fn alloc_slice_copy<T: Copy>(&self, values: &[T]) -> &mut [T] {
     self.bump.alloc_slice_copy(values)
   }
 
   #[inline(always)]
-  pub fn alloc_str(&self, src: &str) -> &mut str {
+  fn alloc_str(&self, src: &str) -> &mut str {
     self.bump.alloc_str(src)
   }
 
   #[inline(always)]
-  pub fn raw_bump(&self) -> &Bump {
-    &self.bump
-  }
-
-  #[inline(always)]
-  pub fn alloc_slice_fill_iter<T, I>(&self, iter: I) -> &mut [T]
+  fn alloc_slice_fill_iter<T, I>(&self, iter: I) -> &mut [T]
   where
     I: IntoIterator<Item = T>,
     I::IntoIter: ExactSizeIterator,
@@ -109,13 +88,20 @@ impl Arena {
 }
 impl Drop for Arena {
   fn drop(&mut self) {
-    self
-      .registry
-      .borrow()
-      .iter()
-      .rev()
-      .for_each(|(ptr, drop_fn)| unsafe {
-        drop_fn(*ptr);
-      });
+    unsafe {
+      self
+        .registry
+        .borrow()
+        .iter()
+        .rev()
+        .for_each(|(ptr, drop_fn)| drop_fn(*ptr));
+    }
+  }
+}
+
+impl Arena {
+  #[inline(always)]
+  pub(crate) fn raw_bump(&self) -> &Bump {
+    &self.bump
   }
 }

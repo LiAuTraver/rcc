@@ -314,7 +314,7 @@ impl<'c> Sema<'c> {
         }
         qualified_type
       })
-      .collect_in::<ArenaVec<_>>(self.arena().raw_bump());
+      .collect_in::<ArenaVec<_>>(self.arena());
     Ok((
       self
         .make_function_proto(
@@ -353,7 +353,7 @@ impl<'c> Sema<'c> {
           .apply_modifiers_for_varty(base_type, modifiers)
           .parameter_adjustment(self)
       })
-      .collect_in(self.arena().raw_bump())
+      .collect_in(self.arena())
   }
 
   fn parse_parameters(
@@ -732,13 +732,13 @@ impl<'c> Sema<'c> {
       .current_labels
       .iter()
       .copied()
-      .collect_in::<ArenaVec<_>>(self.arena().raw_bump())
+      .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice();
     let gotos = self
       .current_gotos
       .iter()
       .copied()
-      .collect_in::<ArenaVec<_>>(self.arena().raw_bump())
+      .collect_in::<ArenaVec<_>>(self.arena())
       .into_bump_slice();
     let analyzed_body = ss::Compound::new(self, statements, body.span);
 
