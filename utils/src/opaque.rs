@@ -1,6 +1,6 @@
 use crate::ensure_is_pod;
 
-/// An opaque handle that can store a pointer to any type, with optional debug information for type checking in debug mode.
+/// An `const void *`-like opaque handle that can store a pointer to any type, with optional debug information for type checking in debug mode.
 /// This is served as a workaround to avoid both [`Box<dyn Any>`] and cyclic dependencies between modules.
 ///
 /// You should always know what type you stored in the opaque handle, and retrieve it with the correct type,
@@ -11,10 +11,13 @@ use crate::ensure_is_pod;
 /// In debug mode, it would *panic* if the wrong type is retrieved to help catch potential bugs.
 ///
 /// The struct and it's methods are all `const`-compatible, so it can be used in const contexts as well.
+///
+/// # UB!!!
+/// acquire a mut ref or ptr(aka. `void*`) is **UB** and is violating aliasing rules. it's a bug and those function should be removed.
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Opaque {
-  ptr: *mut ::std::ffi::c_void,
+  ptr: *mut u8,
   type_name: &'static str,
   // type_id: TypeId, //< T': static makes the struct with lifetime specs unusable here.
 }
@@ -23,7 +26,7 @@ pub struct Opaque {
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Opaque {
-  ptr: *mut ::std::ffi::c_void,
+  ptr: *mut u8,
 }
 
 ensure_is_pod!(Opaque);
@@ -34,9 +37,10 @@ impl Opaque {
   /// Making a wrapper with [`PhantomData`](::std::marker::PhantomData) is recommended.
   #[must_use]
   #[allow(clippy::unnecessary_cast)]
+  #[inline(always)]
   pub const fn new<T>(data: &T) -> Self {
     Self {
-      ptr: &raw const *data as *const T as *mut ::std::ffi::c_void,
+      ptr: &raw const *data as *const T as *mut u8,
       #[cfg(debug_assertions)]
       type_name: ::std::any::type_name::<T>(),
       // #[cfg(debug_assertions)]
@@ -44,25 +48,8 @@ impl Opaque {
     }
   }
 
-  /// Retrieves a raw pointer to the stored data, with an optional type check in debug mode.
-  ///
-  /// Usually this is not the preferred way to retrieve the data, and [`Self::get_ref`] or [`Self::get_ref_mut`] should be used instead.
-  ///
-  /// ```rust
-  /// use ::rcc_utils::Opaque;
-  ///
-  /// let value = 42;
-  /// let opaque = Opaque::new(&value);
-  /// let ptr = opaque.get_ptr::<i32>();
-  /// let value_ref = unsafe { &*ptr };
-  /// let mut value_ref_mut = unsafe { &mut *ptr };
-  /// ```
-  ///
-  /// ## Safety
-  /// The caller must ensure that the type `T` matches the actual type of the stored data,
-  /// otherwise it is *undefined behavior*.
-  #[must_use]
-  pub const fn get_ptr<T>(self) -> *mut T {
+  #[inline(always)]
+  const fn check<T>(self) {
     #[cfg(debug_assertions)]
     {
       fn do_panic<T>(this: Opaque) -> ! {
@@ -78,11 +65,45 @@ impl Opaque {
       }
 
       if self.type_name != ::std::any::type_name::<T>() {
-        use ::core::intrinsics::const_eval_select;
-
-        const_eval_select((self,), static_assertion::<T>, do_panic::<T>)
+        ::core::intrinsics::const_eval_select(
+          (self,),
+          static_assertion::<T>,
+          do_panic::<T>,
+        )
       }
     }
+  }
+
+  /// Retrieves a raw pointer to the stored data, with an optional type check in debug mode.
+  ///
+  /// Usually this is not the preferred way to retrieve the data, and [`Self::get_ref`] or [`Self::get_ref_mut`] should be used instead.
+  ///
+  /// ```rust
+  /// use ::rcc_utils::Opaque;
+  ///
+  /// let value = 42;
+  /// let opaque = Opaque::new(&value);
+  /// let ptr = opaque.get_ptr::<i32>();
+  /// let value_ref = unsafe { &*ptr };
+  /// // let mut value_ref_mut = unsafe { &mut *ptr }; // UB.
+  /// ```
+  ///
+  /// ## Safety
+  /// The caller must ensure that the type `T` matches the actual type of the stored data,
+  /// otherwise it is *undefined behavior*.
+  #[must_use]
+  #[inline(always)]
+  pub const fn get_ptr<T>(self) -> *const T {
+    self.check::<T>();
+
+    self.ptr as *const T
+  }
+
+  #[must_use]
+  #[inline(always)]
+  #[deprecated(note = "UB")]
+  pub const fn get_ptr_mut<T>(self) -> *mut T {
+    self.check::<T>();
 
     self.ptr as *mut T
   }
@@ -99,43 +120,46 @@ impl Opaque {
   /// let value_ref: &i32 = opaque.get_ref::<i32>();
   /// ```
   #[must_use]
-  #[inline]
+  #[inline(always)]
   pub const fn get_ref<T>(&self) -> &T {
     unsafe { &*self.get_ptr::<T>() }
   }
 
   /// Retrieves a mutable reference to the stored data.
   ///
-  /// ```rust
+  /// ```rust, ignore(reason = "UB")
   /// use ::rcc_utils::Opaque;
   ///
-  /// let value = 42;
-  /// let mut opaque = Opaque::new(&value);
+  /// let mut value = 42;
+  /// let mut opaque = Opaque::new(&mut value);
   /// let value_ref_mut: &mut i32 = opaque.get_ref_mut::<i32>();
   /// ```
   #[must_use]
-  #[inline]
+  #[inline(always)]
+  #[deprecated(note = "UB")]
+  #[allow(deprecated)]
   pub const fn get_ref_mut<T>(&mut self) -> &mut T {
-    unsafe { &mut *self.get_ptr::<T>() }
+    unsafe { &mut *self.get_ptr_mut::<T>() }
   }
 
   /// Retrieves the type name of the stored data in debug mode, or a placeholder string in release mode.
   #[cfg(debug_assertions)]
   #[must_use]
-  #[inline]
+  #[inline(always)]
   const fn type_id_name(&self) -> &'static str {
     self.type_name
   }
 
   #[cfg(not(debug_assertions))]
   #[must_use]
-  #[inline]
+  #[inline(always)]
   const fn type_id_name(&self) -> &'static str {
     "<typeinfo not available>"
   }
 }
 
 impl ::std::fmt::Display for Opaque {
+  #[inline(always)]
   fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
     <*mut _ as ::std::fmt::Pointer>::fmt(&self.ptr, f)
   }
@@ -168,12 +192,24 @@ mod tests {
     }
   }
   #[test]
+  #[ignore = "UB"]
+  #[allow(deprecated)]
   const fn test_mutable() {
-    let value: i32 = 42;
-    let mut opaque: Opaque = Opaque::new(&value);
-    let retrieved_value: &mut i32 = opaque.get_ref_mut::<i32>();
-    *retrieved_value += 1;
-    const_assert_eq!(value, 43);
+    {
+      let value: i32 = 42;
+      let opaque: Opaque = Opaque::new(&value);
+      let retrieved_value: &mut i32 =
+        unsafe { &mut *opaque.get_ptr_mut::<i32>() };
+      *retrieved_value += 1;
+      const_assert_eq!(value, 43);
+    }
+    {
+      let value: i32 = 42;
+      let mut opaque: Opaque = Opaque::new(&value);
+      let retrieved_value: &mut i32 = opaque.get_ref_mut::<i32>();
+      *retrieved_value += 1;
+      const_assert_eq!(value, 43);
+    }
   }
   #[test]
   #[should_panic]

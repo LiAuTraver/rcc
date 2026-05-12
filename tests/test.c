@@ -19,3 +19,6 @@ int main() {
   // puts("Hello");
   return k;
 }
+
+static const int C = 100;
+int arr[C];

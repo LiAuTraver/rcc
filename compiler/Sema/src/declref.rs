@@ -38,10 +38,8 @@ impl<'c> DeclRef<'c> {
     declkind: VarDeclKind,
     previous_decl: Option<DeclRef<'c>>,
   ) -> Self {
-    let node_uninit = context.arena().alloc_uninit();
-
     let this = Self {
-      ptr: unsafe { NonNull::new_unchecked(node_uninit.as_mut_ptr()) },
+      ptr: unsafe { NonNull::new_unchecked(context.arena().alloc_uninit()) },
       marker: PhantomData,
     };
     let (canonical_decl, previous_or_latest_decl) =
@@ -55,14 +53,16 @@ impl<'c> DeclRef<'c> {
       } else {
         (this, this.into())
       };
-    node_uninit.write(DeclNode {
-      name,
-      qualified_type,
-      storage_class,
-      declkind,
-      previous_or_latest_decl,
-      canonical_decl,
-    });
+    unsafe {
+      this.ptr.as_ptr().write(DeclNode {
+        name,
+        qualified_type,
+        storage_class,
+        declkind,
+        previous_or_latest_decl,
+        canonical_decl,
+      })
+    };
 
     this
   }

@@ -54,6 +54,7 @@ where
   /// static const auto p = &len2; // Error.
   /// ```
   /// This differs in C and C++, not sure fr.
+  #[allow(unused)]
   relaxed_static_const_var: bool,
 }
 impl<'i, 'c> Deref for Folder<'i, 'c> {
@@ -321,32 +322,32 @@ impl<'c> Folder<'_, 'c> {
     }
   }
 }
-pub trait F<'c, VariantTy> {
+pub trait Fold<'c, VariantTy> {
   #[must_use]
   fn fold(&self, variant: &VariantTy) -> FR<'c>;
 }
-impl<'c> F<'c, RawExpr<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, RawExpr<'c>> for Folder<'_, 'c> {
   fn fold(&self, raw_expr: &RawExpr<'c>) -> FR<'c> {
     ::rcc_utils::static_dispatch!(
       RawExpr: raw_expr,
-      |variant| <Self as F<'c, _>>::fold(self, variant) =>
+      |variant| <Self as Fold<'c, _>>::fold(self, variant) =>
       Empty Constant Unary Binary Call Paren MemberAccess Ternary SizeOf
       CStyleCast ArraySubscript CompoundLiteral Variable ImplicitCast CompoundAssign
     )
   }
 }
-impl<'c> F<'c, Empty> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Empty> for Folder<'_, 'c> {
   #[inline(always)]
   fn fold(&self, _empty: &Empty) -> FR<'c> {
     None
   }
 }
-impl<'c> F<'c, Constant<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Constant<'c>> for Folder<'_, 'c> {
   fn fold(&self, _constant: &Constant<'c>) -> FR<'c> {
     Some(self.expression)
   }
 }
-impl<'c> F<'c, Unary<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Unary<'c>> for Folder<'_, 'c> {
   fn fold(&self, unary: &Unary<'c>) -> FR<'c> {
     debug_assert!(
       unary.operator.unary(),
@@ -379,7 +380,7 @@ impl<'c> F<'c, Unary<'c>> for Folder<'_, 'c> {
     Some(self.new_constant(constant))
   }
 }
-impl<'c> F<'c, Binary<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Binary<'c>> for Folder<'_, 'c> {
   fn fold(&self, binary: &Binary<'c>) -> FR<'c> {
     debug_assert!(
       binary.operator.binary(),
@@ -478,24 +479,24 @@ impl<'c> F<'c, Binary<'c>> for Folder<'_, 'c> {
     Some(self.new_constant(constant))
   }
 }
-impl<'c> F<'c, Call<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Call<'c>> for Folder<'_, 'c> {
   #[inline(always)]
   fn fold(&self, _call: &Call<'c>) -> FR<'c> {
     None
   }
 }
-impl<'c> F<'c, Paren<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Paren<'c>> for Folder<'_, 'c> {
   #[inline(always)]
   fn fold(&self, paren: &Paren<'c>) -> FR<'c> {
     paren.expr.fold(self)
   }
 }
-impl<'c> F<'c, MemberAccess<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, MemberAccess<'c>> for Folder<'_, 'c> {
   fn fold(&self, _member_access: &MemberAccess<'c>) -> FR<'c> {
     unimplemented!()
   }
 }
-impl<'c> F<'c, Ternary<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Ternary<'c>> for Folder<'_, 'c> {
   fn fold(&self, ternary: &Ternary<'c>) -> FR<'c> {
     debug_assert!(
       ternary
@@ -513,7 +514,7 @@ impl<'c> F<'c, Ternary<'c>> for Folder<'_, 'c> {
     }
   }
 }
-impl<'c> F<'c, SizeOf<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, SizeOf<'c>> for Folder<'_, 'c> {
   fn fold(&self, sizeof: &SizeOf<'c>) -> FR<'c> {
     match sizeof.sizeof {
       SizeOfKind::Expression(expression) => expression.fold(self),
@@ -531,24 +532,24 @@ impl<'c> F<'c, SizeOf<'c>> for Folder<'_, 'c> {
     }
   }
 }
-impl<'c> F<'c, CStyleCast<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, CStyleCast<'c>> for Folder<'_, 'c> {
   fn fold(&self, _cstyle_cast: &CStyleCast<'c>) -> FR<'c> {
     unimplemented!()
   }
 }
-impl<'c> F<'c, ArraySubscript<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, ArraySubscript<'c>> for Folder<'_, 'c> {
   /// always fails folding in C, unlike C++.
   #[inline(always)]
   fn fold(&self, _array_subscript: &ArraySubscript<'c>) -> FR<'c> {
     None
   }
 }
-impl<'c> F<'c, CompoundLiteral> for Folder<'_, 'c> {
+impl<'c> Fold<'c, CompoundLiteral> for Folder<'_, 'c> {
   fn fold(&self, _compound_literal: &CompoundLiteral) -> FR<'c> {
     unimplemented!()
   }
 }
-impl<'c> F<'c, Variable<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
   fn fold(&self, variable: &Variable<'c>) -> FR<'c> {
     use ::rcc_ast::types::Qualifiers;
     use ::rcc_shared::Storage::*;
@@ -559,24 +560,29 @@ impl<'c> F<'c, Variable<'c>> for Folder<'_, 'c> {
           .qualifiers
           .contains(Qualifiers::Volatile) =>
         None,
-      Static
-        if variable
-          .qualified_type()
-          .qualifiers
-          .contains(Qualifiers::Const)
-          && self.relaxed_static_const_var =>
-      {
-        // let declnode =
-        //   self.environment.find(variable.name()).or_else(|| {
-        //     eprintln!(
-        //       "variable with name {} not found. shouldn't be possible.",
-        //       variable.name()
-        //     );
-        //     None
-        //   })?;
-        // todo!()
-        None
-      },
+      // Static
+      //   if variable
+      //     .qualified_type()
+      //     .qualifiers
+      //     .contains(Qualifiers::Const)
+      //     && self.relaxed_static_const_var =>
+      //   self
+      //     .environment
+      //     .find(variable.name())
+      //     .and_then(DeclRef::definition)
+      //     .map(DeclRef::as_vardef)
+      //     .and_then(|vardef| {
+      //       debug_assert!(::std::ptr::eq(&vardef.declaration, &**variable));
+      //       vardef.initializer.as_ref().and_then(
+      //         |initializer| match initializer {
+      //           Initializer::Scalar(expression) => expression
+      //             .as_constant()
+      //             .map(|constant| self.new_constant(constant.clone())),
+      //           // unimplemented vvv
+      //           Initializer::List(_) => None,
+      //         },
+      //       )
+      //     }),
       Static | Extern | Automatic | Register => None,
       Constexpr => todo!(),
       // can we reach here?
@@ -585,10 +591,9 @@ impl<'c> F<'c, Variable<'c>> for Folder<'_, 'c> {
     }
   }
 }
-impl<'c> F<'c, ImplicitCast<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, ImplicitCast<'c>> for Folder<'_, 'c> {
   fn fold(&self, implicit_cast: &ImplicitCast<'c>) -> FR<'c> {
     let folded_expr = implicit_cast.expr.fold(self)?;
-    use CastType::*;
 
     let retype_or_reuse = || {
       if RefEq::ref_eq(self.qualified_type(), folded_expr.qualified_type())
@@ -606,6 +611,7 @@ impl<'c> F<'c, ImplicitCast<'c>> for Folder<'_, 'c> {
       "no such implicit cast! only for explicit."
     );
 
+    use CastType::*;
     match implicit_cast.cast_type {
       Noop | ToVoid | LValueToRValue | BitCast => Some(retype_or_reuse()),
       PointerToIntegral | PointerToBoolean => None,
@@ -695,7 +701,7 @@ impl<'c> F<'c, ImplicitCast<'c>> for Folder<'_, 'c> {
     }
   }
 }
-impl<'c> F<'c, CompoundAssign<'c>> for Folder<'_, 'c> {
+impl<'c> Fold<'c, CompoundAssign<'c>> for Folder<'_, 'c> {
   /// should always fail in C.
   #[inline(always)]
   fn fold(&self, _compound_assign: &CompoundAssign<'c>) -> FR<'c> {

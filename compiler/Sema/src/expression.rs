@@ -215,7 +215,7 @@ impl<'c> Call<'c> {
   {
     let arguments = arguments
       .into_iter()
-      .collect_in::<ArenaVec<_>>(context.arena())
+      .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
       .into_bump_slice();
     Self { callee, arguments }
   }

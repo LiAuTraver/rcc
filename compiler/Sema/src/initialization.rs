@@ -843,7 +843,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           entry.is_implicit,
         )
       })
-      .collect_in::<ArenaVec<_>>(self.arena())
+      .collect_in::<ArenaVec<_>>(self.arena().raw_bump())
       .into_bump_slice()
   }
 

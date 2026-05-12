@@ -46,12 +46,14 @@ pub struct Function<'c> {
 }
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct VarDef<'c> {
   pub declaration: DeclRef<'c>,
   pub initializer: Option<Initializer<'c>>,
   pub span: SourceSpan,
 }
-
+// workaround
+::rcc_utils::static_assert!(::std::mem::offset_of!(VarDef, declaration) == 0);
 #[derive(Debug)]
 pub struct Parameter<'c> {
   pub declaration: DeclRef<'c>,
@@ -127,7 +129,7 @@ impl<'c> TranslationUnit<'c> {
     Self {
       declarations: declarations
         .into_iter()
-        .collect_in::<ArenaVec<_>>(context.arena())
+        .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
         .into_bump_slice(),
     }
   }
@@ -162,7 +164,7 @@ impl<'c> Function<'c> {
   ) -> Self {
     let parameters = parameters
       .into_iter()
-      .collect_in::<ArenaVec<_>>(context.arena())
+      .collect_in::<ArenaVec<_>>(context.arena().raw_bump())
       .into_bump_slice();
     Self {
       declref,

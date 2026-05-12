@@ -263,7 +263,7 @@ impl<'c> Compatibility<'c> for FunctionProto<'c> {
           )),
         )
       })
-      .collect_in::<ArenaVec<_>>(context.arena());
+      .collect_in::<ArenaVec<_>>(context.arena().raw_bump());
     Self::new(
       return_type,
       parameter_types.into_bump_slice(),
