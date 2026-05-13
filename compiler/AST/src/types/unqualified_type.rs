@@ -75,6 +75,7 @@ impl<'c> Type<'c> {
       .is_some_and(Primitive::is_character_type)
   }
 
+  #[inline(always)]
   pub fn lookup(self, context: &Context<'c>) -> TypeRef<'c> {
     context.intern(self)
   }
@@ -152,7 +153,7 @@ impl<'c> UnqualExt<'c> for Constant<'c> {
         context,
         context.char_type().into(),
         // '\0'.
-        ArraySize::Constant(str.len().saturating_add(1)),
+        ArraySize::Constant(str.len().saturating_add(1).into()),
       ),
       Self::Nullptr() => Context::nullptr_type(context),
       Self::Address(_) => Context::voidptr_type(context),

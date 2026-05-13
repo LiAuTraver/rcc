@@ -8,7 +8,7 @@ use ::rcc_shared::{
 };
 use ::rcc_utils::{PtrEq, StrRef};
 
-use crate::declref::DeclRef;
+use crate::declaration::DeclRef;
 
 pub(super) type UnaryKind = ::rcc_ast::blueprints::UnaryKind;
 use ::rcc_ast::blueprints::UnaryKind::*;
@@ -459,9 +459,9 @@ impl<'c> Expression<'c> {
   fn is_named_integer_constant_unchecked(variable: &Variable<'c>) -> bool {
     let declaration = variable.declaration;
 
-    (declaration.qualified_type().unqualified_type.is_integer()
-      || declaration.qualified_type().unqualified_type.is_array())
-      && matches!(declaration.storage_class(), Storage::Constexpr)
+    (declaration.qualified_type.is_integer()
+      || declaration.qualified_type.is_array())
+      && matches!(declaration.storage_class, Storage::Constexpr)
   }
 
   /// 6.6.7
@@ -486,7 +486,7 @@ impl<'c> Expression<'c> {
           || (unary.operand.is_lvalue()
             && match &**unary.operand {
               RawExpr::Variable(v) =>
-                matches!(v.storage_class(), Storage::Static | Storage::Extern),
+                matches!(v.storage_class, Storage::Static | Storage::Extern),
               _ => todo!(),
             }),
       _ => false,

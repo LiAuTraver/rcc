@@ -3,7 +3,7 @@ use ::rcc_shared::{ArenaVec, Bumper, CollectIn, SourceSpan};
 use ::rcc_utils::{StrRef, interconvert};
 
 use crate::{
-  declaration::ExternalDeclarationRef,
+  declaration::DeclRef,
   expression::{Constant, ExprRef},
 };
 
@@ -56,7 +56,7 @@ interconvert!(Break, Statement<'c>);
 interconvert!(Continue, Statement<'c>);
 #[derive(Debug)]
 pub struct DeclStmt<'c> {
-  pub declarations: &'c [ExternalDeclarationRef<'c>],
+  pub declarations: &'c [DeclRef<'c>],
   pub span: SourceSpan,
 }
 
@@ -131,7 +131,7 @@ pub struct Goto<'c> {
   pub span: SourceSpan,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Compound<'c> {
   pub statements: &'c [StmtRef<'c>],
   pub span: SourceSpan,
@@ -151,7 +151,7 @@ pub struct Continue {
 impl<'c> DeclStmt<'c> {
   pub fn new(
     context: &Context<'c>,
-    declarations: impl IntoIterator<Item = ExternalDeclarationRef<'c>>,
+    declarations: impl IntoIterator<Item = DeclRef<'c>>,
     span: SourceSpan,
   ) -> Self {
     Self {

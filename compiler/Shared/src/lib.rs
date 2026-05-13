@@ -14,16 +14,8 @@ mod storage;
 mod token;
 mod triple;
 
-pub use fwd::{ArenaString, ArenaVec};
-
-mod fwd {
-  pub use ::bumpalo::{
-    Bump,
-    collections::{
-      CollectIn, FromIteratorIn, String as ArenaString, Vec as ArenaVec,
-    },
-  };
-}
+#[doc(inline)]
+pub use ::bumpalo::collections::{String as ArenaString, Vec as ArenaVec};
 
 pub use self::{
   arena::Arena,
@@ -36,7 +28,7 @@ pub use self::{
   langopts::LangOpts,
   number::Number,
   operator::{Category as OperatorCategory, Operator},
-  redeclarable::Redeclarable,
+  redeclarable::{IntrusiveRedeclarableLink, Redeclarable},
   source_info::{
     Coordinate, Display as SourceDisplay, File as SourceFile,
     Id as SourceFileId, Id as FileId, Index as SourceSpanIndex,

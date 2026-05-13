@@ -90,37 +90,37 @@ impl Storage {
   }
 
   #[inline]
-  pub fn is_static(&self) -> bool {
+  pub fn is_static(self) -> bool {
     matches!(self, Static)
   }
 
   #[inline]
-  pub fn is_extern(&self) -> bool {
+  pub fn is_extern(self) -> bool {
     matches!(self, Extern)
   }
 
   #[inline]
-  pub fn is_thread_local(&self) -> bool {
+  pub fn is_thread_local(self) -> bool {
     matches!(self, ThreadLocal)
   }
 
   #[inline]
-  pub fn is_constexpr(&self) -> bool {
+  pub fn is_constexpr(self) -> bool {
     matches!(self, Constexpr)
   }
 
   #[inline]
-  pub fn is_typedef(&self) -> bool {
+  pub fn is_typedef(self) -> bool {
     matches!(self, Typedef)
   }
 
   #[inline]
-  pub fn is_automatic(&self) -> bool {
+  pub fn is_automatic(self) -> bool {
     matches!(self, Automatic)
   }
 
   #[inline]
-  pub fn is_register(&self) -> bool {
+  pub fn is_register(self) -> bool {
     matches!(self, Register)
   }
 }

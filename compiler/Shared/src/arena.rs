@@ -1,10 +1,11 @@
+use ::bumpalo::Bump;
 use ::std::{
   cell::RefCell,
   mem::{MaybeUninit, needs_drop},
   ptr::drop_in_place,
 };
 
-use super::{Bumper, fwd::Bump};
+use super::Bumper;
 
 type DropFn = unsafe fn(*mut u8);
 #[derive(Debug, Default)]
@@ -15,7 +16,6 @@ pub struct Arena {
   counter: RefCell<usize>,
 }
 
-/// delibreately write wrappers rather than using [`std::ops::Deref`].
 impl Bumper for Arena {
   #[inline(always)]
   unsafe fn alloc_uninit<T>(&self) -> *mut T {
@@ -103,5 +103,10 @@ impl Arena {
   #[inline(always)]
   pub(crate) fn raw_bump(&self) -> &Bump {
     &self.bump
+  }
+
+  #[inline(always)]
+  pub fn new() -> Self {
+    Default::default()
   }
 }

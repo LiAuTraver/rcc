@@ -19,6 +19,7 @@ pub struct SizeBit {
 }
 
 impl SizeBit {
+  #[inline(always)]
   pub const fn new<T: [const] ToUsize + BuiltinIntegerOrBoolean>(
     bits: T,
   ) -> Self {
@@ -29,22 +30,32 @@ impl SizeBit {
 }
 #[rustfmt::skip]
 impl SizeBit {
+  /// 1 bit. Note that this is different from [`Size::U0`] which is truly zero size.
   pub const U0: Self = Self::new(1);
+  /// also 1 bit.
   pub const U1: Self = Self::new(1);
+  /// 8 bits.
   pub const U8: Self = Self::new(8);
+  /// 16 bits.
   pub const U16: Self = Self::new(16);
+  /// 32 bits.
   pub const U32: Self = Self::new(32);
+  /// 64 bits.
   pub const U64:  Self = Self::new(64);
+  /// 80 bits.
   pub const U80:  Self = Self::new(80);
+  /// 128 bits.
   pub const U128: Self = Self::new(128);
+  /// maxinum.
+  pub const MAX: Self = Self::new(usize::MAX);
 }
 impl SizeBit {
-  #[inline]
+  #[inline(always)]
   pub const fn get(self) -> usize {
     self.inner
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn to_builtin<
     T: [const] BuiltinUnsignedOrBoolean + [const] NumFrom<usize>,
   >(
@@ -53,66 +64,75 @@ impl SizeBit {
     self.inner.to()
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn size_bytes(
     self,
   ) -> Result<Size, <Size as TryFrom<SizeBit>>::Error> {
     Size::try_from(self)
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn ceil_to_byte(self) -> Size {
     Size::new(self.inner.div_ceil(8))
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn floor_to_byte(self) -> Size {
     Size::new(self.inner >> 0x03)
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn prev_byte_boundary(self) -> Self {
     Self::new(self.inner & !0x07)
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn next_byte_boundary(self) -> Self {
     Self::new((self.inner + 0x07) & !0x07)
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn is_power_of_two(self) -> bool {
     self.inner.is_power_of_two()
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn next_power_of_two(self) -> Self {
     Self::new(self.inner.next_power_of_two())
   }
 }
 impl Size {
-  #[inline]
+  #[inline(always)]
   pub const fn new(bytes: usize) -> Self {
     Self { inner: bytes }
   }
 }
 #[rustfmt::skip]
 impl Size {
+  /// 0 bytes. Note that this is different from [`SizeBit::U0`] which, for the sake of convenience, set to 1 bit.
   pub const U0: Self = Self::new(0);
+  /// [`U8`](Self::U8) means 1 byte, not 8 bytes.
   pub const U8: Self = Self::new(1);
+  /// 2 bytes.
   pub const U16: Self = Self::new(2);
+  /// 4 bytes.
   pub const U32: Self = Self::new(4);
+  /// 8 bytes.
   pub const U64:  Self = Self::new(8);
+  /// 10 bytes.
   pub const U80:  Self = Self::new(10);
+  /// 16 bytes.
   pub const U128: Self = Self::new(16);
+  /// max
+  pub const MAX: Self = Self::new(usize::MAX);
 }
 impl Size {
-  #[inline]
+  #[inline(always)]
   pub const fn get(self) -> usize {
     self.inner
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn to_builtin<
     T: [const] BuiltinUnsignedOrBoolean + [const] NumFrom<usize>,
   >(
@@ -121,19 +141,29 @@ impl Size {
     self.inner.to()
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn size_bits(self) -> SizeBit {
     SizeBit::new(self.inner * 8)
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn is_power_of_two(self) -> bool {
     self.inner.is_power_of_two()
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn next_power_of_two(self) -> Self {
     Self::new(self.inner.next_power_of_two())
+  }
+
+  #[inline(always)]
+  pub const fn saturating_mul(self, rhs: Self) -> Self {
+    Self::new(self.inner.saturating_mul(rhs.inner))
+  }
+
+  #[inline(always)]
+  pub const fn saturating_add(self, rhs: Self) -> Self {
+    Self::new(self.inner.saturating_add(rhs.inner))
   }
 }
 
@@ -141,22 +171,23 @@ mod cvt {
   use ::rcc_utils::const_pre;
 
   use super::*;
+  use crate::Integral;
 
   impl const From<usize> for Size {
-    #[inline]
+    #[inline(always)]
     fn from(inner: usize) -> Self {
       Self::new(inner)
     }
   }
   impl const From<usize> for SizeBit {
-    #[inline]
+    #[inline(always)]
     fn from(inner: usize) -> Self {
       Self::new(inner)
     }
   }
 
   impl const From<Size> for SizeBit {
-    #[inline]
+    #[inline(always)]
     fn from(size: Size) -> Self {
       const_pre + (size.inner.checked_mul(8).is_some(), "overflow");
       Self::new(size.inner * 8)
@@ -166,7 +197,7 @@ mod cvt {
   impl const TryFrom<SizeBit> for Size {
     type Error = ();
 
-    #[inline]
+    #[inline(always)]
     fn try_from(bits: SizeBit) -> Result<Self, Self::Error> {
       if let Some(bytes) = bits.inner.div_exact(8) {
         Ok(Self::new(bytes))
@@ -175,11 +206,31 @@ mod cvt {
       }
     }
   }
+
+  // impl const From<Integral> for Size {
+  //   #[inline(always)]
+  //   fn from(size: Integral) -> Self {
+  //     size.to_builtin::<usize>().into()
+  //   }
+  // }
+
+  impl const TryFrom<Integral> for Size {
+    type Error = ();
+
+    #[inline(always)]
+    fn try_from(size: Integral) -> Result<Self, Self::Error> {
+      if size.is_negative() {
+        Err(())
+      } else {
+        Ok(size.to_builtin::<usize>().into())
+      }
+    }
+  }
 }
 /// we dont consider overflow here. These ops are just wrappers around the corresponding `usize` ops.
 mod ops {
 
-  use ::std::ops::{Add, Div, Mul, Rem, Sub};
+  use ::std::ops::{Add, Div, Mul, Rem, RemAssign, Sub};
 
   use super::*;
 
@@ -189,7 +240,7 @@ mod ops {
   impl const Add<SizeBit> for Size {
     type Output = SizeBit;
 
-    #[inline]
+    #[inline(always)]
     fn add(self, rhs: SizeBit) -> Self::Output {
       SizeBit::new(self.inner * 8 + rhs.inner)
     }
@@ -198,7 +249,7 @@ mod ops {
   impl const Sub<SizeBit> for Size {
     type Output = SizeBit;
 
-    #[inline]
+    #[inline(always)]
     fn sub(self, rhs: SizeBit) -> Self::Output {
       SizeBit::new(self.inner * 8 - rhs.inner)
     }
@@ -207,7 +258,7 @@ mod ops {
   impl const Mul<usize> for Size {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn mul(self, rhs: usize) -> Self::Output {
       Self::new(self.inner * rhs)
     }
@@ -216,7 +267,7 @@ mod ops {
   impl const Div<usize> for Size {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn div(self, rhs: usize) -> Self::Output {
       Self::new(self.inner / rhs)
     }
@@ -224,7 +275,7 @@ mod ops {
   impl const Rem<usize> for Size {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn rem(self, rhs: usize) -> Self::Output {
       Self::new(self.inner % rhs)
     }
@@ -232,7 +283,7 @@ mod ops {
   impl const Mul<usize> for SizeBit {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn mul(self, rhs: usize) -> Self::Output {
       Self::new(self.inner * rhs)
     }
@@ -240,7 +291,7 @@ mod ops {
   impl const Div<usize> for SizeBit {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn div(self, rhs: usize) -> Self::Output {
       Self::new(self.inner / rhs)
     }
@@ -248,9 +299,21 @@ mod ops {
   impl const Rem<usize> for SizeBit {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn rem(self, rhs: usize) -> Self::Output {
       Self::new(self.inner % rhs)
+    }
+  }
+  impl const RemAssign<usize> for Size {
+    #[inline(always)]
+    fn rem_assign(&mut self, rhs: usize) {
+      self.inner %= rhs;
+    }
+  }
+  impl const RemAssign<Size> for Size {
+    #[inline(always)]
+    fn rem_assign(&mut self, rhs: Size) {
+      self.inner %= rhs.inner;
     }
   }
 }

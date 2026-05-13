@@ -418,7 +418,6 @@ mod tests {
   use ::rcc_utils::static_assert_eq;
   use ::std::{f32, f64};
 
-  #[allow(unused)]
   use super::*;
 
   #[test]

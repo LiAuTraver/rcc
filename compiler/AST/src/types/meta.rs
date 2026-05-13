@@ -1,5 +1,6 @@
 //! this file would be furthur split into multiple files when more impls are added.
 
+use ::rcc_adt::Size;
 use ::rcc_utils::{Opaque, StrRef};
 
 use super::{Primitive, QualifiedType, Type};
@@ -11,13 +12,20 @@ pub struct Pointer<'c> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ::strum_macros::Display)]
 pub enum ArraySize {
-  Constant(usize),
+  Constant(Size),
   /// unsupported dynamic size, but i kept it here for the `full` type category
   ///
   /// TODO: if this holds an expression
   Variable(Opaque),
   /// unspecified size
   Incomplete,
+}
+#[rustfmt::skip]
+impl ArraySize {
+  /// zero size, e.g., `int a[0]`.
+  pub const ZERO: Self = Self::Constant(Size::U0);
+  /// one size, for example, `int a[1]`.
+  pub const ONE: Self = Self::Constant(Size::U8);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -86,7 +94,7 @@ impl<'c> Array<'c> {
   }
 
   #[inline]
-  pub fn size_opt(&self) -> Option<usize> {
+  pub fn size_opt(&self) -> Option<Size> {
     self.size.size_opt()
   }
 
@@ -96,15 +104,15 @@ impl<'c> Array<'c> {
   }
 }
 impl ArraySize {
-  pub fn size(self) -> usize {
+  pub fn size(self) -> Size {
     match self {
       Self::Constant(c) => c,
-      Self::Variable(_) => 0,
-      Self::Incomplete => 0,
+      Self::Variable(_) => Size::U0,
+      Self::Incomplete => Size::U0,
     }
   }
 
-  pub fn size_opt(self) -> Option<usize> {
+  pub fn size_opt(self) -> Option<Size> {
     match self {
       Self::Constant(c) => Some(c),
       Self::Variable(_) => None,

@@ -706,7 +706,6 @@ mod cvt {
 mod tests {
   use ::rcc_utils::{static_assert, static_assert_eq};
 
-  #[allow(unused)]
   use super::*;
 
   #[test]

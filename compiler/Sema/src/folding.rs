@@ -9,6 +9,7 @@ use ::std::ops::Deref;
 
 use super::{
   Sema,
+  declaration::Initializer,
   expression::{
     ArraySubscript, Binary, CStyleCast, Call, CompoundAssign, CompoundLiteral,
     Constant, Empty, ExprRef, Expression, ImplicitCast, MemberAccess, Paren,
@@ -54,7 +55,6 @@ where
   /// static const auto p = &len2; // Error.
   /// ```
   /// This differs in C and C++, not sure fr.
-  #[allow(unused)]
   relaxed_static_const_var: bool,
 }
 impl<'i, 'c> Deref for Folder<'i, 'c> {
@@ -553,38 +553,42 @@ impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
   fn fold(&self, variable: &Variable<'c>) -> FR<'c> {
     use ::rcc_ast::types::Qualifiers;
     use ::rcc_shared::Storage::*;
-    match variable.storage_class() {
+    match variable.storage_class {
       _ if self.expression.is_modifiable_lvalue(self)
         || variable
-          .qualified_type()
+          .qualified_type
           .qualifiers
           .contains(Qualifiers::Volatile) =>
         None,
-      // Static
-      //   if variable
-      //     .qualified_type()
-      //     .qualifiers
-      //     .contains(Qualifiers::Const)
-      //     && self.relaxed_static_const_var =>
-      //   self
-      //     .environment
-      //     .find(variable.name())
-      //     .and_then(DeclRef::definition)
-      //     .map(DeclRef::as_vardef)
-      //     .and_then(|vardef| {
-      //       debug_assert!(::std::ptr::eq(&vardef.declaration, &**variable));
-      //       vardef.initializer.as_ref().and_then(
-      //         |initializer| match initializer {
-      //           Initializer::Scalar(expression) => expression
-      //             .as_constant()
-      //             .map(|constant| self.new_constant(constant.clone())),
-      //           // unimplemented vvv
-      //           Initializer::List(_) => None,
-      //         },
-      //       )
-      //     }),
-      Static | Extern | Automatic | Register => None,
-      Constexpr => todo!(),
+      Static | Extern | Automatic | Register | Constexpr => {
+        if !(matches!(variable.storage_class, Constexpr)
+          || (variable
+            .qualified_type
+            .qualifiers
+            .contains(Qualifiers::Const)
+            && self.relaxed_static_const_var))
+        {
+          None?
+        }
+
+        let vardef = self.environment.find(variable.name)?;
+        debug_assert!(::std::ptr::eq(vardef.canonical(), variable.canonical()));
+        let initializer = vardef
+          .as_variable()
+          .expect("unimplemented for function")
+          .initializer
+          .as_ref()?; //< covers the case of extern var (either reference other TU or has no initializer)
+        if !matches!(variable.storage_class, Constexpr) {
+          self.add_warning(ConstVLAFolds);
+        }
+        match initializer {
+          Initializer::Scalar(expression) => expression
+            .as_constant()
+            .map(|constant| self.new_constant(constant.clone())),
+          // unimplemented vvv
+          Initializer::List(_) => None,
+        }
+      },
       // can we reach here?
       Typedef => None,
       ThreadLocal => unreachable!(),

@@ -377,7 +377,7 @@ mod data {
     UnreachableCode,
 
     // warnings ^^^ / vvv still warnings, but for extensions/non-standards
-    #[error("Variable length array folded to constant array as an extension")]
+    #[error("Variable-length array folded to constant array")]
     ConstVLAFolds,
   }
   // TODO: reduce the size to 64 and lower vbytes.

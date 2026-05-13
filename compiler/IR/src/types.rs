@@ -1,4 +1,4 @@
-use ::rcc_adt::{Alignment, FloatFormat, SizeBit};
+use ::rcc_adt::{Alignment, FloatFormat, Size, SizeBit};
 
 use crate::DataLayout;
 
@@ -27,7 +27,8 @@ impl<'ir> Type<'ir> {
       Pointer() => data_layout.pointer_specs.size_bits(),
       Floating(format) => format.size_bits(),
       Integer(width) => *width,
-      Array(array) => array.element_type.size_bits(data_layout) * array.length,
+      Array(array) =>
+        array.element_type.size_bits(data_layout) * array.length.get(),
       Struct(_) => unimplemented!(),
     }
   }
@@ -73,11 +74,11 @@ pub type TypeRefMut<'ir> = &'ir mut Type<'ir>;
 
 pub struct Array<'ir> {
   pub(super) element_type: TypeRef<'ir>,
-  pub(super) length: usize,
+  pub(super) length: Size,
 }
 
 impl<'ir> Array<'ir> {
-  pub fn new(element_type: TypeRef<'ir>, length: usize) -> Self {
+  pub fn new(element_type: TypeRef<'ir>, length: Size) -> Self {
     Self {
       element_type,
       length,

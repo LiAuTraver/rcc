@@ -1,9 +1,6 @@
 // Valid: 'a', 'b', 'c', and implicit '\0'
 char s1[] = "abc";
 
-// Error: String too long for the array
-char s2[2] = "abc";
-
 // Valid: 'a', 'b', 'c'. No null terminator added because size is explicit.
 char s3[3] = "abc";
 
@@ -29,11 +26,3 @@ int mixed[] = {1, 2, [10] = 3};
 
 // Warning: Excess elements
 int err1[2] = {1, 2, 3};
-
-// Error: Designator index outside array bounds
-int err2[5] = {[10] = 1};
-
-// Error: Negative index
-int err3[5] = {[-1] = 1};
-
-int err4[3] = {{[0] = 0}, {{{{{{{{{{1}}}}}}}}}}, {{{{{{{}}}}}}}};

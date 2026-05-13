@@ -42,19 +42,19 @@ impl ControlFlowContext {
 }
 #[derive(Default)]
 pub struct CanonicalMap<'c> {
-  inner: HashMap<sd::DeclRef<'c>, ValueID>,
+  inner: HashMap<*const sd::ExternalDeclaration<'c>, ValueID>,
 }
 impl<'c> CanonicalMap<'c> {
   #[inline]
   pub fn contains_key(&self, decl: &sd::DeclRef<'c>) -> bool {
     debug_assert!(decl.is_canonical());
-    self.inner.contains_key(decl)
+    self.inner.contains_key(&&raw const **decl)
   }
 
   #[inline]
   pub fn get(&self, decl: &sd::DeclRef<'c>) -> Option<&ValueID> {
     debug_assert!(decl.is_canonical());
-    self.inner.get(decl)
+    self.inner.get(&&raw const **decl)
   }
 
   #[inline]
@@ -104,11 +104,7 @@ impl<'c> Builder<'c> {
   pub fn new(session: SessionRef<'c, OpDiag<'c>>) -> Self {
     Self {
       session,
-      module: Module::new_empty(
-        0,
-        session.triple(),
-        session.ir().data_layout(),
-      ),
+      module: Module::new_empty(0, session.triple(), session.ir()),
       current_block: Default::default(),
       current_function: Default::default(),
       locals: Default::default(),
@@ -287,92 +283,88 @@ impl<'c> Builder<'c> {
 }
 
 impl<'c> Builder<'c> {
-  fn global_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
-    match declaration {
-      sd::ExternalDeclarationRef::Function(function) =>
-        match function.is_definition() {
-          true => self.global_funcdef(function),
-          false => self.funcdecl(function.declref),
-        },
-      sd::ExternalDeclarationRef::Variable(variable) =>
-        match variable.declaration.is_definition() {
-          true => self.global_vardef(variable),
-          false => self.global_vardecl(variable),
-        },
+  fn global_decl(&mut self, declaration: &sd::DeclRef<'c>) {
+    let (is_function, is_definition) = match &declaration.declaration_data {
+      sd::DeclarationData::Function(function) =>
+        (true, function.is_definition()),
+      sd::DeclarationData::Variable(variable) =>
+        (false, variable.is_definition()),
+    };
+    match (is_function, is_definition) {
+      (true, true) => self.global_funcdef(declaration),
+      (true, false) => self.funcdecl(declaration),
+      (false, true) => self.global_vardef(declaration),
+      (false, false) => self.global_vardecl(declaration),
     }
   }
 
   fn funcdecl(&mut self, declaration: sd::DeclRef<'c>) {
-    if self.globals.get(&declaration.canonical_decl()).is_some() {
+    if self.globals.get(&declaration.canonical()).is_some() {
       // do nothing.
     } else {
       // last decl has the most information.
-      let latest_decl = declaration.latest_decl();
+      let latest = declaration.latest();
       let value_id = self.emit(
         global::Function::new_empty(
-          latest_decl.name(),
-          latest_decl.storage_class().into(),
+          latest.name,
+          latest.storage_class.into(),
           Default::default(),
-          latest_decl
-            .qualified_type()
-            .unqualified_type
+          latest
+            .qualified_type
             .as_functionproto_unchecked()
             .is_variadic,
         ),
-        &latest_decl.qualified_type(),
+        &latest.qualified_type,
       );
 
-      self.globals.insert(latest_decl.canonical_decl(), value_id);
+      self.globals.insert(latest.canonical(), value_id);
     }
   }
 
-  fn global_funcdef(&mut self, function: sd::FunctionRef<'c>) {
+  fn global_funcdef(&mut self, function: sd::DeclRef<'c>) {
     debug_assert!(function.is_definition());
 
-    let latest_decl = function.declref.latest_decl();
-    let parameters = function.parameters;
+    let latest = function.latest();
+    let parameters = latest.as_function_unchecked().parameters;
 
-    let function_name = latest_decl.name();
-    let ast_type = latest_decl.qualified_type().unqualified_type;
+    let function_name = latest.name;
+    let ast_type = latest.qualified_type.unqualified_type;
 
-    self.current_function = if let Some(&value_id) =
-      self.globals.get(&function.declref.canonical_decl())
-    {
-      // should be function and declaration-only
-      debug_assert!(
-        self.visit(value_id, |value| value.data.as_constant().is_some_and(
-          |c| c.as_global().is_some_and(|g| g.as_function().is_some_and(
-            |f| !f.is_definition()
-              && function_name
-                == self.visit(value_id, |value| value
-                  .data
-                  .as_constant_unchecked()
-                  .as_global_unchecked()
-                  .as_function_unchecked()
-                  .name)
-              && f.is_variadic
-                == ast_type.as_functionproto_unchecked().is_variadic
-          ))
-        )),
-        "pre-registered function should be declaration-only"
-      );
-      value_id
-    } else {
-      let function_id = self.emit(
-        global::Function::new_empty(
-          function_name,
-          latest_decl.storage_class().into(),
-          Default::default(),
-          ast_type.as_functionproto_unchecked().is_variadic,
-        ),
-        ast_type,
-      );
+    self.current_function =
+      if let Some(&value_id) = self.globals.get(&function.canonical()) {
+        // should be function and declaration-only
+        debug_assert!(
+          self.visit(value_id, |value| value.data.as_constant().is_some_and(
+            |c| c.as_global().is_some_and(|g| g.as_function().is_some_and(
+              |f| !f.is_definition()
+                && function_name
+                  == self.visit(value_id, |value| value
+                    .data
+                    .as_constant_unchecked()
+                    .as_global_unchecked()
+                    .as_function_unchecked()
+                    .name)
+                && f.is_variadic
+                  == ast_type.as_functionproto_unchecked().is_variadic
+            ))
+          )),
+          "pre-registered function should be declaration-only"
+        );
+        value_id
+      } else {
+        let function_id = self.emit(
+          global::Function::new_empty(
+            function_name,
+            latest.storage_class.into(),
+            Default::default(),
+            ast_type.as_functionproto_unchecked().is_variadic,
+          ),
+          ast_type,
+        );
 
-      self
-        .globals
-        .insert(function.declref.canonical_decl(), function_id);
-      function_id
-    };
+        self.globals.insert(function.canonical(), function_id);
+        function_id
+      };
 
     debug_assert!(self.locals.is_empty());
     debug_assert!(self.labels.is_empty());
@@ -406,13 +398,10 @@ impl<'c> Builder<'c> {
       .iter()
       .enumerate()
       .map(|(index, parameter)| {
-        let declaration = parameter.declaration;
-        let ast_type = declaration.qualified_type().unqualified_type;
+        let ast_type = *parameter.qualified_type;
         let arg_id = self.emit(value::Arguments::new(index), ast_type);
         let localed_arg_id = self.emit(inst::Alloca::new(), ast_type);
-        self
-          .locals
-          .insert(declaration.canonical_decl(), localed_arg_id);
+        self.locals.insert(parameter.canonical(), localed_arg_id);
         _ = self.emit(
           inst::Store::new(localed_arg_id, arg_id),
           self.ast().void_type(),
@@ -434,7 +423,9 @@ impl<'c> Builder<'c> {
 
     self.compound(
       function
+        .as_function_unchecked()
         .body
+        .get()
         .as_ref()
         .expect("Precondition: function.is_definition()"),
     );
@@ -536,41 +527,28 @@ impl<'c> Builder<'c> {
     self.current_function = ValueID::null();
   }
 
-  fn global_vardecl(&mut self, variable: sd::VarDefRef<'c>) {
-    debug_assert!(matches!(
-      variable.declaration.declkind(),
-      Declaration | Tentative
-    ));
-    debug_assert!(variable.initializer.is_none());
-    if variable.declaration.is_typedef() {
+  fn global_vardecl(&mut self, variable: sd::DeclRef<'c>) {
+    debug_assert!(matches!(variable.declkind, Declaration | Tentative));
+    debug_assert!(variable.as_variable_unchecked().initializer.is_none());
+    if variable.is_typedef() {
       return;
     }
     // not reached the end nor the node is not recorded, just record it and wait for the definition.
-    let value_id = if let Some(value_id) = self
-      .globals
-      .get(&variable.declaration.canonical_decl())
-      .copied()
+    let value_id = if let Some(value_id) =
+      self.globals.get(&variable.canonical()).copied()
     {
       // nothing.
       value_id
     } else {
-      let latest_decl = variable.declaration.latest_decl();
+      let latest = variable.latest();
       let value_id = self.emit(
-        global::Variable::new(
-          latest_decl.name(),
-          latest_decl.storage_class().into(),
-          None,
-        ),
-        &latest_decl.qualified_type(),
+        global::Variable::new(latest.name, latest.storage_class.into(), None),
+        &latest.qualified_type,
       );
-      self
-        .globals
-        .insert(variable.declaration.canonical_decl(), value_id);
+      self.globals.insert(variable.canonical(), value_id);
       value_id
     };
-    if variable.declaration.is_latest()
-      && matches!(variable.declaration.declkind(), Tentative)
-    {
+    if variable.is_latest() && matches!(variable.declkind, Tentative) {
       self.apply(value_id, |value| {
         value
           .data
@@ -585,14 +563,14 @@ impl<'c> Builder<'c> {
           // 6.9.3p2
           self.diag().add_warning(
             TentativeIncompleteArrType(
-              variable.declaration.name(),
+              variable.name,
               value.ast_type.to_string(),
             ),
             variable.span,
           );
           value.ast_type = ast::Type::Array(ast::Array::new(
             array.element_type,
-            ast::ArraySize::Constant(1usize),
+            ast::ArraySize::ONE,
           ))
           .lookup(self.ast());
           value.ir_type = self.ir_type(value.ast_type);
@@ -601,22 +579,18 @@ impl<'c> Builder<'c> {
     }
   }
 
-  fn global_vardef(&mut self, variable: sd::VarDefRef<'c>) {
-    debug_assert!(variable.declaration.is_definition());
-    debug_assert!(!variable.declaration.is_typedef());
+  fn global_vardef(&mut self, variable: sd::DeclRef<'c>) {
+    debug_assert!(variable.is_definition());
+    debug_assert!(!variable.is_typedef());
 
-    let initializer = match variable.initializer {
+    let initializer = match variable.as_variable_unchecked().initializer {
       Some(sd::Initializer::Scalar(expr)) => Some(global::Initializer::Scalar(
         expr.as_constant_unchecked().clone(),
       )),
       Some(sd::Initializer::List(_)) => todo!("ilist lowering"), // TODO: handle initializers
       None => None,
     };
-    if let Some(value_id) = self
-      .globals
-      .get(&variable.declaration.canonical_decl())
-      .copied()
-    {
+    if let Some(value_id) = self.globals.get(&variable.canonical()).copied() {
       self.apply(value_id, |value| {
         debug_assert!(value.data.as_constant().is_some_and(|c| {
           c.as_global().is_some_and(|g| {
@@ -631,18 +605,16 @@ impl<'c> Builder<'c> {
           .initializer = initializer;
       });
     } else {
-      let latest_decl = variable.declaration.latest_decl();
+      let latest = variable.latest();
       let value_id = self.emit(
         global::Variable::new(
-          latest_decl.name(),
-          latest_decl.storage_class().into(),
+          latest.name,
+          latest.storage_class.into(),
           initializer,
         ),
-        &latest_decl.qualified_type(),
+        &latest.qualified_type,
       );
-      self
-        .globals
-        .insert(variable.declaration.canonical_decl(), value_id);
+      self.globals.insert(variable.canonical(), value_id);
     }
   }
 
@@ -653,19 +625,25 @@ impl<'c> Builder<'c> {
       .for_each(|decl| self.local_decl(decl));
   }
 
-  fn local_decl(&mut self, declaration: &sd::ExternalDeclarationRef<'c>) {
+  fn local_decl(&mut self, declaration: &sd::DeclRef<'c>) {
     debug_assert!(!self.current_block.is_null());
-    match declaration {
-      sd::ExternalDeclarationRef::Function(function_decl) =>
-        self.funcdecl(function_decl.declref),
-      sd::ExternalDeclarationRef::Variable(var_def) =>
-        self.local_vardef(var_def),
+    match &declaration.declaration_data {
+      sd::DeclarationData::Function(_) => {
+        unreachable!("function declaration is not allowed in local scope")
+      },
+      sd::DeclarationData::Variable(_) => self.local_vardef(declaration),
     }
+    // match declaration {
+    //   sd::DeclRef::Function(function_decl) =>
+    //     self.funcdecl(function_decl.declref),
+    //   sd::DeclRef::Variable(var_def) =>
+    //     self.local_vardef(var_def),
+    // }
   }
 
-  fn local_vardef(&mut self, var_def: sd::VarDefRef<'c>) {
+  fn local_vardef(&mut self, var_def: sd::DeclRef<'c>) {
     use Storage::*;
-    match var_def.declaration.latest_decl().storage_class() {
+    match var_def.latest().storage_class {
       Static | Extern | Constexpr => {
         todo!("local static/extern variable is not implemented yet!")
       },
@@ -674,11 +652,10 @@ impl<'c> Builder<'c> {
       ThreadLocal => unreachable!("not valid"),
       Typedef => return,
     }
-    let declaration = var_def.declaration;
-    let value_id =
-      self.emit(inst::Alloca::new(), &declaration.qualified_type());
+    let declaration = var_def;
+    let value_id = self.emit(inst::Alloca::new(), &declaration.qualified_type);
 
-    match var_def.initializer {
+    match var_def.as_variable_unchecked().initializer {
       Some(sd::Initializer::Scalar(expr)) => {
         let init_value_id = self.expression(expr);
         _ = self.emit(
@@ -689,7 +666,7 @@ impl<'c> Builder<'c> {
       Some(sd::Initializer::List(_)) => todo!(),
       None => (),
     };
-    self.locals.insert(declaration.canonical_decl(), value_id);
+    self.locals.insert(declaration.canonical(), value_id);
   }
 }
 
@@ -1224,13 +1201,13 @@ impl<'c> Builder<'c> {
     _ast_type: ast::TypeRef<'c>,
     _span: SourceSpan,
   ) -> ValueID {
-    let can_decl = variable.canonical_decl();
+    let can_decl = variable.canonical();
     if let Some(&vid) = self.locals.get(&can_decl) {
       vid
     } else if let Some(&vid) = self.globals.get(&can_decl) {
       vid
     } else {
-      panic!("undefined variable: {}", can_decl.name())
+      panic!("undefined variable: {}", can_decl.name)
     }
   }
 

@@ -1,4 +1,4 @@
-use ::rcc_adt::{FloatFormat, Floating, Integral, SizeBit};
+use ::rcc_adt::{FloatFormat, Floating, Integral, Size, SizeBit};
 use ::rcc_ast::{Context as ASTContext, TargetInfo, types as ast};
 use ::rcc_shared::{Arena, Bumper, Diagnosis, SourceManager, Triple};
 
@@ -35,6 +35,13 @@ pub struct Context<'c> {
   ir_data_layout: DataLayout,
 
   ast_arena: &'c Arena,
+}
+impl<'c> Deref for Context<'c> {
+  type Target = DataLayout;
+
+  fn deref(&self) -> &Self::Target {
+    &self.ir_data_layout
+  }
 }
 #[derive(Debug)]
 pub struct Session<'c, D: Diagnosis<'c>> {
@@ -177,10 +184,6 @@ impl<'c> Context<'c> {
       _ => panic!("intern other integer constant on the fly"),
     }
   }
-
-  pub fn data_layout(&self) -> &DataLayout {
-    &self.ir_data_layout
-  }
 }
 impl<'c> Context<'c> {
   fn do_intern(&self, value: Type<'c>) -> TypeRef<'c> {
@@ -243,7 +246,7 @@ impl<'c> Context<'c> {
   pub fn make_array(
     &self,
     element_type: TypeRef<'c>,
-    length: usize,
+    length: Size,
   ) -> TypeRef<'c> {
     self.intern(Array::new(element_type, length))
   }
@@ -360,7 +363,7 @@ impl<'c> Context<'c> {
         self.ir_type(&array.element_type),
         match array.size {
           ast::ArraySize::Constant(c) => c,
-          ast::ArraySize::Incomplete | ast::ArraySize::Variable(_) => 0,
+          ast::ArraySize::Incomplete | ast::ArraySize::Variable(_) => Size::U0,
         },
       ),
       ast::Type::FunctionProto(function_proto) => self.make_function(

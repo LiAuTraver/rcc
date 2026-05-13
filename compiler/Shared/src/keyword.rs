@@ -121,7 +121,6 @@ pub enum Keyword {
   ::strum_macros::AsRefStr,
   ::std::marker::ConstParamTy,
 )]
-#[allow(unused)]
 #[strum(serialize_all = "snake_case")]
 /// kept as reserved keyword.
 pub enum Reserved {

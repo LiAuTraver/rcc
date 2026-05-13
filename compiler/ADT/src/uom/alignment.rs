@@ -201,7 +201,6 @@ mod tests {
   use ::rcc_utils::static_assert_eq;
   use Alignment as A;
 
-  #[allow(unused)]
   use super::*;
 
   /// only panic when debug_assertion is enabled at runtime.

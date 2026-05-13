@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(unused_variables)]
 
 use ::rcc_adt::{Integral, SizeBit};
 use ::rcc_ast::Constant;
@@ -58,7 +58,7 @@ fn pretty_print_contant_or_id<'c>(
     printer.write_id(value_id);
   }
 }
-fn print_users<'c>(
+fn _print_users<'c>(
   printer: &mut impl Printer<'c>,
   palette: &Palette,
   value_id: ValueID,
@@ -399,10 +399,7 @@ impl<'c> Print<'c, IRVariable<'_>> for Value<'c> {
     printer.write(", ", &palette.skeleton);
     printer.write("align ", &palette.literal);
     printer.write(
-      printer
-        .ir()
-        .ir_type(self.ast_type)
-        .alignment(printer.ir().data_layout()),
+      printer.ir().ir_type(self.ast_type).alignment(printer.ir()),
       &palette.meta,
     );
 
@@ -429,7 +426,7 @@ impl<'c> Print<'c, BasicBlock> for Value<'c> {
       }
 
       Printable::print(&*value, printer, "", is_last, palette);
-      // print_users(printer, palette, inst_id);
+      // _print_users(printer, palette, inst_id);
       printer.newline();
     });
     let terminator = &*lookup!(printer, variant.terminator);
@@ -445,7 +442,7 @@ impl<'c> Print<'c, BasicBlock> for Value<'c> {
         .as_instruction_unchecked()
         .as_terminator_unchecked(),
     );
-    // print_users(printer, palette, variant.terminator);
+    // _print_users(printer, palette, variant.terminator);
     printer.newline();
   }
 }
@@ -839,7 +836,7 @@ impl<'c> Print<'c, inst::Alloca> for Value<'c> {
 
     printer.write(", ", &palette.skeleton);
     printer.write("align ", &palette.literal);
-    printer.write(ir_type.alignment(printer.ir().data_layout()), &palette.meta);
+    printer.write(ir_type.alignment(printer.ir()), &palette.meta);
   }
 }
 impl<'c> Print<'c, inst::Load> for Value<'c> {
@@ -862,10 +859,7 @@ impl<'c> Print<'c, inst::Load> for Value<'c> {
 
     printer.write(", ", &palette.skeleton);
     printer.write("align ", &palette.literal);
-    printer.write(
-      self.ir_type.alignment(printer.ir().data_layout()),
-      &palette.meta,
-    );
+    printer.write(self.ir_type.alignment(printer.ir()), &palette.meta);
   }
 }
 impl<'c> Print<'c, inst::Store> for Value<'c> {
@@ -895,7 +889,7 @@ impl<'c> Print<'c, inst::Store> for Value<'c> {
       printer
         .ir()
         .ir_type(lookup!(printer, variant.data()).ast_type)
-        .alignment(printer.ir().data_layout()),
+        .alignment(printer.ir()),
       &palette.meta,
     );
   }

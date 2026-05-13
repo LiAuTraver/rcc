@@ -14,6 +14,7 @@
 //! - VLA is treated as [`Incomplete`] and only allows empty initialization.
 //!   it's simple here, but the upstream has blocked it as [`unimplemented!`].
 
+use ::rcc_adt::Size;
 use ::rcc_ast::types::{Array, ArraySize, QualifiedType, Type, TypeInfo};
 use ::rcc_parse::{declaration as pd, expression as pe};
 use ::rcc_shared::{ArenaVec, Bumper, CollectIn, DiagData::*, SourceSpan};
@@ -21,9 +22,19 @@ use ::rcc_utils::RefEq;
 use ::std::{collections::HashMap, ops::Deref};
 use ArraySize::*;
 
-use crate::{Sema, declaration as sd, expression as se, semantics::HandleWith};
+use crate::{
+  Sema,
+  declaration::{self as sd, Index},
+  expression as se,
+  semantics::HandleWith,
+};
+
 #[allow(non_upper_case_globals)]
-const npos: usize = sd::Designator::npos;
+const npos: Index = sd::Designator::npos;
+#[allow(non_upper_case_globals)]
+const zero: Index = Index::U0;
+#[allow(non_upper_case_globals)]
+const one: Index = Index::U8;
 /// See the [Module level](self) for more information.
 pub struct Initialization<'i, 'c>
 where
@@ -59,12 +70,13 @@ enum InitNode<'c> {
   Scalar(pe::Expression<'c>),
   List(ArrayTree<'c>),
 }
+use InitNode::*;
 
 impl InitNode<'_> {
   fn span(&self) -> SourceSpan {
     match self {
-      InitNode::Scalar(expr) => expr.span(),
-      InitNode::List(tree) => tree.span,
+      Scalar(expr) => expr.span(),
+      List(tree) => tree.span,
     }
   }
 }
@@ -72,13 +84,13 @@ impl InitNode<'_> {
 #[derive(Debug)]
 struct TreeEntry<'c> {
   node: InitNode<'c>,
-  index: usize,
+  index: Index,
   is_implicit: bool,
 }
 
 impl<'c> TreeEntry<'c> {
   #[inline]
-  fn new(index: usize, node: InitNode<'c>, is_implicit: bool) -> Self {
+  fn new(index: Index, node: InitNode<'c>, is_implicit: bool) -> Self {
     Self {
       index,
       node,
@@ -90,8 +102,8 @@ impl<'c> TreeEntry<'c> {
 #[derive(Debug, Default)]
 struct ArrayTree<'c> {
   entries: Vec<TreeEntry<'c>>,
-  positions: HashMap<usize, usize>,
-  max_index: usize,
+  positions: HashMap<Index, Size>,
+  max_index: Index,
   span: SourceSpan,
 }
 
@@ -110,7 +122,7 @@ impl<'c> ArrayTree<'c> {
   }
 
   #[inline]
-  fn update_max_index(&mut self, index: usize) {
+  fn update_max_index(&mut self, index: Index) {
     if index == npos {
       return;
     }
@@ -119,19 +131,19 @@ impl<'c> ArrayTree<'c> {
 
   fn insert_leaf(
     &mut self,
-    index: usize,
+    index: Index,
     node: InitNode<'c>,
     is_implicit: bool,
   ) -> bool {
     self.update_max_index(index);
     if let Some(&pos) = self.positions.get(&index) {
-      let entry = &mut self.entries[pos];
+      let entry = &mut self.entries[pos.get()];
       entry.node = node;
       entry.is_implicit = is_implicit;
       true
     } else {
       let pos = self.entries.len();
-      self.positions.insert(index, pos);
+      self.positions.insert(index, pos.into());
       self.entries.push(TreeEntry::new(index, node, is_implicit));
       false
     }
@@ -139,7 +151,7 @@ impl<'c> ArrayTree<'c> {
 
   fn insert_path(
     &mut self,
-    path: &[usize],
+    path: &[Index],
     node: InitNode<'c>,
     is_implicit: bool,
   ) -> bool {
@@ -154,32 +166,30 @@ impl<'c> ArrayTree<'c> {
 
     self.update_max_index(index);
 
-    let pos = if let Some(&pos) = self.positions.get(&index) {
-      pos
-    } else {
-      let pos = self.entries.len();
+    let pos = self.positions.get(&index).copied().unwrap_or_else(|| {
+      let pos = self.entries.len().into();
       self.positions.insert(index, pos);
       self.entries.push(TreeEntry::new(
         index,
-        InitNode::List(ArrayTree::new(node.span())),
+        List(ArrayTree::new(node.span())),
         is_implicit,
       ));
       pos
-    };
+    });
 
-    let entry = &mut self.entries[pos];
+    let entry = &mut self.entries[pos.get()];
     entry.is_implicit = is_implicit;
 
-    let is_overridden = if !matches!(entry.node, InitNode::List(_)) {
-      entry.node = InitNode::List(ArrayTree::new(node.span()));
+    let is_overridden = if !matches!(entry.node, List(_)) {
+      entry.node = List(ArrayTree::new(node.span()));
       true
     } else {
       false
     };
 
     let deeper = match &mut entry.node {
-      InitNode::List(tree) => tree.insert_path(&path[1..], node, is_implicit),
-      InitNode::Scalar(_) => unreachable!(),
+      List(tree) => tree.insert_path(&path[1..], node, is_implicit),
+      Scalar(_) => unreachable!(),
     };
 
     is_overridden || deeper
@@ -289,14 +299,14 @@ impl<'i, 'c> Initialization<'i, 'c> {
       .handle_with(self, self.__empty_expr)
   }
 
-  fn scalar_leaf_width(&self, target_type: QualifiedType<'c>) -> usize {
+  fn scalar_leaf_width(&self, target_type: QualifiedType<'c>) -> Size {
     match target_type.unqualified_type {
       Type::Array(array) => match array.size {
         Constant(size) =>
           size.saturating_mul(self.scalar_leaf_width(array.element_type)),
-        Incomplete | Variable(_) => 0,
+        Incomplete | Variable(_) => zero,
       },
-      _ => 1,
+      _ => one,
     }
   }
 
@@ -304,7 +314,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     &self,
     element_type: QualifiedType<'c>,
   ) -> QualifiedType<'c> {
-    Type::Array(Array::new(element_type, Constant(1)))
+    Type::Array(Array::new(element_type, ArraySize::ONE))
       .lookup(self)
       .into()
   }
@@ -312,17 +322,17 @@ impl<'i, 'c> Initialization<'i, 'c> {
   fn relative_scalar_path_from_flat(
     &self,
     mut object_type: QualifiedType<'c>,
-    mut flat_index: usize,
-  ) -> (Vec<usize>, QualifiedType<'c>) {
+    mut flat_index: Index,
+  ) -> (Vec<Index>, QualifiedType<'c>) {
     let mut path = Vec::default();
 
     // struct/union unimplemented
     while let Type::Array(array) = object_type.unqualified_type {
       let stride = self.scalar_leaf_width(array.element_type);
-      if stride == 0 {
+      if stride == zero {
         // unknown downstream extent. keep this dimension at zero and let
         // deeper dimensions absorb the flat cursor for recovery.
-        path.push(0);
+        path.push(zero);
         object_type = array.element_type;
         continue;
       }
@@ -340,7 +350,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     &self,
     initializer: pd::Initializer<'c>,
     target_type: QualifiedType<'c>,
-    object_path: Vec<usize>,
+    object_path: Vec<Index>,
     state: &mut ArrayTree<'c>,
     kind: Kind,
   ) {
@@ -350,19 +360,14 @@ impl<'i, 'c> Initialization<'i, 'c> {
           let pd::InitializerList { entries, span } = list;
           let mut local_state = ArrayTree::new(span);
           self.consume_array_ilist(entries, target_type, &[], &mut local_state);
-          self.record_array_node(
-            state,
-            object_path,
-            InitNode::List(local_state),
-            kind,
-          );
+          self.record_array_node(state, object_path, List(local_state), kind);
         },
         pd::Initializer::Expression(expression) => {
           if Self::is_char_array_string_literal(&expression, target_type) {
             self.record_array_node(
               state,
               object_path,
-              InitNode::Scalar(expression),
+              Scalar(expression),
               kind,
             );
             return;
@@ -370,15 +375,10 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
           // scalar-to-aggregate brace elision: initialize the first scalar leaf.
           let (mut rel_path, _) =
-            self.relative_scalar_path_from_flat(target_type, 0);
+            self.relative_scalar_path_from_flat(target_type, zero);
           let mut full_path = object_path;
           full_path.append(&mut rel_path);
-          self.record_array_node(
-            state,
-            full_path,
-            InitNode::Scalar(expression),
-            kind,
-          );
+          self.record_array_node(state, full_path, Scalar(expression), kind);
         },
       },
       Type::Record(_) | Type::Union(_) => {
@@ -390,29 +390,21 @@ impl<'i, 'c> Initialization<'i, 'c> {
         );
 
         match initializer {
-          pd::Initializer::Expression(expression) => self.record_array_node(
-            state,
-            object_path,
-            InitNode::Scalar(expression),
-            kind,
-          ),
+          pd::Initializer::Expression(expression) =>
+            self.record_array_node(state, object_path, Scalar(expression), kind),
           pd::Initializer::InitializerList(list) => {
             self.record_array_node(
               state,
               object_path,
-              InitNode::List(ArrayTree::new(list.span)),
+              List(ArrayTree::new(list.span)),
               kind,
             );
           },
         }
       },
       _ => match initializer {
-        pd::Initializer::Expression(expression) => self.record_array_node(
-          state,
-          object_path,
-          InitNode::Scalar(expression),
-          kind,
-        ),
+        pd::Initializer::Expression(expression) =>
+          self.record_array_node(state, object_path, Scalar(expression), kind),
         pd::Initializer::InitializerList(list) => self.consume_braced_scalar(
           target_type,
           object_path,
@@ -427,7 +419,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
   fn consume_braced_scalar(
     &self,
     target_type: QualifiedType<'c>,
-    object_path: Vec<usize>,
+    object_path: Vec<Index>,
     state: &mut ArrayTree<'c>,
     kind: Kind,
     list: pd::InitializerList<'c>,
@@ -445,12 +437,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
     // zeroinit.
     if local_state.is_empty() {
-      self.record_array_node(
-        state,
-        object_path,
-        InitNode::List(local_state),
-        kind,
-      );
+      self.record_array_node(state, object_path, List(local_state), kind);
       return;
     }
 
@@ -471,7 +458,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     } = entry;
 
     debug_assert!(
-      index == 0,
+      index == zero,
       "shall be handled just inside the ilist call few line above and \
        `assume`d it as zeroinit."
     );
@@ -486,7 +473,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     }
 
     debug_assert!(
-      !matches!(node, InitNode::List(ref list) if !list.is_empty()),
+      !matches!(node, List(ref list) if !list.is_empty()),
       "shall be flattened recursively via the execution of this function \
        upstream... except it's zeroinit"
     );
@@ -548,7 +535,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     designators: Vec<pd::Designator<'c>>,
     mut target_type: QualifiedType<'c>,
     span: SourceSpan,
-  ) -> (Vec<usize>, QualifiedType<'c>) {
+  ) -> (Vec<Index>, QualifiedType<'c>) {
     let mut resolved = Vec::default();
 
     for designator in designators {
@@ -562,7 +549,10 @@ impl<'i, 'c> Initialization<'i, 'c> {
                 && let Some(index) = index
                 && index >= bound
               {
-                self.add_error(DesignatorIndexOutOfBound(index, bound), span);
+                self.add_error(
+                  DesignatorIndexOutOfBound(index.get(), bound.get()),
+                  span,
+                );
               }
               resolved.push(index.unwrap_or(npos));
               target_type = array.element_type;
@@ -596,13 +586,13 @@ impl<'i, 'c> Initialization<'i, 'c> {
     &self,
     entries: Vec<pd::InitializerListEntry<'c>>,
     array_type: QualifiedType<'c>,
-    prefix: &[usize], // always empty for now, but leave rooms for extension...
+    prefix: &[Index], // always empty for now, but leave rooms for extension...
     state: &mut ArrayTree<'c>,
   ) {
-    let mut cursor_flat: usize = 0;
+    let mut cursor_flat: Index = zero;
     let element_scalar_width = Ord::max(
       self.scalar_leaf_width(array_type.as_array_unchecked().element_type),
-      1,
+      one,
     );
 
     entries.into_iter().for_each(|entry| {
@@ -620,10 +610,10 @@ impl<'i, 'c> Initialization<'i, 'c> {
   fn consume_array_entry(
     &self,
     array_type: QualifiedType<'c>,
-    prefix: &[usize],
+    prefix: &[Index],
     state: &mut ArrayTree<'c>,
-    cursor_flat: &mut usize,
-    element_scalar_width: usize,
+    cursor_flat: &mut Index,
+    element_scalar_width: Size,
     entry: pd::InitializerListEntry<'c>,
   ) {
     match entry {
@@ -651,10 +641,10 @@ impl<'i, 'c> Initialization<'i, 'c> {
   fn consume_designated_array_entry(
     &self,
     array_type: QualifiedType<'c>,
-    prefix: &[usize],
+    prefix: &[Index],
     state: &mut ArrayTree<'c>,
-    element_scalar_width: usize,
-    cursor_flat: &mut usize,
+    element_scalar_width: Size,
+    cursor_flat: &mut Index,
     designated: pd::Designated<'c>,
   ) {
     let pd::Designated {
@@ -684,20 +674,19 @@ impl<'i, 'c> Initialization<'i, 'c> {
       state,
       Explicit,
     );
-    debug_assert!(first_index != npos);
 
     *cursor_flat = first_index
-      .saturating_add(1)
+      .saturating_add(one)
       .saturating_mul(element_scalar_width);
   }
 
   fn consume_anonymous_array_entry(
     &self,
     array_type: QualifiedType<'c>,
-    prefix: &[usize],
+    prefix: &[Index],
     state: &mut ArrayTree<'c>,
-    element_scalar_width: usize,
-    cursor_flat: &mut usize,
+    element_scalar_width: Size,
+    cursor_flat: &mut Index,
     initializer: pd::Initializer<'c>,
   ) {
     let element_type = array_type.as_array_unchecked().element_type;
@@ -728,7 +717,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
         );
 
         let next_object =
-          (*cursor_flat / element_scalar_width).saturating_add(1);
+          (*cursor_flat / element_scalar_width).saturating_add(one);
         *cursor_flat = next_object.saturating_mul(element_scalar_width);
       },
       pd::Initializer::Expression(expression) => {
@@ -736,7 +725,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           && *cursor_flat >= total
         {
           self.add_warning(ExcessElemInInitializer, expression.span());
-          *cursor_flat = cursor_flat.saturating_add(1);
+          *cursor_flat = cursor_flat.saturating_add(one);
           return;
         }
 
@@ -747,7 +736,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
               && object_index >= bound
             {
               self.add_warning(ExcessElemInInitializer, expression.span());
-              *cursor_flat = cursor_flat.saturating_add(1);
+              *cursor_flat = cursor_flat.saturating_add(one);
               return;
             }
 
@@ -762,7 +751,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
             );
 
             *cursor_flat = object_index
-              .saturating_add(1)
+              .saturating_add(one)
               .saturating_mul(element_scalar_width);
             return;
           }
@@ -775,7 +764,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           self.record_array_node(
             state,
             full_path,
-            InitNode::Scalar(expression),
+            Scalar(expression),
             Implicit,
           );
         } else {
@@ -785,12 +774,12 @@ impl<'i, 'c> Initialization<'i, 'c> {
           self.record_array_node(
             state,
             full_path,
-            InitNode::Scalar(expression),
+            Scalar(expression),
             Implicit,
           );
         }
 
-        *cursor_flat = cursor_flat.saturating_add(1)
+        *cursor_flat = cursor_flat.saturating_add(one)
       },
     }
   }
@@ -798,7 +787,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
   fn record_array_node(
     &self,
     state: &mut ArrayTree<'c>,
-    path: Vec<usize>,
+    path: Vec<Index>,
     node: InitNode<'c>,
     kind: Kind,
   ) {
@@ -810,7 +799,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
     if state.insert_path(&path, node, kind.is_implicit()) {
       /// Diag helper. render a designator path like `[0][2][3]`.
-      fn render_array_path(path: &[usize]) -> String {
+      fn render_array_path(path: &[Index]) -> String {
         debug_assert!(!path.is_empty());
 
         let mut rendered = String::with_capacity(path.len() * 4);
@@ -853,9 +842,8 @@ impl<'i, 'c> Initialization<'i, 'c> {
     target_type: QualifiedType<'c>,
   ) -> sd::Initializer<'c> {
     match node {
-      InitNode::Scalar(expression) =>
-        self.scalar(expression, target_type).into(),
-      InitNode::List(tree) => {
+      Scalar(expression) => self.scalar(expression, target_type).into(),
+      List(tree) => {
         let list_target_type = if target_type.is_array() {
           target_type
         } else {
@@ -890,7 +878,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
     let size = match array.size {
       Constant(size) => Constant(size),
-      Incomplete | Variable(_) => Constant(tree.max_index.saturating_add(1)),
+      Incomplete | Variable(_) => Constant(tree.max_index.saturating_add(one)),
     };
 
     Type::Array(Array::new(element_type, size))
@@ -906,7 +894,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     let mut inferred = None;
 
     for entry in &tree.entries {
-      if let InitNode::List(child) = &entry.node {
+      if let List(child) = &entry.node {
         let child_inferred = self.infer_array_type(default_element_type, child);
         inferred = Some(match inferred {
           None => child_inferred,
@@ -918,11 +906,11 @@ impl<'i, 'c> Initialization<'i, 'c> {
     inferred.unwrap_or(default_element_type)
   }
 
-  fn string_literal_len(expr: se::ExprRef<'c>) -> Option<usize> {
+  fn string_literal_len(expr: se::ExprRef<'c>) -> Option<Size> {
     expr
       .as_constant()
       .and_then(|constant| constant.as_string())
-      .map(|&string| string.len())
+      .map(|&string| string.len().into())
   }
 
   fn is_char_array_string_literal(
@@ -954,7 +942,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     }
 
     let Some(required_size) =
-      Self::string_literal_len(expr).map(|len| len.saturating_add(1))
+      Self::string_literal_len(expr).map(|len| len.saturating_add(one))
     else {
       return target_type;
     };
@@ -1021,7 +1009,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     &self,
     expression: pe::Expression<'c>,
     span: SourceSpan,
-  ) -> Option<usize> {
+  ) -> Option<Size> {
     let analyzed = self
       .expression(expression)
       .handle_with(self, self.__empty_expr);
@@ -1048,24 +1036,21 @@ impl<'i, 'c> Initialization<'i, 'c> {
           None?
         }
 
-        match &**expr {
-          se::RawExpr::Constant(se::Constant::Integral(integral)) => {
-            if integral.is_negative() {
+        match **expr {
+          se::RawExpr::Constant(se::Constant::Integral(integral)) =>
+            integral.try_into().ok().or_else(|| {
               self.add_error(
                 DesignatorIndexNegative(integral.to_builtin()),
                 span,
               );
-              None?
-            } else {
-              Some(integral.to_builtin())
-            }
-          },
+              None
+            }),
           _ => {
             self.add_error(
               NonIntegerInArraySubscript(expr.to_string()),
               expr.span(),
             );
-            None?
+            None
           },
         }
       },
@@ -1077,7 +1062,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
           )),
           analyzed.span(),
         );
-        None?
+        None
       },
     }
   }

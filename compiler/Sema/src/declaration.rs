@@ -1,65 +1,153 @@
+use ::rcc_adt::Size;
 use ::rcc_ast::{
-  Context,
-  types::{FunctionSpecifier, Type},
+  Context, VarDeclKind,
+  types::{FunctionSpecifier, QualifiedType, Type},
 };
-use ::rcc_shared::{ArenaVec, Bumper, CollectIn, SourceSpan};
-use ::rcc_utils::StrRef;
+use ::rcc_shared::{
+  ArenaVec, CollectIn, IntrusiveRedeclarableLink, SourceSpan, Storage,
+  make_intrusive_redeclarable_node,
+};
+use ::rcc_utils::{StrRef, ensure_is_pod, interconvert, make_trio_for};
+use ::std::{cell::Cell, ops::Deref};
 
-pub use crate::declref::DeclRef;
 use crate::{expression::ExprRef, statement::Compound};
 
 #[derive(Debug)]
 pub struct TranslationUnit<'c> {
-  pub declarations: &'c [ExternalDeclarationRef<'c>],
+  pub declarations: &'c [DeclRef<'c>],
 }
 
-pub type FunctionRef<'c> = &'c Function<'c>;
-pub type VarDefRef<'c> = &'c VarDef<'c>;
+pub type DeclRef<'c> = &'c ExternalDeclaration<'c>;
 
-/// FIXME: make external decl a (intrusive-forwarding-)linked list, rather than vec.
-///
-/// should be copyable,,, but leave it there until we make it a list.
+#[repr(C)]
 #[derive(Debug)]
-pub enum ExternalDeclarationRef<'c> {
-  Function(FunctionRef<'c>),
-  Variable(VarDefRef<'c>),
+pub struct ExternalDeclaration<'c> {
+  __intrusive_redeclarable_link: IntrusiveRedeclarableLink<Self>,
+  pub name: StrRef<'c>,
+  pub qualified_type: QualifiedType<'c>,
+  pub storage_class: Storage,
+  /// the complex rule of [`Storage`] and [`VarDeclKind`] are managed by [`Linkage`].
+  pub declkind: VarDeclKind,
+  pub declaration_data: DeclarationData<'c>,
+  pub span: SourceSpan,
 }
 
-impl<'c> ExternalDeclarationRef<'c> {
-  pub fn declref(&self) -> DeclRef<'c> {
-    match self {
-      Self::Function(func) => func.declref,
-      Self::Variable(var) => var.declaration,
+make_intrusive_redeclarable_node!(
+  __intrusive_redeclarable_link => pub ExternalDeclaration[
+    name: StrRef<'c>,
+    qualified_type: QualifiedType<'c>,
+    storage_class: Storage,
+    declkind: VarDeclKind,
+    declaration_data: DeclarationData<'c>,
+    span: SourceSpan
+]: 'c
+);
+impl<'c> ExternalDeclaration<'c> {
+  #[inline]
+  pub fn definition(&self) -> Option<&Self> {
+    self.iter().find(|decl| decl.is_definition())
+  }
+
+  #[inline(always)]
+  pub fn is_typedef(&self) -> bool {
+    self.storage_class.is_typedef()
+  }
+}
+make_trio_for!(Function, DeclarationData, 'c, Function);
+make_trio_for!(VarDef, DeclarationData, 'c, Variable);
+interconvert!(Function, DeclarationData, 'c, Function);
+interconvert!(VarDef, DeclarationData, 'c, Variable);
+impl<'c> Deref for ExternalDeclaration<'c> {
+  type Target = DeclarationData<'c>;
+
+  #[inline(always)]
+  fn deref(&self) -> &Self::Target {
+    &self.declaration_data
+  }
+}
+#[derive(Debug)]
+pub enum DeclarationData<'c> {
+  Function(Function<'c>),
+  Variable(VarDef<'c>),
+}
+impl<'c> DeclarationData<'c> {
+  #[must_use]
+  #[inline(always)]
+  pub fn is_definition(&self) -> bool {
+    ::rcc_utils::static_dispatch!(
+      self,
+      |variant| variant.is_definition() =>
+      Function Variable
+    )
+  }
+}
+#[derive(Debug)]
+pub struct Function<'c> {
+  pub specifier: FunctionSpecifier,
+  /// in C: must be variable and has no initializer.
+  pub parameters: &'c [DeclRef<'c>],
+  pub body: Cell<Option<Compound<'c>>>,
+  pub labels: Cell<&'c [StrRef<'c>]>,
+  pub gotos: Cell<&'c [StrRef<'c>]>,
+}
+impl<'c> Function<'c> {
+  #[must_use]
+  #[inline(always)]
+  pub fn is_definition(&self) -> bool {
+    self.body.get().is_some()
+  }
+
+  #[inline]
+  pub fn new(
+    specifier: FunctionSpecifier,
+    parameters: &'c [DeclRef<'c>],
+    body: Option<Compound<'c>>,
+  ) -> Self {
+    Self {
+      specifier,
+      parameters,
+      body: Cell::new(body),
+      labels: Cell::default(),
+      gotos: Cell::default(),
+    }
+  }
+
+  #[inline]
+  pub fn new_decl(
+    specifier: FunctionSpecifier,
+    parameters: &'c [DeclRef<'c>],
+  ) -> Self {
+    Self::new(specifier, parameters, None)
+  }
+}
+#[derive(Debug)]
+pub struct VarDef<'c> {
+  pub initializer: Option<Initializer<'c>>,
+}
+impl<'c> VarDef<'c> {
+  #[must_use]
+  #[inline(always)]
+  pub fn is_definition(&self) -> bool {
+    self.initializer.is_some()
+  }
+
+  #[inline]
+  pub fn new(initializer: Option<Initializer<'c>>) -> Self {
+    Self { initializer }
+  }
+
+  #[inline]
+  pub const fn decl() -> Self {
+    Self { initializer: None }
+  }
+
+  #[inline]
+  pub fn def(initializer: Initializer<'c>) -> Self {
+    Self {
+      initializer: Some(initializer),
     }
   }
 }
-
-#[derive(Debug)]
-pub struct Function<'c> {
-  pub declref: DeclRef<'c>,
-  pub parameters: &'c [Parameter<'c>],
-  pub specifier: FunctionSpecifier,
-  pub body: Option<Compound<'c>>,
-  pub labels: &'c [StrRef<'c>],
-  pub gotos: &'c [StrRef<'c>],
-  pub span: SourceSpan,
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct VarDef<'c> {
-  pub declaration: DeclRef<'c>,
-  pub initializer: Option<Initializer<'c>>,
-  pub span: SourceSpan,
-}
-// workaround
-::rcc_utils::static_assert!(::std::mem::offset_of!(VarDef, declaration) == 0);
-#[derive(Debug)]
-pub struct Parameter<'c> {
-  pub declaration: DeclRef<'c>,
-  pub span: SourceSpan,
-}
-
 #[derive(Debug)]
 pub enum Initializer<'c> {
   /// fixme: dont do [`ExprRef`] here but store a real expr so that we have cache locality.
@@ -68,8 +156,8 @@ pub enum Initializer<'c> {
   Scalar(ExprRef<'c>),
   List(InitializerList<'c>),
 }
-::rcc_utils::interconvert!(ExprRef, Initializer, 'c, Scalar);
-::rcc_utils::interconvert!(InitializerList, Initializer, 'c, List);
+interconvert!(ExprRef, Initializer, 'c, Scalar);
+interconvert!(InitializerList, Initializer, 'c, List);
 #[derive(Debug)]
 pub struct InitializerList<'c> {
   pub entries: &'c [InitializerListEntry<'c>],
@@ -96,10 +184,11 @@ impl<'c> InitializerListEntry<'c> {
     }
   }
 }
-
+/// currently an alias of [`Size`]. no intention to make it a new type; but for clarity.
+pub type Index = Size;
 #[derive(Debug)]
 pub enum Designator<'c> {
-  Array(usize),
+  Array(Index),
   Field(
     /* Field iterator or so.. */ ::std::marker::PhantomData<&'c u8>,
   ),
@@ -110,21 +199,20 @@ impl Designator<'_> {
   /// since it would require the array has [`usize::MAX`] + 1 length, which is impossible.
   /// Also nobody in SANE would allocate such a huge array...
   #[allow(non_upper_case_globals)]
-  pub const npos: usize = usize::MAX;
+  pub const npos: Index = Index::MAX;
   // pub const nofield...
 }
 
-::rcc_utils::ensure_is_pod!(Initializer<'_>);
-::rcc_utils::ensure_is_pod!(VarDef<'_>);
-::rcc_utils::ensure_is_pod!(Parameter<'_>);
-::rcc_utils::ensure_is_pod!(Function<'_>);
-::rcc_utils::ensure_is_pod!(ExternalDeclarationRef<'_>);
-::rcc_utils::ensure_is_pod!(TranslationUnit<'_>);
+ensure_is_pod!(Initializer<'_>);
+ensure_is_pod!(VarDef<'_>);
+ensure_is_pod!(Function<'_>);
+ensure_is_pod!(DeclRef<'_>);
+ensure_is_pod!(TranslationUnit<'_>);
 
 impl<'c> TranslationUnit<'c> {
   pub fn new(
     context: &Context<'c>,
-    declarations: impl IntoIterator<Item = ExternalDeclarationRef<'c>>,
+    declarations: impl IntoIterator<Item = DeclRef<'c>>,
   ) -> Self {
     Self {
       declarations: declarations
@@ -135,94 +223,6 @@ impl<'c> TranslationUnit<'c> {
   }
 }
 
-impl<'c> Function<'c> {
-  pub fn alloc(
-    context: &Context<'c>,
-    function: Function<'c>,
-  ) -> FunctionRef<'c> {
-    context.arena().alloc(function)
-  }
-
-  #[inline]
-  pub fn new_decl(
-    context: &Context<'c>,
-    declaration: DeclRef<'c>,
-    parameters: impl IntoIterator<Item = Parameter<'c>>,
-    specifier: FunctionSpecifier,
-    span: SourceSpan,
-  ) -> Self {
-    Self::new(context, declaration, parameters, specifier, None, span)
-  }
-
-  pub fn new(
-    context: &Context<'c>,
-    declref: DeclRef<'c>,
-    parameters: impl IntoIterator<Item = Parameter<'c>>,
-    specifier: FunctionSpecifier,
-    body: Option<Compound<'c>>,
-    span: SourceSpan,
-  ) -> Self {
-    let parameters = parameters
-      .into_iter()
-      .collect_in::<ArenaVec<_>>(context.arena())
-      .into_bump_slice();
-    Self {
-      declref,
-      parameters,
-      specifier,
-      body,
-      labels: &[],
-      gotos: &[],
-      span,
-    }
-  }
-
-  #[inline(always)]
-  pub fn is_definition(&self) -> bool {
-    self.body.is_some()
-  }
-}
-
-impl<'c> VarDef<'c> {
-  #[inline]
-  pub fn new(
-    context: &Context<'c>,
-    declaration: DeclRef<'c>,
-    initializer: Option<Initializer<'c>>,
-    span: SourceSpan,
-  ) -> VarDefRef<'c> {
-    context.arena().alloc(Self {
-      declaration,
-      initializer,
-      span,
-    })
-  }
-
-  #[inline]
-  pub fn decl(
-    context: &Context<'c>,
-    declaration: DeclRef<'c>,
-    span: SourceSpan,
-  ) -> VarDefRef<'c> {
-    Self::new(context, declaration, None, span)
-  }
-
-  #[inline]
-  pub fn def(
-    context: &Context<'c>,
-    declaration: DeclRef<'c>,
-    initializer: Initializer<'c>,
-    span: SourceSpan,
-  ) -> VarDefRef<'c> {
-    Self::new(context, declaration, Some(initializer), span)
-  }
-}
-
-impl<'c> Parameter<'c> {
-  pub fn new(declaration: DeclRef<'c>, span: SourceSpan) -> Self {
-    Self { declaration, span }
-  }
-}
 impl<'c> Initializer<'c> {
   pub fn span(&self) -> SourceSpan {
     ::rcc_utils::static_dispatch!(
@@ -269,65 +269,52 @@ mod fmt {
     }
   }
 
-  impl<'c> Display for ExternalDeclarationRef<'c> {
+  impl<'c> Display for ExternalDeclaration<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      ::rcc_utils::static_dispatch!(
-        self,
-        |variant| variant.fmt(f) =>
-        Function Variable
-      )
+      // ::rcc_utils::static_dispatch!(
+      //   self,
+      //   |variant| variant.fmt(f) =>
+      //   Function Variable
+      // )
+      match &self.declaration_data {
+        DeclarationData::Function(function) => match &**self.qualified_type {
+          Type::FunctionProto(proto) => {
+            write!(f, "{} {}(", proto.return_type, self.name)?;
+            for (index, param) in function.parameters.iter().enumerate() {
+              if index > 0 {
+                write!(f, ", ")?;
+              }
+              write!(f, "{}", param)?;
+            }
+            write!(f, ")")?;
+            write!(f, " {}", function)
+          },
+          // _ => write!(f, "{} {} {}", self.qualified_type, self.name, function),
+          _ => unreachable!("can we reach here fr?"),
+        },
+        DeclarationData::Variable(var_def) => write!(
+          f,
+          "{} {} {} {}",
+          self.storage_class, self.qualified_type, self.name, var_def
+        ),
+      }
     }
   }
 
   impl<'c> Display for Function<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      match self.declref.qualified_type().unqualified_type {
-        Type::FunctionProto(proto) => {
-          write!(f, "{} {}(", proto.return_type, self.declref.name())?;
-          for (index, param) in self.parameters.iter().enumerate() {
-            if index > 0 {
-              write!(f, ", ")?;
-            }
-            write!(f, "{}", param)?;
-          }
-          write!(f, ")")?;
-        },
-        _ => {
-          write!(
-            f,
-            "{} {}",
-            self.declref.qualified_type(),
-            self.declref.name()
-          )?;
-        },
-      }
-
-      if let Some(body) = &self.body {
-        write!(f, " {}", body)
+      if let Some(body) = &self.body.get() {
+        write!(f, "{}", body)
       } else {
         write!(f, ";")
       }
     }
   }
 
-  impl<'c> Display for Parameter<'c> {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      write!(f, "{}", self.declaration.qualified_type())
-    }
-  }
-
   impl<'c> Display for VarDef<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      let decl = self.declaration;
-      write!(
-        f,
-        "{} {} {}",
-        decl.storage_class(),
-        decl.qualified_type(),
-        decl.name()
-      )?;
       if let Some(initializer) = &self.initializer {
-        write!(f, " = {}", initializer)?;
+        write!(f, "= {}", initializer)?;
       }
       write!(f, ";")
     }
