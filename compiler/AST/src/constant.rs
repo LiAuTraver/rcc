@@ -33,7 +33,7 @@ pub struct Address<'c> {
   inner: Opaque,
   /// this shall not be [`Address`] again, except is two base is the same: &a[5] - &a[2].
   offset: Option<ConstantRef<'c>>,
-  nothing: PhantomData<StrRef<'c>>,
+  _covariant: PhantomData<StrRef<'c>>,
 }
 
 impl<'c> Address<'c> {
@@ -41,7 +41,7 @@ impl<'c> Address<'c> {
     Self {
       inner,
       offset: None,
-      nothing: PhantomData,
+      _covariant: PhantomData,
     }
   }
 
@@ -49,7 +49,7 @@ impl<'c> Address<'c> {
     Self {
       inner,
       offset: Some(offset),
-      nothing: PhantomData,
+      _covariant: PhantomData,
     }
   }
 

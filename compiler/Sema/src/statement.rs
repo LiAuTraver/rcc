@@ -512,7 +512,17 @@ mod fmt {
       self
         .declarations
         .iter()
-        .try_for_each(|decl| write!(f, "{}\n", decl))
+        .enumerate()
+        .try_for_each(|(index, decl)| {
+          // hard coded for now...
+          if index == 0 {
+            write!(f, "{}", decl)
+          } else if index + 1 == self.declarations.len() {
+            write!(f, "  {}", decl)
+          } else {
+            write!(f, "  {}\n", decl)
+          }
+        })
     }
   }
 

@@ -392,6 +392,8 @@ impl<'c> ImplicitCast<'c> {
 }
 
 /// TODO: reduce the size of this struct.
+///
+/// Maybe for C we only need to store [`Type`] rather than [`QualifiedType`]?
 #[derive(Debug, Clone)]
 pub struct CompoundAssign<'c> {
   pub operator: Operator,
@@ -399,11 +401,11 @@ pub struct CompoundAssign<'c> {
   pub right: ExprRef<'c>,
   /// the type of the left operand which underwent conversions as if it were the left operand of a [`Binary`].
   ///
-  /// Called [`ComputationLHSType`](https://github.com/llvm/llvm-project/blob/23eec1216993f599f90e259e339228ba8b69c58a/clang/include/clang/AST/RawExpr.h#L4304) in clang's AST.
+  /// Called [`ComputationLHSType`](https://github.com/llvm/llvm-project/blob/23eec1216993f599f90e259e339228ba8b69c58a/clang/include/clang/AST/Expr.h#L4304) in clang's AST.
   pub intermediate_left_type: QualifiedType<'c>,
   /// the type of the result of the computation of the left and right as if they were the operands of a [`Binary`].
   ///
-  /// Also called [`ComputationResultType`](https://github.com/llvm/llvm-project/blob/23eec1216993f599f90e259e339228ba8b69c58a/clang/include/clang/AST/RawExpr.h#L4305) in clang.
+  /// Also called [`ComputationResultType`](https://github.com/llvm/llvm-project/blob/23eec1216993f599f90e259e339228ba8b69c58a/clang/include/clang/AST/Expr.h#L4305) in clang.
   pub intermediate_result_type: QualifiedType<'c>,
 }
 
@@ -422,11 +424,6 @@ impl<'c> CompoundAssign<'c> {
       intermediate_result_type,
       intermediate_left_type,
     }
-  }
-
-  #[inline]
-  pub fn associated_operator(&self) -> Operator {
-    self.operator.associated_operator().unwrap()
   }
 }
 
@@ -654,7 +651,7 @@ mod fmt {
   // the specialization for the smart pointer case
   impl<'c> Display for Variable<'c> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      write!(f, "{}", self.declaration)
+      write!(f, "{}", self.name)
     }
   }
 

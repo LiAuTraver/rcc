@@ -26,6 +26,7 @@ use crate::{
   Sema,
   declaration::{self as sd, Index},
   expression as se,
+  folding::Folder,
   semantics::HandleWith,
 };
 
@@ -992,7 +993,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     if !self.requires_folding {
       expr
     } else {
-      expr.fold(self).unwrap_or_else(|| {
+      Folder::new(self, false, expr).doit().unwrap_or_else(|| {
         // empty is error node currently
         self.add_error(
           ExprNotConstant(
@@ -1022,7 +1023,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
       None?
     }
 
-    match analyzed.fold(self) {
+    match Folder::new(self, false, analyzed).doit() {
       Some(expr) => {
         if !expr.is_integer_constant() {
           self.add_error(

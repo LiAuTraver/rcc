@@ -5,6 +5,53 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "cppvsdbg",
+      "request": "launch",
+      "name": "ms-cpp debug rcc",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/target/debug/rcc.exe",
+      "preLaunchTask": "rust: cargo build",
+      "args": [],
+      "environment": [
+        {
+          "name": "RUST_BACKTRACE",
+          "value": "short"
+        },
+        {
+          "name": "RUSTC_TOOLCHAIN",
+          "value": "Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
+        },
+        {
+          "name": "PYTHONIOENCODING",
+          "value": "utf-8"
+        }
+      ],
+      "console": "internalConsole"
+    },
+    {
+      "type": "cppvsdbg",
+      "request": "launch",
+      "name": "ms-cpp debug rcc analyze",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/target/debug/rcc.exe",
+      "preLaunchTask": "rust: cargo build",
+      "args": [
+        "analyze",
+        "${file}"
+      ],
+      "environment": [
+        {
+          "name": "RUST_BACKTRACE",
+          "value": "short"
+        },
+        {
+          "name": "RUSTC_TOOLCHAIN",
+          "value": "Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
+        }
+      ],
+      "console": "internalConsole"
+    },
+    {
       "type": "lldb",
       "request": "launch",
       // codelldb provide better support as for breakpoint
@@ -12,20 +59,12 @@
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/target/debug/rcc.exe",
       "preLaunchTask": "rust: cargo build",
-      "cargo": {
-        "args": [
-          "run"
-        ],
-        "filter": {
-          "name": "rcc",
-          "kind": "bin"
-        }
-      },
       "env": {
         "RUST_BACKTRACE": "short",
         "RUSTC_TOOLCHAIN": "Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
       },
-      "console": "internalConsole",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
       "stopOnEntry": false,
       "sourceLanguages": [
         "rust",
@@ -34,16 +73,58 @@
       ],
     },
     {
-      "type": "lldb-dap",
+      "type": "lldb",
       "request": "launch",
-      "name": "lldb-dap debug rcc",
+      "name": "codelldb debug rcc with files",
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/target/debug/rcc.exe",
-      "env": [
-        "RUST_BACKTRACE=short",
-        "RUSTC_TOOLCHAIN=Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
+      "preLaunchTask": "rust: cargo build",
+      "args": [
+        "analyze",
+        "${file}"
       ],
-      "args": []
-    }
+      "env": {
+        "RUST_BACKTRACE": "short",
+        "RUSTC_TOOLCHAIN": "Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "stopOnEntry": false,
+      "sourceLanguages": [
+        "rust",
+        "C++",
+        "C"
+      ]
+    },
+    {
+      "name": "rcc analyze",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceFolder}/target/debug/rcc.exe",
+      "args": [
+        "analyze",
+        "${file}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "env": {
+        "RCC_OUTPUT_COLOR_OPTION": "ALWAYS"
+      }
+    },
+    // // lldb-dap.exe not working
+    // {
+    //   "type": "lldb-dap",
+    //   "request": "launch",
+    //   "name": "lldb-dap debug rcc",
+    //   "cwd": "${workspaceFolder}",
+    //   "program": "${workspaceFolder}/target/debug/rcc.exe",
+    //   "env": [
+    //     "RUST_BACKTRACE=short",
+    //     // "PYTHONHOME=C:\\Users\\LiAuT\\.conda\\envs\\Py312",
+    //     "RUSTC_TOOLCHAIN=Z:\\.packages\\.rustup\\toolchains\\nightly-x86_64-pc-windows-msvc"
+    //   ],
+    //   "args": []
+    // },
   ]
 }

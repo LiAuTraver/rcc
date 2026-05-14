@@ -118,34 +118,6 @@ impl<'c> Builder<'c> {
   pub(super) fn data_layout(&self) -> &DataLayout {
     self.module.data_layout
   }
-
-  #[inline(always)]
-  pub(super) fn visit<R, F: FnOnce(&Value<'c>) -> R>(
-    &self,
-    id: ValueID,
-    action: F,
-  ) -> R {
-    self.ir().visit(id, action)
-  }
-
-  #[inline(always)]
-  pub fn inspect<R, F: FnOnce(&Value<'c>, &Value<'c>) -> R>(
-    &self,
-    left: ValueID,
-    right: ValueID,
-    action: F,
-  ) -> R {
-    self.ir().inspect(left, right, action)
-  }
-
-  #[inline(always)]
-  pub(super) fn apply<R, F: FnOnce(&mut Value<'c>) -> R>(
-    &self,
-    id: ValueID,
-    action: F,
-  ) -> R {
-    self.ir().apply(id, action)
-  }
 }
 impl<'c> Builder<'c> {
   fn contextual_convert_to_i1(&mut self, value_id: ValueID) -> ValueID {
@@ -174,7 +146,6 @@ impl<'c> Builder<'c> {
   }
 }
 impl<'c> Builder<'c> {
-  #[must_use]
   fn push_block(&mut self, block_id: ValueID) -> ValueID {
     let old_id = self.current_block;
     self.seal_current_block();
@@ -213,7 +184,6 @@ impl<'c> Builder<'c> {
     };
   }
 
-  #[must_use]
   fn new_empty_block(&mut self) -> ValueID {
     self.insert(Value::new(
       self.ast().void_type(),
@@ -328,7 +298,7 @@ impl<'c> Builder<'c> {
     let parameters = latest.as_function_unchecked().parameters;
 
     let function_name = latest.name;
-    let ast_type = latest.qualified_type.unqualified_type;
+    let ast_type = &*latest.qualified_type;
 
     self.current_function =
       if let Some(&value_id) = self.globals.get(&function.canonical()) {
@@ -398,7 +368,7 @@ impl<'c> Builder<'c> {
       .iter()
       .enumerate()
       .map(|(index, parameter)| {
-        let ast_type = *parameter.qualified_type;
+        let ast_type = &*parameter.qualified_type;
         let arg_id = self.emit(value::Arguments::new(index), ast_type);
         let localed_arg_id = self.emit(inst::Alloca::new(), ast_type);
         self.locals.insert(parameter.canonical(), localed_arg_id);
@@ -693,7 +663,7 @@ impl<'c> Builder<'c> {
 
   #[inline]
   fn exprstmt(&mut self, expression: se::ExprRef<'c>) {
-    self.expression(expression);
+    let _expr_result = self.expression(expression);
   }
 
   fn return_stmt(&mut self, return_stmt: &ss::Return<'c>) {
@@ -751,9 +721,10 @@ impl<'c> Builder<'c> {
     // i.e., `_last_block_of_then` is not necessarily the same as `then_block_id`.
     let _last_block_of_then = self.push_block(else_block_id);
 
-    self.refill_branch(now_block_terminator, then_block_id, else_block_id);
+    let _still_now_block_terminator =
+      self.refill_branch(now_block_terminator, then_block_id, else_block_id);
 
-    else_branch
+    let _i_forgot = else_branch
       .map(|else_branch| {
         self.statement(else_branch);
         let terminator = self.visit(self.current_block, |value| {
@@ -768,7 +739,7 @@ impl<'c> Builder<'c> {
         let immediate_block_id = self.new_empty_block();
         let _last_block_of_else = self.push_block(immediate_block_id);
 
-        self.refill_jump(then_block_terminator, immediate_block_id);
+        let _tbt = self.refill_jump(then_block_terminator, immediate_block_id);
         self.refill_jump(else_block_terminator, immediate_block_id)
       })
       .or_else(|| self.refill_jump(then_block_terminator, else_block_id));
@@ -937,7 +908,7 @@ impl<'c> Builder<'c> {
     let _last_block_of_body = self.push_block(increment_block_id);
 
     if let Some(increment) = increment {
-      self.expression(increment);
+      self.exprstmt(increment);
     }
     let _inc_block_terminator =
       self.emit(inst::Jump::new(cond_block_id), self.ast().void_type());
@@ -1268,6 +1239,10 @@ impl<'c> Builder<'c> {
       intermediate_result_type,
     } = compound_assign;
     let left_ty = left.unqualified_type();
+    // `Deref` is WEIRD. would result &Type<'c> rather than &'c Type<'c>.
+    let intermediate_left_type = intermediate_left_type.unqualified_type;
+    let intermediate_result_type = intermediate_result_type.unqualified_type;
+
     debug_assert!(
       RefEq::ref_eq(left_ty, ast_type),
       "precond: the lhs type shall be the whole expr type."

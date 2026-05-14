@@ -25,7 +25,7 @@ pub use self::{
     Operational as OpDiag, Severity,
   },
   keyword::Keyword,
-  langopts::LangOpts,
+  langopts::{C, Kind as Lang, Options as LangOpts, SysY},
   number::Number,
   operator::{Category as OperatorCategory, Operator},
   redeclarable::{IntrusiveRedeclarableLink, Redeclarable},

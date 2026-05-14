@@ -4,6 +4,7 @@ use ::rcc_ast::{
   types::{FunctionSpecifier, Qualifiers, TypeInfo},
 };
 use ::rcc_shared::{
+  C::{C17, C23},
   DiagData::{self, *},
   Diagnosis, Keyword, Literal, OpDiag,
   Operator::{self, *},
@@ -162,7 +163,7 @@ impl<'c> Parser<'c> {
   fn must_get_key<const KEY: Keyword>(&mut self) -> usize {
     let index = self.get();
     contract_assert!(
-      !matches!(&self.tokens[index].literal, Literal::Keyword(kw) if kw != KEY),
+      !matches!(&self.tokens[index].literal, Literal::Keyword(kw) if *kw != KEY),
       "expected: {:?}, found: {:?}",
       KEY,
       self.tokens[index].literal
@@ -175,7 +176,7 @@ impl<'c> Parser<'c> {
   fn must_get_op<const OP: Operator>(&mut self) -> usize {
     let index = self.get();
     contract_assert!(
-      !matches!(&self.tokens[index].literal, Literal::Operator(op) if op != OP),
+      !matches!(&self.tokens[index].literal, Literal::Operator(op) if *op != OP),
       "expected: {:?}, found: {:?}",
       OP,
       self.tokens[index].literal
@@ -253,7 +254,9 @@ impl<'c> Parser<'c> {
 /// opt checks
 impl<'c> Parser<'c> {
   fn ios_c_strict_check_for_decl(&self, statement: &Statement) {
-    if self.langopts() < 23 && matches!(statement, Statement::Declaration(_)) {
+    if self.langopts().is_c_and(|c| c < C23)
+      && matches!(statement, Statement::Declaration(_))
+    {
       self.add_warning(DeprecatedStmtDeclCvt, *self.peek_loc());
     }
   }
@@ -274,7 +277,7 @@ impl<'c> Parser<'c> {
       Literal::Keyword(Keyword::Union) => todo!(),
       Literal::Keyword(Keyword::Enum) => todo!(),
       Literal::Keyword(Keyword::Auto) =>
-        if self.langopts() >= 23 {
+        if self.langopts().is_c_and(|c| c >= C23) {
           Some(TypeSpecifier::AutoType)
         } else {
           None
@@ -342,7 +345,7 @@ impl<'c> Parser<'c> {
         }
       } else if let Ok(storage_class) = Storage::try_from(self.peek_lit())
         && (!matches!(storage_class, Storage::Automatic)
-          || (self.langopts() >= 23
+          || (self.langopts().is_c_and(|c| c >= C23)
             && self.parse_type_specifier_with_offset(1).is_some()))
       {
         match storage {
@@ -992,7 +995,7 @@ impl<'c> Parser<'c> {
         parser: &mut Parser<'a>,
       ) -> Option<Expression<'a>> {
         match parser.peek_lit() {
-          Literal::Operator(op) if op == OP => {
+          Literal::Operator(op) if *op == OP => {
             parser.must_get_op::<OP>();
             None
           },
@@ -1168,7 +1171,7 @@ impl<'c> Parser<'c> {
         not_implemented_feature!("not implemented: {kw:#?}"),
 
       bool_constant @ (True | False) => Expression::Constant(
-        CL::Integral(if self.langopts() >= 17 {
+        CL::Integral(if self.langopts().is_c_and(|c| c >= C17) {
           Integral::from_unsigned(
             bool_constant == True,
             self.i8_bool_type().size_bits(self),

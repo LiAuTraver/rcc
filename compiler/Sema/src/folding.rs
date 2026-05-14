@@ -1,3 +1,5 @@
+//! FIXME: many redundant helpers like [`Expression::fold`], [`Folder::doit`], [`Folder::child`]...
+
 use ::rcc_adt::{Floating, Integral, Size};
 use ::rcc_ast::types::{CastType, Compatibility, QualifiedType, TypeInfo};
 use ::rcc_shared::{
@@ -18,14 +20,15 @@ use super::{
 };
 
 impl<'c> Expression<'c> {
-  pub fn fold(&'c self, sema: &Sema<'c>) -> FoldingResult<'c> {
-    Folder::new(sema, self).doit()
+  #[inline(always)]
+  fn fold(&'c self, folder: &Folder<'_, 'c>) -> FoldingResult<'c> {
+    Folder::child(folder, self).doit()
   }
 }
 
 type FR<'c> = Option<ExprRef<'c>>;
 pub type FoldingResult<'c> = FR<'c>;
-struct Folder<'i, 'c>
+pub struct Folder<'i, 'c>
 where
   'c: 'i,
 {
@@ -68,16 +71,28 @@ impl<'i, 'c> Deref for Folder<'i, 'c> {
 
 impl<'i, 'c> Folder<'i, 'c> {
   #[inline(always)]
-  pub fn new(sema: &'i Sema<'c>, expression: ExprRef<'c>) -> Self {
+  pub fn new(
+    sema: &'i Sema<'c>,
+    relaxed_static_const_var: bool,
+    expression: ExprRef<'c>,
+  ) -> Self {
     Self {
       sema,
       expression,
-      relaxed_static_const_var: true,
+      relaxed_static_const_var,
     }
+  }
+
+  #[inline(always)]
+  fn child<'a>(parent: &'a Self, expression: ExprRef<'c>) -> Self
+  where
+    'a: 'i,
+  {
+    Self::new(parent, parent.relaxed_static_const_var, expression)
   }
 }
 impl<'c> Folder<'_, 'c> {
-  #[inline]
+  #[inline(always)]
   pub fn doit(self) -> FR<'c> {
     // dont judge by is_modifiable_lvalue here; it is always likely to be one before folding.
     self.fold(&**self.expression)
@@ -578,9 +593,6 @@ impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
           .expect("unimplemented for function")
           .initializer
           .as_ref()?; //< covers the case of extern var (either reference other TU or has no initializer)
-        if !matches!(variable.storage_class, Constexpr) {
-          self.add_warning(ConstVLAFolds);
-        }
         match initializer {
           Initializer::Scalar(expression) => expression
             .as_constant()

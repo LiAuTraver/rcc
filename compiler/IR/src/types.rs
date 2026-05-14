@@ -4,6 +4,7 @@ use crate::DataLayout;
 
 /// IR Type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[must_use]
 pub enum Type<'ir> {
   Void(),
   Label(),

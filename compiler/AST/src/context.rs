@@ -1,4 +1,6 @@
-use ::rcc_shared::{Arena, Bumper, DiagMeta, Severity, Triple};
+use ::rcc_shared::{
+  Arena, Bumper, DiagMeta, LangOpts, Severity, Storage, Triple,
+};
 use ::rcc_utils::StrRef;
 use ::std::{cell::RefCell, collections::HashSet, ops::Deref};
 
@@ -48,7 +50,7 @@ pub struct Context<'c> {
 
   unnamed_str: StrRef<'c>,
 
-  langopts: u8,
+  langopts: LangOpts,
 
   target_info: TargetInfo,
 
@@ -236,8 +238,8 @@ impl<'c> Context<'c> {
   }
 
   #[must_use]
-  pub fn langopts(&self) -> u8 {
-    self.langopts
+  pub fn langopts(&self) -> &LangOpts {
+    &self.langopts
   }
 
   #[must_use]
@@ -246,7 +248,7 @@ impl<'c> Context<'c> {
   }
 }
 impl<'c> Context<'c> {
-  pub fn new(arena: &'c Arena, triple: Triple) -> Self {
+  pub fn new(arena: &'c Arena, triple: Triple, langopts: LangOpts) -> Self {
     use Primitive::*;
 
     let void_type = arena.alloc(Void.into());
@@ -281,7 +283,7 @@ impl<'c> Context<'c> {
       fake_bool_type: arena.alloc(__IRBit.into()),
 
       unnamed_str: arena.alloc_str("<unnamed>"),
-      langopts: 23,
+      langopts,
       target_info: TargetInfo::new(triple),
       __unresolved_auto_type: arena.alloc(__AutoType.into()),
     };
@@ -311,6 +313,7 @@ impl<'c> Context<'c> {
     this
   }
 
+  #[inline(always)]
   pub fn arena(&self) -> &'c Arena {
     self.arena
   }
@@ -318,21 +321,24 @@ impl<'c> Context<'c> {
 impl<'c> Context<'c> {
   pub fn main_proto_validate(
     &self,
+    storage: Storage,
     proto: &FunctionProto<'c>,
     function_specifier: FunctionSpecifier,
   ) -> Result<(), DiagMeta<'c>> {
     use ::rcc_shared::DiagData::MainFunctionProtoMismatch;
+    use Severity::*;
+    use Storage::*;
 
-    if proto.is_variadic {
+    if matches!(storage, Static) {
       Err(
-        MainFunctionProtoMismatch("main function cannot be variadic")
-          + Severity::Error,
+        MainFunctionProtoMismatch(
+          "main function cannot be declared with static storage",
+        ) + Error,
       )
+    } else if proto.is_variadic {
+      Err(MainFunctionProtoMismatch("main function cannot be variadic") + Error)
     } else if function_specifier.contains(FunctionSpecifier::Inline) {
-      Err(
-        MainFunctionProtoMismatch("main function cannot be inline")
-          + Severity::Error,
-      )
+      Err(MainFunctionProtoMismatch("main function cannot be inline") + Error)
     } else if !proto.compatible_with(
       self
         .intern(FunctionProto::new(
@@ -359,9 +365,9 @@ impl<'c> Context<'c> {
     ) {
       Err(
         MainFunctionProtoMismatch(
-          "main function must have either no parameters or two parameters \
-           (int argc, char** argv)",
-        ) + Severity::Error,
+          "main function must have either no parameters or parameters \
+           compatible with int(int argc, char** argv)",
+        ) + Error,
       )
     } else {
       Ok(())

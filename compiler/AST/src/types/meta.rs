@@ -100,7 +100,7 @@ impl<'c> Array<'c> {
 
   pub fn has_vla_dim(&self) -> bool {
     matches!(self.size, ArraySize::Variable(_))
-      || (matches!(&**self.element_type, Type::Array(array) if array.has_vla_dim()))
+      || (matches!(*self.element_type, Type::Array(array) if array.has_vla_dim()))
   }
 }
 impl ArraySize {

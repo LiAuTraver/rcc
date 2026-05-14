@@ -21,7 +21,8 @@ use ::std::collections::{HashMap, HashSet};
 
 use super::{declaration as sd, expression as se, statement as ss};
 use crate::{
-  declaration::DeclRef, expression::ExprRef, initialization::Initialization,
+  declaration::DeclRef, expression::ExprRef, folding::Folder,
+  initialization::Initialization,
 };
 
 #[derive(Debug)]
@@ -141,7 +142,7 @@ impl<'c> Sema<'c> {
     translation_unit
   }
 }
-pub type ParsedDeclspecs<'c> =
+type ParsedDeclspecs<'c> =
   (FunctionSpecifier, Option<Storage>, QualifiedType<'c>);
 
 impl<'c> Sema<'c> {
@@ -217,7 +218,7 @@ impl<'c> Sema<'c> {
         // be integer type 3. should be non-negative
         match self.expression(expr) {
           Ok(analyzed_expr) if analyzed_expr.qualified_type().is_scalar() =>
-            match analyzed_expr.fold(self) {
+            match self.folder(false, analyzed_expr) {
               Some(value) =>
                 if value.is_integer_constant() {
                   ArraySize::Constant(
@@ -234,21 +235,40 @@ impl<'c> Sema<'c> {
                   );
                   ArraySize::ONE
                 },
-              None =>
-                if self.environment.is_global() {
-                  self.add_error(GlobalVLA, analyzed_expr.span());
-                  ArraySize::ONE
-                } else {
-                  self.add_error(
-                    UnsupportedFeature(
-                      "Expression could not be evaluated to a constant; VLA \
-                       is not supported currently."
-                        .to_string(),
-                    ),
-                    analyzed_expr.span(),
-                  );
-                  ArraySize::Variable(Opaque::new(analyzed_expr))
-                },
+              None => match self.folder(true, analyzed_expr) {
+                Some(value) =>
+                  if value.is_integer_constant() {
+                    self.add_warning(ConstVLAFolds, value.span());
+                    ArraySize::Constant(
+                      value
+                        .as_constant_unchecked()
+                        .as_integral_unchecked()
+                        .to_builtin::<usize>()
+                        .into(),
+                    )
+                  } else {
+                    self.add_error(
+                      NonIntegerInArraySubscript(value.to_string()),
+                      value.span(),
+                    );
+                    ArraySize::ONE
+                  },
+                None =>
+                  if self.environment.is_global() {
+                    self.add_error(GlobalVLA, analyzed_expr.span());
+                    ArraySize::ONE
+                  } else {
+                    self.add_error(
+                      UnsupportedFeature(
+                        "Expression could not be evaluated to a constant; VLA \
+                         is not supported currently."
+                          .to_string(),
+                      ),
+                      analyzed_expr.span(),
+                    );
+                    ArraySize::Variable(Opaque::new(analyzed_expr))
+                  },
+              },
             },
           Ok(analyzed_expr) => {
             self.add_error(
@@ -411,7 +431,7 @@ impl<'c> Sema<'c> {
     assert!(type_specifiers.len() <= 5); // unsigned long long int complex (integer complex not in standard) is the max
     type_specifiers.sort_by_key(pd::TypeSpecifier::sort_key);
     use pd::TypeSpecifier::*;
-    // 6.7.3.1
+    // 6.7.3p1
     match type_specifiers.as_slice() {
       [AutoType] => Ok(self.auto_type().into()),
       [Nullptr] => Ok(self.nullptr_type().into()),
@@ -564,16 +584,6 @@ impl<'c> Sema<'c> {
       .apply_modifiers_for_functiondecl(base_return_type, modifiers)
       .shall_ok("failed to apply modifiers for function declarator");
 
-    if name == "main" {
-      Context::main_proto_validate(
-        self,
-        qualified_type.as_functionproto_unchecked(),
-        function_specifier,
-      )
-      .unwrap_or_else(|e| {
-        self.add_diag(e + span);
-      });
-    }
     use VarDeclKind::*;
 
     let declkind = if body.is_some() {
@@ -583,7 +593,8 @@ impl<'c> Sema<'c> {
     };
 
     let previous_decl = self.environment.find(name);
-    let (declaration_type, storage) = if let Some(previous_decl) = previous_decl
+    let (declaration_type, merged_storage) = if let Some(previous_decl) =
+      previous_decl
     {
       if !Compatibility::compatible(
         &previous_decl.qualified_type,
@@ -627,12 +638,24 @@ impl<'c> Sema<'c> {
       (qualified_type, storage.unwrap_or(Storage::Extern))
     };
 
+    if name == "main" {
+      Context::main_proto_validate(
+        self,
+        merged_storage,
+        qualified_type.as_functionproto_unchecked(),
+        function_specifier,
+      )
+      .unwrap_or_else(|e| {
+        self.add_diag(e + span);
+      });
+    }
+
     let function = sd::ExternalDeclaration::new(
       self.arena(),
       previous_decl,
       name,
       declaration_type,
-      storage,
+      merged_storage,
       declkind,
       sd::Function::new_decl(function_specifier, parameters).into(),
       span,
@@ -777,7 +800,7 @@ impl<'c> Sema<'c> {
     );
 
     let (qualified_type, initializer) =
-      if RefEq::ref_eq(&**raw_qualified_type, self.auto_type()) {
+      if RefEq::ref_eq(&*raw_qualified_type, self.auto_type()) {
         let out = initializer.map(|initializer| {
           self.initializer(
             initializer,
@@ -914,6 +937,14 @@ impl<'c> Sema<'c> {
     Initialization::new(self, requires_folding).doit(initializer, target_type)
   }
 
+  pub fn folder(
+    &self,
+    relaxed_static_const_var: bool,
+    expression: ExprRef<'c>,
+  ) -> Option<ExprRef<'c>> {
+    Folder::new(self, relaxed_static_const_var, expression).doit()
+  }
+
   #[allow(clippy::too_many_arguments)]
   fn global_vardef(
     &self,
@@ -926,6 +957,16 @@ impl<'c> Sema<'c> {
     span: SourceSpan,
   ) -> sd::DeclRef<'c> {
     use Storage::*;
+
+    if name == "main" && matches!(merged_storage, Extern) {
+      self.add_warning(
+        MainFunctionProtoMismatch(
+          "a variable that has name 'main' with externel linkage is undefined \
+           behavior.",
+        ),
+        span,
+      );
+    }
 
     let ten = || {
       sd::ExternalDeclaration::new(
@@ -2430,8 +2471,8 @@ impl<'c> Sema<'c> {
 
     Ok(ss::Case::new(
       self,
-      analyzed_value
-        .fold(self)
+      self
+        .folder(false, analyzed_value)
         .map(|expr| {
           if let se::RawExpr::Constant(constant) = &**expr {
             constant.clone()

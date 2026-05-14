@@ -271,13 +271,8 @@ mod fmt {
 
   impl<'c> Display for ExternalDeclaration<'c> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-      // ::rcc_utils::static_dispatch!(
-      //   self,
-      //   |variant| variant.fmt(f) =>
-      //   Function Variable
-      // )
       match &self.declaration_data {
-        DeclarationData::Function(function) => match &**self.qualified_type {
+        DeclarationData::Function(function) => match *self.qualified_type {
           Type::FunctionProto(proto) => {
             write!(f, "{} {}(", proto.return_type, self.name)?;
             for (index, param) in function.parameters.iter().enumerate() {

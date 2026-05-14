@@ -1,5 +1,6 @@
 use ::rcc_ast::{Session, SessionRef};
 use ::rcc_shared::{
+  C::C23,
   Coordinate,
   DiagData::{self, *},
   Diagnosis, Keyword, Number, OpDiag,
@@ -365,7 +366,7 @@ impl<'c> Lexer<'c> {
         (16, 2)
       },
       (b'0', c) if c.is_ascii_digit() => {
-        if self.langopts() >= 23 {
+        if self.langopts().is_c_and(|c| c >= C23) {
           self
             .diag()
             .add_warning(DeprecatedLeadingZeroAsOctalNumber, self.span(start));

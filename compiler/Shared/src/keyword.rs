@@ -1,14 +1,17 @@
 #[derive(
   Debug,
   Clone,
+  Copy,
   PartialEq,
   Eq,
+  Hash,
   ::strum_macros::Display,
   ::strum_macros::EnumString,
   ::strum_macros::AsRefStr,
   ::strum_macros::IntoStaticStr,
   ::std::marker::ConstParamTy,
 )]
+#[must_use]
 #[strum(serialize_all = "snake_case")]
 pub enum Keyword {
   // C
@@ -121,6 +124,7 @@ pub enum Keyword {
   ::strum_macros::AsRefStr,
   ::std::marker::ConstParamTy,
 )]
+#[must_use]
 #[strum(serialize_all = "snake_case")]
 /// kept as reserved keyword.
 pub enum Reserved {
@@ -187,12 +191,6 @@ pub enum Reserved {
   Override,
   Import,
   Module,
-}
-
-impl PartialEq<Keyword> for &Keyword {
-  fn eq(&self, other: &Keyword) -> bool {
-    **self == *other
-  }
 }
 
 #[cfg(test)]

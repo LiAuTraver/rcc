@@ -10,6 +10,7 @@ use super::{
 
 new_key_type! {
     /// size = 8 (0x08), align = 0x8, no Drop
+    #[must_use]
     pub struct ValueID;
 }
 

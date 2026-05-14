@@ -8,8 +8,10 @@
   ::strum_macros::Display,
   ::strum_macros::EnumString,
   ::strum_macros::IntoStaticStr,
+  ::strum_macros::AsRefStr,
   ::std::marker::ConstParamTy,
 )]
+#[must_use]
 pub enum Operator {
   // one-character operators
   #[strum(serialize = "+")]
@@ -294,6 +296,7 @@ impl Operator {
   }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub enum Category {
   /// applies to integral, floating-point, and pointer types
   Logical,
@@ -340,14 +343,8 @@ impl Operator {
     }
   }
 
-  #[inline]
+  #[inline(always)]
   pub const fn assignment(&self) -> bool {
     matches!(self.category(), Assignment)
-  }
-}
-
-impl PartialEq<Operator> for &Operator {
-  fn eq(&self, other: &Operator) -> bool {
-    *self == other
   }
 }

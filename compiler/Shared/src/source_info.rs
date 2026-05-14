@@ -25,6 +25,7 @@ pub struct Span {
   pub end: Index,
 }
 impl Span {
+  #[inline(always)]
   pub fn new(file_index: Id, start: Index, end: Index) -> Self {
     Self {
       file_index,

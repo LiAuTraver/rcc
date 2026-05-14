@@ -6,7 +6,9 @@ use ::rcc_lex::Lexer;
 use ::rcc_parse::Parser;
 use ::rcc_sema::Sema;
 use ::rcc_serialize::{ASTDumper, IRPrinter};
-use ::rcc_shared::{Arena, Bumper, Diagnosis, OpDiag, SourceManager, Triple};
+use ::rcc_shared::{
+  Arena, Bumper, C::C23, Diagnosis, LangOpts, OpDiag, SourceManager, Triple,
+};
 use ::rcc_utils::DisplayWith;
 enum Stage {
   Lex,
@@ -14,7 +16,21 @@ enum Stage {
   Analyze,
   Ir,
 }
+/// cppvsdbg workaround
+fn setmywindow() {
+  #[cfg(windows)]
+  unsafe {
+    use ::winapi::{
+      shared::minwindef::UINT,
+      um::wincon::{SetConsoleCP, SetConsoleOutputCP},
+    };
+    const FK_WINDOWS: UINT = 65001;
+    SetConsoleOutputCP(FK_WINDOWS);
+    SetConsoleCP(FK_WINDOWS);
+  }
+}
 fn main() {
+  setmywindow();
   let args = ::std::env::args().collect::<Vec<_>>();
 
   println!("Args: {:?}", args);
@@ -54,7 +70,8 @@ fn main() {
 fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
   let arena = Arena::default();
   let triple = Triple::HOST;
-  let ast_context = arena.alloc(ASTContext::new(&arena, triple));
+  let langopts = LangOpts::new(C23);
+  let ast_context = arena.alloc(ASTContext::new(&arena, triple, langopts));
   let diagnosis = OpDiag::default();
   let ast_session = ASTSession::new(&diagnosis, &manager, ast_context, triple);
   let mut lexer = Lexer::new(&ast_session);
@@ -100,6 +117,13 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
   let analyzer = Sema::new(&ast_session);
   let translation_unit = analyzer.analyze(program);
 
+  if let Stage::Analyze = stage {
+    if pretty_print {
+      println!("{:#?}", translation_unit);
+    }
+    println!("{translation_unit}");
+  }
+
   ASTDumper::dump(&translation_unit, &ast_session).unwrap();
 
   if ast_session.diag().has_warnings() {
@@ -121,14 +145,7 @@ fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
     return 1;
   }
   if let Stage::Analyze = stage {
-    if pretty_print {
-      println!("{:#?}", translation_unit);
-    }
-    println!("{translation_unit}");
     println!("Analyze succeeded.");
-  }
-
-  if let Stage::Analyze = stage {
     return 0;
   }
   assert!(matches!(stage, Stage::Ir));

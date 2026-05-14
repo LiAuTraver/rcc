@@ -1,7 +1,19 @@
 use super::{DiagData, Keyword, Literal};
 
 /// storage-class-specifier
-#[derive(Debug, ::strum_macros::Display, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(
+  Debug,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  ::strum_macros::Display,
+  ::strum_macros::EnumString,
+  ::strum_macros::AsRefStr,
+  ::strum_macros::IntoStaticStr,
+)]
+#[must_use]
 #[strum(serialize_all = "snake_case")]
 pub enum Storage {
   /// variables that declared in block scope without any storage-class specifier
@@ -35,15 +47,15 @@ pub enum Storage {
   /// it acts more like an attribute. if I were to implement it, pls add to attribute.
   ThreadLocal,
   /// C23.
-  Constexpr, // ignore for now
+  Constexpr,
 }
 
 use Storage::*;
 
-impl TryFrom<&Keyword> for Storage {
+impl TryFrom<Keyword> for Storage {
   type Error = ();
 
-  fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
+  fn try_from(kw: Keyword) -> Result<Self, Self::Error> {
     match kw {
       Keyword::Auto => Ok(Automatic),
       Keyword::Register => Ok(Register),
@@ -62,7 +74,7 @@ impl<'c> TryFrom<&Literal<'c>> for Storage {
 
   fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
     match literal {
-      Literal::Keyword(kw) => Self::try_from(kw),
+      Literal::Keyword(kw) => Self::try_from(*kw),
       _ => Err(()),
     }
   }
@@ -89,43 +101,44 @@ impl Storage {
     }
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_static(self) -> bool {
     matches!(self, Static)
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_extern(self) -> bool {
     matches!(self, Extern)
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_thread_local(self) -> bool {
     matches!(self, ThreadLocal)
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_constexpr(self) -> bool {
     matches!(self, Constexpr)
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_typedef(self) -> bool {
     matches!(self, Typedef)
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_automatic(self) -> bool {
     matches!(self, Automatic)
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_register(self) -> bool {
     matches!(self, Register)
   }
 }
 
 impl PartialEq<Storage> for &Storage {
+  #[inline(always)]
   fn eq(&self, other: &Storage) -> bool {
     **self == *other
   }

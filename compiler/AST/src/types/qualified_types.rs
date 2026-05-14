@@ -4,7 +4,7 @@
 use ::rcc_shared::{Keyword, Literal};
 use ::rcc_utils::{IntoWith, RefEq, concat_static_str as css, ensure_is_pod};
 
-use super::{TypeRef, TypeRefMut};
+use super::{Type, TypeRef, TypeRefMut};
 use crate::TargetInfo;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -107,10 +107,10 @@ impl<'c> QualifiedType<'c> {
   }
 }
 impl<'c> ::std::ops::Deref for QualifiedType<'c> {
-  type Target = TypeRef<'c>;
+  type Target = Type<'c>;
 
   fn deref(&self) -> &Self::Target {
-    &self.unqualified_type
+    self.unqualified_type
   }
 }
 

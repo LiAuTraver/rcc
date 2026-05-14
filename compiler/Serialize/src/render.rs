@@ -78,12 +78,23 @@ pub trait RenderEngine<'c> {
   where
     Self: Sized, // for `dyn`.
   {
-    use ::std::io::{IsTerminal, stdout};
+    use ::std::{
+      env::var,
+      io::{IsTerminal, stdout},
+    };
 
-    if stdout().is_terminal() {
-      ColorChoice::Auto
-    } else {
-      ColorChoice::Never
+    match var("RCC_OUTPUT_COLOR_OPTION") {
+      Ok(opt) => match opt.as_str() {
+        "Always" | "always" | "ALWAYS" => ColorChoice::Always,
+        "Never" | "never" | "NEVER" => ColorChoice::Never,
+        _ =>
+          if stdout().is_terminal() {
+            ColorChoice::Auto
+          } else {
+            ColorChoice::Never
+          },
+      },
+      Err(_) => ColorChoice::Auto,
     }
   }
 }
