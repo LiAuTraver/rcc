@@ -8,7 +8,7 @@ use ::rcc_shared::{
   DiagData::{self, *},
   Diagnosis, Keyword, Literal, OpDiag,
   Operator::{self, *},
-  SourceSpan, Storage, Token,
+  SourceSpan, StorageSpecifier, Token,
 };
 use ::rcc_utils::{IntoWith, StrRef, contract_assert, not_implemented_feature};
 
@@ -327,7 +327,7 @@ impl<'c> Parser<'c> {
     let location = *self.peek_loc();
 
     let mut qualifiers = Qualifiers::empty();
-    let mut storage: Option<Storage> = None;
+    let mut storage: Option<StorageSpecifier> = None;
     let mut type_specifiers = Vec::new();
     let mut function_specifiers = FunctionSpecifier::empty();
 
@@ -343,21 +343,23 @@ impl<'c> Parser<'c> {
         } else {
           qualifiers |= qualifier;
         }
-      } else if let Ok(storage_class) = Storage::try_from(self.peek_lit())
-        && (!matches!(storage_class, Storage::Automatic)
+      } else if let Ok(storage_class) =
+        StorageSpecifier::try_from(self.peek_lit())
+        && (!matches!(storage_class, StorageSpecifier::Automatic)
           || (self.langopts().is_c_and(|c| c >= C23)
             && self.parse_type_specifier_with_offset(1).is_some()))
       {
         match storage {
-          _ if matches!(storage_class, Storage::ThreadLocal) => self.add_error(
-            UnsupportedFeature(
-              "Thread local unimplemented. (quick notes: the keyword is \
-               classified as storage class but it acts more like an \
-               attribute. so handle it there.)"
-                .to_string(),
+          _ if matches!(storage_class, StorageSpecifier::ThreadLocal) => self
+            .add_error(
+              UnsupportedFeature(
+                "Thread local unimplemented. (quick notes: the keyword is \
+                 classified as storage class but it acts more like an \
+                 attribute. so handle it there.)"
+                  .to_string(),
+              ),
+              self.eloc(location),
             ),
-            self.eloc(location),
-          ),
           Some(ref existing_storage) if existing_storage == storage_class =>
             self.add_warning(
               RedundantStorageSpecs(storage_class),
@@ -488,7 +490,7 @@ impl<'c> Parser<'c> {
       if is_static {
         // clang chooses to report an error here directly, nonetheless I choose to warn only.
         self.add_warning(
-          RedundantStorageSpecs(Storage::Static),
+          RedundantStorageSpecs(StorageSpecifier::Static),
           *self.peek_loc(),
         );
       } else {
@@ -534,7 +536,7 @@ impl<'c> Parser<'c> {
         let mut declspecs = self.parse_declspecs();
         let declarator = self.parse_declarator::<{ Maybe }, false>();
         if let Some(storage) = declspecs.storage_class
-          && storage != Storage::Register
+          && storage != StorageSpecifier::Register
         {
           self.add_error(ExtraneousStorageSpecs(storage), self.eloc(location));
           declspecs.storage_class = None;
@@ -814,7 +816,7 @@ impl<'c> Parser<'c> {
       } else {
         self.parse_declarator::<{ Named }, false>()
       };
-      if matches!(declspecs.storage_class, Some(Storage::Typedef)) {
+      if matches!(declspecs.storage_class, Some(StorageSpecifier::Typedef)) {
         if let Some(name) = declarator.name {
           self.typedefs.declare(name);
         } else {

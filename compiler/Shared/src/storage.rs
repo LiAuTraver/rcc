@@ -15,7 +15,7 @@ use super::{DiagData, Keyword, Literal};
 )]
 #[must_use]
 #[strum(serialize_all = "snake_case")]
-pub enum Storage {
+pub enum StorageSpecifier {
   /// variables that declared in block scope without any storage-class specifier
   /// are considered to have automatic storage duration.
   #[strum(serialize = "auto")]
@@ -50,9 +50,9 @@ pub enum Storage {
   Constexpr,
 }
 
-use Storage::*;
+use StorageSpecifier::*;
 
-impl TryFrom<Keyword> for Storage {
+impl TryFrom<Keyword> for StorageSpecifier {
   type Error = ();
 
   fn try_from(kw: Keyword) -> Result<Self, Self::Error> {
@@ -69,7 +69,7 @@ impl TryFrom<Keyword> for Storage {
   }
 }
 
-impl<'c> TryFrom<&Literal<'c>> for Storage {
+impl TryFrom<&Literal<'_>> for StorageSpecifier {
   type Error = ();
 
   fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
@@ -80,7 +80,7 @@ impl<'c> TryFrom<&Literal<'c>> for Storage {
   }
 }
 
-impl Storage {
+impl StorageSpecifier {
   pub fn try_merge<'c>(
     prev: Self,
     incoming: Self,
@@ -137,9 +137,53 @@ impl Storage {
   }
 }
 
-impl PartialEq<Storage> for &Storage {
+impl PartialEq<StorageSpecifier> for &StorageSpecifier {
   #[inline(always)]
-  fn eq(&self, other: &Storage) -> bool {
+  fn eq(&self, other: &StorageSpecifier) -> bool {
     **self == *other
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Linkage {
+  /// Visible to other translation units, [`Storage::Extern`].
+  External,
+  /// Not visible, [`Storage::Static`].
+  Internal,
+  /// Anonymous data like string literals and const arrays. Also [`Storage::Static`].
+  Private,
+  // /// Tentative.
+  // Common,
+}
+#[derive(Debug, Clone, Copy)]
+pub enum Storage {
+  Static,
+  Register,
+  Automatic,
+  ThreadLocal,
+}
+// impl From<Storage> for StorageDuration {
+//   fn from(storage: Storage) -> Self {
+//     use Storage::*;
+//     match storage {
+//       Automatic => Self::Automatic,
+//       Register => Self::Register,
+//       Extern => todo!(),
+//       Static => Self::Static,
+//       Typedef => panic!(""),
+//       ThreadLocal => Self::ThreadLocal,
+//       Constexpr => Self::Static,
+//     }
+//   }
+// }
+impl From<StorageSpecifier> for Linkage {
+  fn from(storage: StorageSpecifier) -> Self {
+    use Linkage::*;
+    use StorageSpecifier::*;
+    match storage {
+      Extern => External,
+      Static => Internal,
+      _ => panic!("not a truly storage class."),
+    }
   }
 }

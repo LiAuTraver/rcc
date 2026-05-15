@@ -16,7 +16,7 @@ pub use self::{
   data_layout::{DataLayout, SymbolDecoration, TypeSpecs},
   global::{
     BasicBlock, Function as IRFunction, Global as GlobalValue,
-    Initializer as IRStaticInitializer, Linkage, Variable as IRVariable,
+    Initializer as IRStaticInitializer, Variable as IRVariable,
   },
   module::Module,
   types::{Type, TypeRef, TypeRefMut},

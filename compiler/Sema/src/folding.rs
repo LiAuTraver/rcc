@@ -567,7 +567,7 @@ impl<'c> Fold<'c, CompoundLiteral> for Folder<'_, 'c> {
 impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
   fn fold(&self, variable: &Variable<'c>) -> FR<'c> {
     use ::rcc_ast::types::Qualifiers;
-    use ::rcc_shared::Storage::*;
+    use ::rcc_shared::StorageSpecifier::*;
     match variable.storage_class {
       _ if self.expression.is_modifiable_lvalue(self)
         || variable
@@ -592,7 +592,7 @@ impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
           .as_variable()
           .expect("unimplemented for function")
           .initializer
-          .as_ref()?; //< covers the case of extern var (either reference other TU or has no initializer)
+          .as_ref()?; //< covers the case of var either is extern and referencing other TU or has no initializer)
         match initializer {
           Initializer::Scalar(expression) => expression
             .as_constant()

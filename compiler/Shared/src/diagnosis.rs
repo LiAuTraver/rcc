@@ -64,7 +64,7 @@ mod data {
   use ::std::ops::Add;
 
   use crate::{
-    Keyword, Literal, Number, Operator, SourceManager, SourceSpan, Storage,
+    Keyword, Literal, Number, Operator, SourceManager, SourceSpan, StorageSpecifier,
   };
   /// Custom message. would be printed as-is.
   type CustomMessage = String;
@@ -88,7 +88,7 @@ mod data {
     #[error("Expect '{0}'")]
     MissingOperator(Operator),
     #[error("Cannot combine storage classes '{0}' and '{1}'")]
-    MultipleStorageSpecs(Storage, Storage),
+    MultipleStorageSpecs(StorageSpecifier, StorageSpecifier),
     #[error("Expect a type specifier in declaration, default to 'int'")]
     MissingTypeSpecifier,
     #[error("Expect identifier in declarator")]
@@ -98,7 +98,7 @@ mod data {
     #[error("{0}")]
     VoidVariableDecl(CustomMessage),
     #[error("Storage class specifier '{0}' is not allowed here")]
-    ExtraneousStorageSpecs(Storage),
+    ExtraneousStorageSpecs(StorageSpecifier),
     #[error("Expect ',', ')' or type specifier in parameter list")]
     UnclosedParameterList,
     #[error("Expect '(' after {0}")]
@@ -241,7 +241,7 @@ mod data {
     #[error("Type '{0}' is incomplete")]
     IncompleteType(QualTyStr),
     #[error("Cannot combine previous storage class '{0}' with '{1}'")]
-    StorageSpecsUnmergeable(Storage, Storage),
+    StorageSpecsUnmergeable(StorageSpecifier, StorageSpecifier),
     #[error("{0}")]
     MainFunctionProtoMismatch(CustomMsgFixed),
     #[error("Discarding qualifiers '{0}' during conversion is not allowed")]
@@ -303,7 +303,7 @@ mod data {
     #[error("Unused variable '{0}'")]
     UnusedVariable(Elem),
     #[error("Redundant storage specifiers '{0}'")]
-    RedundantStorageSpecs(Storage),
+    RedundantStorageSpecs(StorageSpecifier),
     #[error("Redundant type qualifiers '{0}'")]
     RedundantQualifier(String),
     #[error("Extern global variable '{0}' should not have an initializer")]

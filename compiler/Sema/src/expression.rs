@@ -4,7 +4,7 @@ use ::rcc_ast::{
   types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeRef},
 };
 use ::rcc_shared::{
-  ArenaVec, Bumper, CollectIn, Operator, SourceSpan, Storage,
+  ArenaVec, Bumper, CollectIn, Operator, SourceSpan, StorageSpecifier,
 };
 use ::rcc_utils::{PtrEq, StrRef};
 
@@ -458,7 +458,7 @@ impl<'c> Expression<'c> {
 
     (declaration.qualified_type.is_integer()
       || declaration.qualified_type.is_array())
-      && matches!(declaration.storage_class, Storage::Constexpr)
+      && matches!(declaration.storage_class, StorageSpecifier::Constexpr)
   }
 
   /// 6.6.7
@@ -483,7 +483,7 @@ impl<'c> Expression<'c> {
           || (unary.operand.is_lvalue()
             && match &**unary.operand {
               RawExpr::Variable(v) =>
-                matches!(v.storage_class, Storage::Static | Storage::Extern),
+                matches!(v.storage_class, StorageSpecifier::Static | StorageSpecifier::Extern),
               _ => todo!(),
             }),
       _ => false,

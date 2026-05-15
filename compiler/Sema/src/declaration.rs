@@ -4,7 +4,7 @@ use ::rcc_ast::{
   types::{FunctionSpecifier, QualifiedType, Type},
 };
 use ::rcc_shared::{
-  ArenaVec, CollectIn, IntrusiveRedeclarableLink, SourceSpan, Storage,
+  ArenaVec, CollectIn, IntrusiveRedeclarableLink, SourceSpan, StorageSpecifier,
   make_intrusive_redeclarable_node,
 };
 use ::rcc_utils::{StrRef, ensure_is_pod, interconvert, make_trio_for};
@@ -19,24 +19,25 @@ pub struct TranslationUnit<'c> {
 
 pub type DeclRef<'c> = &'c ExternalDeclaration<'c>;
 
+/// Size: probably 19 * sizeof(usize)
 #[repr(C)]
 #[derive(Debug)]
 pub struct ExternalDeclaration<'c> {
-  __intrusive_redeclarable_link: IntrusiveRedeclarableLink<Self>,
-  pub name: StrRef<'c>,
-  pub qualified_type: QualifiedType<'c>,
-  pub storage_class: Storage,
+  __intrusive_redeclarable_link: IntrusiveRedeclarableLink<Self>, // 2 ptr.
+  pub name: StrRef<'c>,                                           // 2 ptr
+  pub qualified_type: QualifiedType<'c>,                          // 2 ptr
+  pub declaration_data: DeclarationData<'c>,                      // 11 ptr
+  pub storage_class: StorageSpecifier,                                     // packed
   /// the complex rule of [`Storage`] and [`VarDeclKind`] are managed by [`Linkage`].
-  pub declkind: VarDeclKind,
-  pub declaration_data: DeclarationData<'c>,
-  pub span: SourceSpan,
+  pub declkind: VarDeclKind, // packed
+  pub span: SourceSpan,                                           // 1+ ptr
 }
 
 make_intrusive_redeclarable_node!(
   __intrusive_redeclarable_link => pub ExternalDeclaration[
     name: StrRef<'c>,
     qualified_type: QualifiedType<'c>,
-    storage_class: Storage,
+    storage_class: StorageSpecifier,
     declkind: VarDeclKind,
     declaration_data: DeclarationData<'c>,
     span: SourceSpan

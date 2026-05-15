@@ -1,5 +1,5 @@
 use ::rcc_ast::types::{FunctionSpecifier, Qualifiers};
-use ::rcc_shared::{Keyword, Literal, SourceSpan, Storage};
+use ::rcc_shared::{Keyword, Literal, SourceSpan, StorageSpecifier};
 use ::rcc_utils::{StrRef, interconvert};
 
 use crate::{expression::Expression, statement::Compound};
@@ -169,7 +169,7 @@ impl<'c> TypeSpecifier<'c> {
 #[derive(Debug)]
 pub struct DeclSpecs<'c> {
   pub function_specifiers: FunctionSpecifier,
-  pub storage_class: Option<Storage>,
+  pub storage_class: Option<StorageSpecifier>,
   pub qualifiers: Qualifiers,
   pub type_specifiers: Vec<TypeSpecifier<'c>>,
   pub span: SourceSpan,
@@ -395,7 +395,7 @@ impl<'c> Program<'c> {
 }
 impl<'c> DeclSpecs<'c> {
   pub fn new(
-    storage_class: Option<Storage>,
+    storage_class: Option<StorageSpecifier>,
     qualifiers: Qualifiers,
     type_specifiers: Vec<TypeSpecifier<'c>>,
     function_specifiers: FunctionSpecifier,

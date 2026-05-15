@@ -14,7 +14,7 @@ pub trait Bumper {
   ///
   /// Note: `cargo miri` would sometimes fail on Windows since File APIs are unsupported.
   #[must_use]
-  unsafe fn alloc_uninit<T>(&self) -> *mut T;
+  fn alloc_uninit<T>(&self) -> *mut T;
 
   /// If the returned reference is casted to a pointer, **beaware of the provenance**.
   #[must_use]
@@ -23,7 +23,7 @@ pub trait Bumper {
     T: ::std::fmt::Debug;
 
   #[must_use]
-  fn alloc_slice_copy<T>(&self, values: &[T]) -> &mut [T]
+  fn alloc_slice<T>(&self, values: &[T]) -> &mut [T]
   where
     T: Copy;
 

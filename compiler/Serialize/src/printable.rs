@@ -4,9 +4,10 @@ use ::rcc_adt::{Integral, SizeBit};
 use ::rcc_ast::Constant;
 use ::rcc_ir::{
   BasicBlock, GlobalValue, IRArguments, IRConstant, IRFunction,
-  IRStaticInitializer, IRVariable, Linkage, Module, Value, ValueData, ValueID,
+  IRStaticInitializer, IRVariable, Module, Value, ValueData, ValueID,
   instruction as inst,
 };
+use ::rcc_shared::Linkage;
 
 use crate::{
   Palette, Printable, pre, printer::Printer, quoted, render::RenderEngineMixin,

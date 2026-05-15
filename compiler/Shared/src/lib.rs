@@ -35,7 +35,7 @@ pub use self::{
     Index as SpanIndex, Manager as SourceManager, Span as SourceSpan,
     SpanDisplay,
   },
-  storage::Storage,
+  storage::{Linkage, Storage, StorageSpecifier},
   token::{Literal, Token},
   triple::{
     Architecture, CallingConvention, DataModel, Endianess, Environment,

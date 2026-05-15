@@ -6,7 +6,7 @@ use ::rcc_ast::{
 use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
 use ::rcc_shared::{
   DiagData::*, Diagnosis, OpDiag, Operator, OperatorCategory, SourceSpan,
-  Storage,
+  StorageSpecifier,
 };
 use ::rcc_utils::{RefEq, StrRef, contract_violation};
 use ::std::{collections::HashMap, ops::Deref};
@@ -612,7 +612,7 @@ impl<'c> Builder<'c> {
   }
 
   fn local_vardef(&mut self, var_def: sd::DeclRef<'c>) {
-    use Storage::*;
+    use StorageSpecifier::*;
     match var_def.latest().storage_class {
       Static | Extern | Constexpr => {
         todo!("local static/extern variable is not implemented yet!")

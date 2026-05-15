@@ -11,7 +11,8 @@ use ::rcc_parse::{declaration as pd, expression as pe, statement as ps};
 use ::rcc_shared::{
   ArenaVec, CollectIn, Diag,
   DiagData::{self, *},
-  Diagnosis, OpDiag, Operator, OperatorCategory, Severity, SourceSpan, Storage,
+  Diagnosis, OpDiag, Operator, OperatorCategory, Severity, SourceSpan,
+  StorageSpecifier,
 };
 use ::rcc_utils::{
   Opaque, RefEq, StrRef, contract_assert, contract_violation,
@@ -142,8 +143,11 @@ impl<'c> Sema<'c> {
     translation_unit
   }
 }
-type ParsedDeclspecs<'c> =
-  (FunctionSpecifier, Option<Storage>, QualifiedType<'c>);
+type ParsedDeclspecs<'c> = (
+  FunctionSpecifier,
+  Option<StorageSpecifier>,
+  QualifiedType<'c>,
+);
 
 impl<'c> Sema<'c> {
   /// IMPORTANT: currently, caller shoould check:
@@ -359,7 +363,7 @@ impl<'c> Sema<'c> {
           span: _,
         } = parameter;
         let (_, storage, base_type) = self.parse_declspecs(declspecs);
-        contract_assert!(storage.is_none_or(Storage::is_register));
+        contract_assert!(storage.is_none_or(StorageSpecifier::is_register));
         // strictly speaking the names shall be unique but it doesnt matter here really.
         let pd::Declarator {
           modifiers,
@@ -386,7 +390,7 @@ impl<'c> Sema<'c> {
           span,
         } = parameter;
         let (_, storage, base_type) = self.parse_declspecs(declspecs);
-        contract_assert!(storage.is_none_or(Storage::is_register));
+        contract_assert!(storage.is_none_or(StorageSpecifier::is_register));
         let pd::Declarator {
           modifiers,
           name,
@@ -399,7 +403,7 @@ impl<'c> Sema<'c> {
           self.arena(),
           name.unwrap_or("<unnamed>"),
           qualified_type,
-          Storage::Automatic,
+          StorageSpecifier::Automatic,
           VarDeclKind::Declaration,
           sd::VarDef::decl().into(),
           span,
@@ -625,9 +629,9 @@ impl<'c> Sema<'c> {
           &qualified_type,
           self,
         ),
-        Storage::try_merge(
+        StorageSpecifier::try_merge(
           previous_decl.storage_class,
-          storage.unwrap_or(Storage::Extern),
+          storage.unwrap_or(StorageSpecifier::Extern),
         )
         .unwrap_or_else(|data| {
           self.add_diag(data + Severity::Error + span);
@@ -635,7 +639,7 @@ impl<'c> Sema<'c> {
         }),
       )
     } else {
-      (qualified_type, storage.unwrap_or(Storage::Extern))
+      (qualified_type, storage.unwrap_or(StorageSpecifier::Extern))
     };
 
     if name == "main" {
@@ -788,7 +792,7 @@ impl<'c> Sema<'c> {
       span: _,
     } = declarator;
 
-    use Storage::*;
+    use StorageSpecifier::*;
 
     let name = name.unwrap_or("<unnamed>");
 
@@ -873,12 +877,11 @@ impl<'c> Sema<'c> {
             self,
           ),
           storage.map(|s| {
-            Storage::try_merge(prev_decl_ref.storage_class, s).unwrap_or_else(
-              |data| {
+            StorageSpecifier::try_merge(prev_decl_ref.storage_class, s)
+              .unwrap_or_else(|data| {
                 self.add_diag(data + Severity::Error + span);
                 prev_decl_ref.storage_class
-              },
-            )
+              })
           }),
         )
       }
@@ -948,15 +951,15 @@ impl<'c> Sema<'c> {
   #[allow(clippy::too_many_arguments)]
   fn global_vardef(
     &self,
-    original_storage: Option<Storage>,
-    merged_storage: Storage,
+    original_storage: Option<StorageSpecifier>,
+    merged_storage: StorageSpecifier,
     qualified_type: QualifiedType<'c>,
     name: StrRef<'c>,
     initializer: Option<sd::Initializer<'c>>,
     previous_decl: Option<sd::DeclRef<'c>>,
     span: SourceSpan,
   ) -> sd::DeclRef<'c> {
-    use Storage::*;
+    use StorageSpecifier::*;
 
     if name == "main" && matches!(merged_storage, Extern) {
       self.add_warning(
@@ -1053,15 +1056,15 @@ impl<'c> Sema<'c> {
   #[allow(clippy::too_many_arguments)]
   fn local_vardef(
     &self,
-    original_storage: Storage,
-    merged_storage: Storage,
+    original_storage: StorageSpecifier,
+    merged_storage: StorageSpecifier,
     qualified_type: QualifiedType<'c>,
     name: StrRef<'c>,
     initializer: Option<sd::Initializer<'c>>,
     previous_decl: Option<sd::DeclRef<'c>>,
     span: SourceSpan,
   ) -> sd::DeclRef<'c> {
-    use Storage::*;
+    use StorageSpecifier::*;
     match original_storage {
       Automatic | Register | Typedef => (),
       Extern if initializer.is_some() =>

@@ -1,32 +1,8 @@
 use ::rcc_ast::Constant;
-use ::rcc_shared::Storage;
+use ::rcc_shared::Linkage;
 use ::rcc_utils::StrRef;
 
 use super::ValueID;
-
-#[derive(Debug, Clone, Copy)]
-pub enum Linkage {
-  /// Visible to other translation units, [`Storage::Extern`].
-  External,
-  /// Not visible, [`Storage::Static`].
-  Internal,
-  /// Anonymous data like string literals and const arrays. Also [`Storage::Static`].
-  Private,
-  // /// Tentative.
-  // Common,
-}
-
-impl From<Storage> for Linkage {
-  fn from(storage: Storage) -> Self {
-    use Linkage::*;
-    use Storage::*;
-    match storage {
-      Extern => External,
-      Static => Internal,
-      _ => panic!("not a truly storage class."),
-    }
-  }
-}
 
 #[derive(Debug)]
 pub enum Global<'ir> {

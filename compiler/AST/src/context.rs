@@ -1,5 +1,5 @@
 use ::rcc_shared::{
-  Arena, Bumper, DiagMeta, LangOpts, Severity, Storage, Triple,
+  Arena, Bumper, DiagMeta, LangOpts, Severity, StorageSpecifier, Triple,
 };
 use ::rcc_utils::StrRef;
 use ::std::{cell::RefCell, collections::HashSet, ops::Deref};
@@ -16,7 +16,6 @@ type Interner<T> = RefCell<HashSet<T>>;
 pub struct Context<'c> {
   arena: &'c Arena,
   ast_type_interner: Interner<TypeRef<'c>>,
-  // str_interner: Interner<StrRef<'c>>,
   nullptr_type: TypeRef<'c>,
   void_type: TypeRef<'c>,
   bool_type: TypeRef<'c>,
@@ -78,32 +77,15 @@ impl<'c> Context<'c> {
     }
   }
 
-  // #[must_use]
-  // pub fn intern_str(&self, value: &str) -> StrRef<'c> {
-  //   if let Some(&interned) = self.str_interner.borrow().get(value) {
-  //     interned
-  //   } else {
-  //     let interned = self.arena.alloc_str(value);
-  //     self.str_interner.borrow_mut().insert(interned);
-  //     // ... weird syntax to make &mut str into &str
-  //     &*interned
-  //   }
-  // }
-
   #[must_use]
   pub fn intern<T: Into<Type<'c>>>(&self, value: T) -> TypeRef<'c> {
     self.do_intern(value.into())
   }
 
-  // #[must_use]
-  // fn alloc_vec<T>(&self, capacity: usize) -> ArenaVec<'c, T> {
-  //   ArenaVec::with_capacity_in(capacity, self.arena)
-  // }
-
   /// Helper to allocate slices
   #[must_use]
   fn alloc_slice<T: Copy>(&self, values: &[T]) -> &'c [T] {
-    self.arena.alloc_slice_copy(values)
+    self.arena.alloc_slice(values)
   }
 
   #[must_use]
@@ -256,7 +238,6 @@ impl<'c> Context<'c> {
     let this = Self {
       arena,
       ast_type_interner: Default::default(),
-      // str_interner: Default::default(),
       int_type,
       float_type: arena.alloc(Float.into()),
       short_type: arena.alloc(Short.into()),
@@ -309,7 +290,6 @@ impl<'c> Context<'c> {
 
       refmut.insert(this.converted_bool); // not needed actually, anyways
     }
-    // this.str_interner.borrow_mut().insert(this.unnamed_str);
     this
   }
 
@@ -321,13 +301,13 @@ impl<'c> Context<'c> {
 impl<'c> Context<'c> {
   pub fn main_proto_validate(
     &self,
-    storage: Storage,
+    storage: StorageSpecifier,
     proto: &FunctionProto<'c>,
     function_specifier: FunctionSpecifier,
   ) -> Result<(), DiagMeta<'c>> {
     use ::rcc_shared::DiagData::MainFunctionProtoMismatch;
     use Severity::*;
-    use Storage::*;
+    use StorageSpecifier::*;
 
     if matches!(storage, Static) {
       Err(

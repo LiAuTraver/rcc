@@ -94,28 +94,31 @@ impl Alignment {
 #[rustfmt::skip]
 impl Alignment {
   /// the smallest possible [`alignment`](Alignment), i.e., 1 [byte](Size).
-  pub const MIN: Alignment = Self::O0;
+  pub const MIN: Self = Self::O0;
 
   /// Order-0 [`alignment`](Alignment), i.e., `2^0 = 1` [byte](Size).
-  pub const O0: Alignment = Self::from_align_fixed::<1>();
+  pub const O0: Self = Self::from_align_fixed::<1>();
 
   /// Order-1 [`alignment`](Alignment), i.e., `2^1 = 2` [bytes](Size).
-  pub const O1: Alignment = Self::from_align_fixed::<2>();
+  pub const O1: Self = Self::from_align_fixed::<2>();
 
   /// Order-2 [`alignment`](Alignment), i.e., `2^2 = 4` [bytes](Size).
-  pub const O2: Alignment = Self::from_align_fixed::<4>();
+  pub const O2: Self = Self::from_align_fixed::<4>();
 
   /// Order-3 [`alignment`](Alignment), i.e., `2^3 = 8` [bytes](Size).
-  pub const O3: Alignment = Self::from_align_fixed::<8>();
+  pub const O3: Self = Self::from_align_fixed::<8>();
 
   /// Order-4 [`alignment`](Alignment), i.e., `2^4 = 16` [bytes](Size).
-  pub const O4: Alignment = Self::from_align_fixed::<16>();
+  pub const O4: Self = Self::from_align_fixed::<16>();
 
   /// Order-255 [`alignment`](Alignment), i.e., `2^255` [bytes](Size).
-  pub const O255: Alignment = unsafe { Self::from_flag_unchecked(255) };
+  /// 
+  /// This is **impossible** unless you have a 256-bit address space(i.e., `2^256` bytes of memory).
+  /// It only exists for the sake of completeness to satisfy perfectionists like me :P
+  pub const O255: Self = unsafe { Self::from_flag_unchecked(255) };
   
   /// the largest possible [`alignment`](Alignment) that [`this struct`](Alignment) can represent.
-  pub const MAX: Alignment = Self::O255;
+  pub const MAX: Self = Self::O255;
 }
 impl Alignment {
   #[inline]

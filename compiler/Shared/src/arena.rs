@@ -18,7 +18,7 @@ pub struct Arena {
 
 impl Bumper for Arena {
   #[inline(always)]
-  unsafe fn alloc_uninit<T>(&self) -> *mut T {
+  fn alloc_uninit<T>(&self) -> *mut T {
     self.alloc(MaybeUninit::uninit()).as_mut_ptr()
   }
 
@@ -68,7 +68,7 @@ impl Bumper for Arena {
   }
 
   #[inline(always)]
-  fn alloc_slice_copy<T: Copy>(&self, values: &[T]) -> &mut [T] {
+  fn alloc_slice<T: Copy>(&self, values: &[T]) -> &mut [T] {
     self.bump.alloc_slice_copy(values)
   }
 
