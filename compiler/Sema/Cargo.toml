@@ -14,3 +14,4 @@ rcc-parse = { path = "../Parse" }
 
 strum_macros = "0.25.3"
 strum = "0.27.2"
+bitflags = "2.10.0"

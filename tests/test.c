@@ -25,6 +25,18 @@ int main() {
 static const int C = 100;
 int arr[C];
 
-void f() { int arr2[C]; }
-constexpr auto L3 = 5;
+void f() {
+  int arr2[C];
+  {
+    float C;
+    double arr2;
+    {
+      extern const int C;
+      auto external = C;
+      extern int arr2[];
+      auto e2 = arr2[0];
+    }
+  }
+}
+static constexpr const auto L3 = 5;
 unsigned vla_fold[L3];

@@ -157,6 +157,7 @@ dependencies = [
 name = "rcc-sema"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "rcc-adt",
  "rcc-ast",
  "rcc-parse",
@@ -184,6 +185,7 @@ dependencies = [
 name = "rcc-shared"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "bumpalo",
  "rcc-adt",
  "rcc-utils",

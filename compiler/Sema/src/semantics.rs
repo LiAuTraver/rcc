@@ -11,12 +11,11 @@ use ::rcc_parse::{declaration as pd, expression as pe, statement as ps};
 use ::rcc_shared::{
   ArenaVec, CollectIn, Diag,
   DiagData::{self, *},
-  Diagnosis, OpDiag, Operator, OperatorCategory, Severity, SourceSpan,
-  StorageSpecifier,
+  Diagnosis, Linkage, OpDiag, Operator, OperatorCategory, Severity, SourceSpan,
+  Storage, StorageSpecifier as SS,
 };
 use ::rcc_utils::{
-  Opaque, RefEq, StrRef, contract_assert, contract_violation,
-  not_implemented_feature,
+  Opaque, RefEq, StrRef, contract_violation, not_implemented_feature,
 };
 use ::std::collections::{HashMap, HashSet};
 
@@ -67,6 +66,17 @@ impl<'c> DeclEnvironment<'c> {
       .scopes
       .last()
       .and_then(|scope| scope.get(name).copied())
+  }
+
+  /// find declnode from root, excluding the last scope.
+  fn extern_find(&self, name: StrRef<'c>) -> Option<sd::DeclRef<'c>> {
+    debug_assert!(self.scopes.len() >= 2,);
+    for scope in self.scopes.iter().take(self.scopes.len() - 1) {
+      if let Some(&declaration) = scope.get(name) {
+        return Some(declaration);
+      }
+    }
+    None
   }
 
   fn declare(
@@ -143,11 +153,7 @@ impl<'c> Sema<'c> {
     translation_unit
   }
 }
-type ParsedDeclspecs<'c> = (
-  FunctionSpecifier,
-  Option<StorageSpecifier>,
-  QualifiedType<'c>,
-);
+type ParsedDeclspecs<'c> = (FunctionSpecifier, SS, QualifiedType<'c>);
 
 impl<'c> Sema<'c> {
   /// IMPORTANT: currently, caller shoould check:
@@ -313,15 +319,10 @@ impl<'c> Sema<'c> {
     Diag<'c>,
   > {
     let mut it = modifiers.into_iter();
-    let function_signature = match it
-      .next()
-      .expect("function declarator should have at least one modifier(function)")
-    {
-      pd::Modifier::Function(function_signature) => function_signature,
-      _ => {
-        contract_violation!("function declarator should have function modifier")
-      },
+    let Some(pd::Modifier::Function(function_signature)) = it.next() else {
+      panic!("function declarator should have at least one modifier(function)")
     };
+
     let return_type = self.apply_modifiers_for_varty(base_return_type, it);
     // we need to build function type
     let parameters = self.parse_parameters(function_signature.parameters);
@@ -362,8 +363,12 @@ impl<'c> Sema<'c> {
           declspecs,
           span: _,
         } = parameter;
-        let (_, storage, base_type) = self.parse_declspecs(declspecs);
-        contract_assert!(storage.is_none_or(StorageSpecifier::is_register));
+        let (_fs, storage_specs, base_type) = self.parse_declspecs(declspecs);
+        ::std::assert_matches!(
+          storage_specs,
+          SS::Empty | SS::Auto | SS::Register,
+          "pls report add_error()"
+        );
         // strictly speaking the names shall be unique but it doesnt matter here really.
         let pd::Declarator {
           modifiers,
@@ -389,8 +394,13 @@ impl<'c> Sema<'c> {
           declspecs,
           span,
         } = parameter;
-        let (_, storage, base_type) = self.parse_declspecs(declspecs);
-        contract_assert!(storage.is_none_or(StorageSpecifier::is_register));
+        let (_fs, storage_specs, base_type) = self.parse_declspecs(declspecs);
+
+        ::std::assert_matches!(
+          storage_specs,
+          SS::Empty | SS::Auto | SS::Register,
+          "pls report add_error()"
+        );
         let pd::Declarator {
           modifiers,
           name,
@@ -403,9 +413,9 @@ impl<'c> Sema<'c> {
           self.arena(),
           name.unwrap_or("<unnamed>"),
           qualified_type,
-          StorageSpecifier::Automatic,
+          Linkage::None,
           VarDeclKind::Declaration,
-          sd::VarDef::decl().into(),
+          sd::VarDef::decl(Storage::Automatic).into(),
           span,
         )
       })
@@ -421,7 +431,7 @@ impl<'c> Sema<'c> {
       .get_type(declspecs.type_specifiers)
       .handle_with(self, self.int_type().into())
       .with_qualifiers(declspecs.qualifiers);
-    let storage_class = declspecs.storage_class;
+    let storage_class = declspecs.storage_specifiers;
     let function_specifier = declspecs.function_specifiers;
 
     (function_specifier, storage_class, qualified_type)
@@ -575,12 +585,14 @@ impl<'c> Sema<'c> {
       declarator,
       span,
     } = function;
-    let (function_specifier, storage, base_return_type) = parsed_declspecs;
+    let (function_specifier, storage_specifier, base_return_type) =
+      parsed_declspecs;
     let pd::Declarator {
       modifiers,
       name,
       span: _,
     } = declarator;
+
     let name = name
       .shall_ok("function must have a name; it should be handled in parser");
 
@@ -597,55 +609,81 @@ impl<'c> Sema<'c> {
     };
 
     let previous_decl = self.environment.find(name);
-    let (declaration_type, merged_storage) = if let Some(previous_decl) =
-      previous_decl
-    {
-      if !Compatibility::compatible(
-        &previous_decl.qualified_type,
-        &qualified_type,
-      ) {
-        Err(
-          IncompatibleType(
-            name,
-            previous_decl.qualified_type.to_string(),
-            qualified_type.to_string(),
-          ) + Severity::Error
-            + span,
-        )?;
-      }
-
-      debug_assert!(
-        !matches!(previous_decl.declkind, Tentative),
-        "function cannot be tentative"
-      );
-
-      if matches!(declkind, Definition) && previous_decl.definition().is_some()
-      {
-        Err(FunctionAlreadyDefined(name) + Severity::Error + span)?
-      }
-      (
-        Compatibility::composite_unchecked(
+    let (declaration_type, linkage) = {
+      let linkage = if self.environment.is_global() {
+        match storage_specifier {
+          SS::Empty | SS::Extern => Linkage::External,
+          SS::Static => Linkage::Internal,
+          _ => {
+            self.add_error(
+              Custom(format!(
+                "invalid storage classifier '{storage_specifier}' for function"
+              )),
+              span,
+            );
+            Linkage::External
+          },
+        }
+      } else {
+        if !storage_specifier.is_empty() && storage_specifier != SS::Extern {
+          self.add_error(
+            Custom(format!(
+              "function decl at block scope shall have either extern or no \
+               storage specifier. got '{}'",
+              storage_specifier
+            )),
+            span,
+          );
+        }
+        Linkage::External
+      };
+      if let Some(previous_decl) = previous_decl {
+        if !Compatibility::compatible(
           &previous_decl.qualified_type,
           &qualified_type,
-          self,
-        ),
-        StorageSpecifier::try_merge(
-          previous_decl.storage_class,
-          storage.unwrap_or(StorageSpecifier::Extern),
+        ) {
+          Err(
+            IncompatibleType(
+              name,
+              previous_decl.qualified_type.to_string(),
+              qualified_type.to_string(),
+            ) + Severity::Error
+              + span,
+          )?;
+        }
+
+        debug_assert!(
+          !matches!(previous_decl.declkind, Tentative),
+          "function cannot be tentative"
+        );
+
+        if matches!(declkind, Definition)
+          && previous_decl.definition().is_some()
+        {
+          Err(FunctionAlreadyDefined(name) + Severity::Error + span)?
+        }
+        (
+          Compatibility::composite_unchecked(
+            &previous_decl.qualified_type,
+            &qualified_type,
+            self,
+          ),
+          Linkage::try_merge(previous_decl.linkage, linkage).unwrap_or_else(
+            |e| {
+              self.add_error(StorageSpecsUnmergeable(e), span);
+              previous_decl.linkage
+            },
+          ),
         )
-        .unwrap_or_else(|data| {
-          self.add_diag(data + Severity::Error + span);
-          previous_decl.storage_class
-        }),
-      )
-    } else {
-      (qualified_type, storage.unwrap_or(StorageSpecifier::Extern))
+      } else {
+        (qualified_type, linkage)
+      }
     };
 
     if name == "main" {
       Context::main_proto_validate(
         self,
-        merged_storage,
+        linkage,
         qualified_type.as_functionproto_unchecked(),
         function_specifier,
       )
@@ -659,7 +697,7 @@ impl<'c> Sema<'c> {
       previous_decl,
       name,
       declaration_type,
-      merged_storage,
+      linkage,
       declkind,
       sd::Function::new_decl(function_specifier, parameters).into(),
       span,
@@ -776,6 +814,7 @@ impl<'c> Sema<'c> {
     Ok(function)
   }
 
+  /// FIXME: [`SS::ThreadLocal`] is inaccurate.
   pub fn vardef(
     &mut self,
     parsed_declspecs: ParsedDeclspecs<'c>,
@@ -792,102 +831,126 @@ impl<'c> Sema<'c> {
       span: _,
     } = declarator;
 
-    use StorageSpecifier::*;
-
-    let name = name.unwrap_or("<unnamed>");
-
-    let (_function_specifier, storage, raw_qualified_type) = parsed_declspecs;
+    let (_function_specifier, storage_specifier, raw_qualified_type) =
+      parsed_declspecs;
     debug_assert!(
       _function_specifier.is_empty(),
       "variable cannot have function specifier; this should be handled in \
        parser"
     );
-
-    let (qualified_type, initializer) =
-      if RefEq::ref_eq(&*raw_qualified_type, self.auto_type()) {
-        let out = initializer.map(|initializer| {
-          self.initializer(
-            initializer,
-            None,
-            self.environment.is_global()
-              || matches!(storage, Some(Constexpr | Static | ThreadLocal)),
-          )
-        });
-        if let Some((initializer, qualified_type)) = out {
-          (qualified_type, Some(initializer))
-        } else {
-          Err(DeducedTypeWithNoInitializer(name) + Severity::Error + span)?
-        }
+    let previous_decl = name.and_then(|name| {
+      if !self.environment.is_global() && storage_specifier.contains(SS::Extern)
+      {
+        self.environment.extern_find(name)
       } else {
-        let qualified_type =
-          self.apply_modifiers_for_varty(raw_qualified_type, modifiers);
-        if self.environment.is_global() && qualified_type.has_vla_dim() {
-          self.add_error(TopLevelVLA(name), span);
-          // skip init part...
-          (qualified_type, None)
-        } else if let Some((initializer, qualified_type)) =
-          initializer.map(|initializer| {
-            self.initializer(
-              initializer,
-              Some(qualified_type),
-              self.environment.is_global()
-                || matches!(storage, Some(Constexpr | Static | ThreadLocal)),
-            )
-          })
-        {
-          (qualified_type, Some(initializer))
+        self.environment.shallow_find(name)
+      }
+    });
+
+    if storage_specifier.contains(SS::ThreadLocal) {
+      self.add_error(
+        UnsupportedFeature("ThreadLocal unimplemented".to_string()),
+        span,
+      );
+    }
+
+    let name = name.unwrap_or("<unnamed>");
+    let is_constexpr = storage_specifier.contains(SS::Constexpr);
+
+    let (qualified_type, initializer) = {
+      let requires_folding = self.environment.is_global()
+        || storage_specifier
+          .intersects(SS::Constexpr | SS::Static | SS::ThreadLocal);
+
+      let (qtype, init) =
+        if RefEq::ref_eq(&*raw_qualified_type, self.auto_type()) {
+          let out = initializer.map(|initializer| {
+            self.initializer(initializer, None, requires_folding)
+          });
+          if let Some((initializer, qualified_type)) = out {
+            (qualified_type, Some(initializer))
+          } else {
+            Err(DeducedTypeWithNoInitializer(name) + Severity::Error + span)?
+          }
         } else {
-          (qualified_type, None)
+          let qualified_type =
+            self.apply_modifiers_for_varty(raw_qualified_type, modifiers);
+          if self.environment.is_global() && qualified_type.has_vla_dim() {
+            self.add_error(TopLevelVLA(name), span);
+            // skip init part...
+            (qualified_type, None)
+          } else if let Some((initializer, qualified_type)) =
+            initializer.map(|initializer| {
+              self.initializer(
+                initializer,
+                Some(qualified_type),
+                requires_folding,
+              )
+            })
+          {
+            (qualified_type, Some(initializer))
+          } else {
+            (qualified_type, None)
+          }
+        };
+      if is_constexpr && init.is_none() {
+        self.add_warning(
+          Custom(format!(
+            "constexpr variable '{name}' shall have initializer"
+          )),
+          span,
+        );
+      }
+      let constexpr_check = |qtype: QualifiedType<'c>| {
+        if is_constexpr {
+          if qtype
+            .qualifiers
+            .intersects(Qualifiers::Atomic | Qualifiers::Volatile)
+          {
+            self.add_error(
+              Custom(format!(
+                "constexpr variable '{name}' shall not have qualifier '{}'",
+                qtype.qualifiers
+              )),
+              span,
+            );
+            qtype
+              .without_qualifiers()
+              .with_qualifiers(Qualifiers::Const)
+          } else {
+            qtype.with_qualifiers(Qualifiers::Const)
+          }
+        } else {
+          qtype
         }
       };
-    let previous_decl = self.environment.shallow_find(name);
+      if let Some(prev_decl_ref) = previous_decl {
+        let prev_qtype = prev_decl_ref.qualified_type;
 
-    let (qualified_type, merged_storage) = if let Some(prev_decl_ref) =
-      previous_decl
-    {
-      let prev_qtype = prev_decl_ref.qualified_type;
-
-      if !Compatibility::compatible(&prev_qtype, &qualified_type) {
-        Err(
-          IncompatibleType(
-            name,
-            prev_qtype.to_string(),
-            qualified_type.to_string(),
-          ) + Severity::Error
-            + span,
-        )?
-      } else {
-        if prev_decl_ref.definition().is_some() && initializer.is_some() {
-          self.add_error(VariableAlreadyDefined(name), span)
-        }
-        if storage.is_none() && !matches!(prev_decl_ref.storage_class, Extern) {
-          self.add_error(
-            Custom(format!(
-              "variable '{}' declared as extern follows previous declaration \
-               with non-extern storage specifier '{}'",
-              name, prev_decl_ref.storage_class
+        if !Compatibility::compatible(&prev_qtype, &qtype) {
+          Err(
+            IncompatibleType(name, prev_qtype.to_string(), qtype.to_string())
+              + Severity::Error
+              + span,
+          )?
+        } else {
+          if prev_decl_ref.definition().is_some() && init.is_some() {
+            self.add_error(VariableAlreadyDefined(name), span)
+          }
+          (
+            constexpr_check(Compatibility::composite_unchecked(
+              &prev_qtype,
+              &qtype,
+              self,
             )),
-            span,
-          );
+            init,
+          )
         }
-        (
-          Compatibility::composite_unchecked(
-            &prev_qtype,
-            &qualified_type,
-            self,
-          ),
-          storage.map(|s| {
-            StorageSpecifier::try_merge(prev_decl_ref.storage_class, s)
-              .unwrap_or_else(|data| {
-                self.add_diag(data + Severity::Error + span);
-                prev_decl_ref.storage_class
-              })
-          }),
-        )
+      } else {
+        (constexpr_check(qtype), init)
       }
-    } else {
-      (qualified_type, storage)
     };
+
     // arr can have 1st extend incomplete, handled downstream at init
     if !qualified_type.is_complete(self) && !qualified_type.is_array() {
       Err(
@@ -897,29 +960,208 @@ impl<'c> Sema<'c> {
       )?;
     }
 
-    let vardef = match self.environment.is_global() {
-      true => self.global_vardef(
-        storage,
-        merged_storage.unwrap_or(Extern),
-        qualified_type,
-        name,
-        initializer,
-        previous_decl,
-        span,
-      ),
-      false => self.local_vardef(
-        storage.unwrap_or(Automatic),
-        merged_storage.unwrap_or(Automatic),
-        qualified_type,
-        name,
-        initializer,
-        previous_decl,
-        span,
-      ),
+    use Linkage as L;
+    use Storage as S;
+
+    let vardef = {
+      let merge = |incoming: Linkage| {
+        if let Some(prev) = previous_decl {
+          Linkage::try_merge(prev.linkage, incoming).unwrap_or_else(|e| {
+            self.add_error(StorageSpecsUnmergeable(e), span);
+            prev.linkage
+          })
+        } else {
+          incoming
+        }
+      };
+      let typedef = || {
+        sd::ExternalDeclaration::new(
+          self.arena(),
+          previous_decl,
+          name,
+          qualified_type,
+          L::None,
+          VarDeclKind::Declaration,
+          sd::Typedef::new().into(),
+          span,
+        )
+      };
+      if self.environment.is_global() {
+        if name == "main" && storage_specifier.contains(SS::Extern) {
+          self.add_warning(
+            MainFunctionProtoMismatch(
+              "a variable that has name 'main' with externel linkage is \
+               undefined behavior.",
+            ),
+            span,
+          );
+        }
+
+        let ten = |incoming: Linkage, storage: Storage| {
+          sd::ExternalDeclaration::new(
+            self.arena(),
+            previous_decl,
+            name,
+            qualified_type,
+            merge(incoming),
+            VarDeclKind::Tentative,
+            sd::VarDef::new(None, is_constexpr, storage).into(),
+            span,
+          )
+        };
+        let decl = |incoming: Linkage, storage: Storage| {
+          sd::ExternalDeclaration::new(
+            self.arena(),
+            previous_decl,
+            name,
+            qualified_type,
+            merge(incoming),
+            VarDeclKind::Declaration,
+            sd::VarDef::decl(storage).into(),
+            span,
+          )
+        };
+        let def = |incoming: Linkage,
+                   storage: Storage,
+                   initializer: sd::Initializer<'c>| {
+          sd::ExternalDeclaration::new(
+            self.arena(),
+            previous_decl,
+            name,
+            qualified_type,
+            merge(incoming),
+            VarDeclKind::Definition,
+            sd::VarDef::def(initializer, is_constexpr, storage).into(),
+            span,
+          )
+        };
+        match (storage_specifier, initializer) {
+          // 6.9.3p2, tentative.
+          (SS::Empty, None) => ten(L::Common, S::Static),
+          (
+            SS::Auto | SS::Register | SS::AutoConstexpr | SS::RegisterConstexpr,
+            None,
+          ) => {
+            self.add_error(GlobalVar(storage_specifier), span);
+            ten(L::Common, S::Static)
+          },
+          (SS::Static | SS::StaticConstexpr, None) =>
+            ten(L::Internal, S::Static),
+          // error reported above
+          (SS::Constexpr, None) => ten(L::Internal, S::Static),
+          // declaration.
+          (SS::ThreadLocal | SS::StaticThreadLocal, None) =>
+            decl(L::Internal, S::ThreadLocal),
+          (SS::Extern, None) =>
+            if let Some(prev) = previous_decl {
+              decl(
+                L::External,
+                prev.as_variable().map(|v| v.storage).unwrap_or(S::Static),
+              )
+            } else {
+              decl(L::External, S::Static)
+            },
+          (SS::ExternThreadLocal, None) => decl(L::External, S::ThreadLocal),
+          // definition.
+          (SS::Empty | SS::Constexpr, Some(init)) =>
+            def(L::External, S::Static, init),
+          (SS::Static | SS::StaticConstexpr, Some(init)) =>
+            def(L::Internal, S::Static, init),
+          (SS::ThreadLocal | SS::StaticThreadLocal, Some(init)) =>
+            def(L::Internal, S::ThreadLocal, init),
+          (SS::Extern | SS::ExternThreadLocal, Some(init)) => {
+            self.add_warning(ExternVariableWithInitializer(name), span);
+            def(L::External, S::ThreadLocal, init)
+          },
+          // definition w/ errors.
+          (
+            SS::Auto | SS::Register | SS::AutoConstexpr | SS::RegisterConstexpr,
+            Some(init),
+          ) => {
+            self.add_error(GlobalVar(storage_specifier), span);
+            def(L::Common, S::Static, init)
+          },
+          (SS::Typedef, Some(_init)) => {
+            self.add_error(
+              Custom("typedef symbol cannot have initializer.".to_string()),
+              span,
+            );
+            typedef()
+          },
+          (SS::Typedef, None) => typedef(),
+          _ => {
+            self.add_error(
+              Custom(format!("Unknown storage specs {storage_specifier}")),
+              span,
+            );
+            decl(L::Internal, S::Static)
+          },
+        }
+      } else {
+        if (qualified_type
+          .as_array()
+          .is_some_and(|array| !array.is_complete(self)))
+          && initializer.is_none()
+        {
+          self.add_error(
+            IncompleteArrayDefNoInit(name, qualified_type.to_string()),
+            span,
+          );
+        }
+        if storage_specifier.contains(SS::Extern) && initializer.is_some() {
+          self.add_error(ExternVariableWithInitializer(name), span);
+        }
+        let local = |incoming: Linkage, storage: Storage| {
+          sd::ExternalDeclaration::new(
+            self.arena(),
+            previous_decl,
+            name,
+            qualified_type,
+            merge(incoming),
+            if storage_specifier.contains(SS::Extern) {
+              VarDeclKind::Declaration
+            } else {
+              VarDeclKind::Definition
+            },
+            sd::VarDef::new(initializer, is_constexpr, storage).into(),
+            span,
+          )
+        };
+        match storage_specifier {
+          SS::Empty
+          | SS::Auto
+          | SS::Register
+          | SS::Constexpr
+          | SS::AutoConstexpr
+          | SS::RegisterConstexpr => local(L::None, S::Automatic),
+          SS::Extern =>
+            if let Some(decl) = previous_decl {
+              local(
+                decl.linkage,
+                decl.as_variable().map(|v| v.storage).unwrap_or(S::Static),
+              )
+            } else {
+              local(L::External, S::Static)
+            },
+          SS::Static | SS::StaticConstexpr => local(L::Internal, S::Static),
+          // FIXME: block scope thread_local is also considered External Definitions... here ignoring...
+          SS::ThreadLocal | SS::StaticThreadLocal =>
+            local(L::Internal, S::ThreadLocal),
+          SS::ExternThreadLocal => local(L::External, S::ThreadLocal),
+          SS::Typedef => typedef(),
+          _ => {
+            self.add_error(
+              Custom(format!("Unknown storage specs {storage_specifier}")),
+              span,
+            );
+            local(L::None, S::Automatic)
+          },
+        }
+      }
     };
 
     if !vardef.qualified_type.is_complete(self)
-      && !vardef.storage_class.is_extern()
+      && !matches!(vardef.linkage, L::External | L::Common)
     {
       self.add_error(
         VariableIncompleteType(name, vardef.qualified_type.to_string()),
@@ -946,152 +1188,6 @@ impl<'c> Sema<'c> {
     expression: ExprRef<'c>,
   ) -> Option<ExprRef<'c>> {
     Folder::new(self, relaxed_static_const_var, expression).doit()
-  }
-
-  #[allow(clippy::too_many_arguments)]
-  fn global_vardef(
-    &self,
-    original_storage: Option<StorageSpecifier>,
-    merged_storage: StorageSpecifier,
-    qualified_type: QualifiedType<'c>,
-    name: StrRef<'c>,
-    initializer: Option<sd::Initializer<'c>>,
-    previous_decl: Option<sd::DeclRef<'c>>,
-    span: SourceSpan,
-  ) -> sd::DeclRef<'c> {
-    use StorageSpecifier::*;
-
-    if name == "main" && matches!(merged_storage, Extern) {
-      self.add_warning(
-        MainFunctionProtoMismatch(
-          "a variable that has name 'main' with externel linkage is undefined \
-           behavior.",
-        ),
-        span,
-      );
-    }
-
-    let ten = || {
-      sd::ExternalDeclaration::new(
-        self.arena(),
-        previous_decl,
-        name,
-        qualified_type,
-        merged_storage,
-        VarDeclKind::Tentative,
-        sd::VarDef::new(None).into(),
-        span,
-      )
-    };
-    let decl = || {
-      sd::ExternalDeclaration::new(
-        self.arena(),
-        previous_decl,
-        name,
-        qualified_type,
-        merged_storage,
-        VarDeclKind::Declaration,
-        sd::VarDef::decl().into(),
-        span,
-      )
-    };
-    let def = |init| {
-      sd::ExternalDeclaration::new(
-        self.arena(),
-        previous_decl,
-        name,
-        qualified_type,
-        merged_storage,
-        VarDeclKind::Definition,
-        sd::VarDef::def(init).into(),
-        span,
-      )
-    };
-    // code here written deliberately repetitive to catch bugs.
-    match (original_storage, initializer) {
-      // 6.9.3p2, tentative.
-      (None, None) => ten(),
-      (Some(Static), None) => ten(),
-      (Some(Constexpr), None) => ten(),
-      // tentative w/ errors.
-      (Some(Register), None) => {
-        self.add_error(GlobalRegVar, span);
-        ten()
-      },
-      (Some(Automatic), None) => {
-        self.add_error(GlobalAutoVar, span);
-        ten()
-      },
-      // declaration.
-      (Some(Extern), None) => decl(),
-      (Some(Typedef), None) => decl(),
-      // definition.
-      (None, Some(init)) => def(init),
-      (Some(Static), Some(init)) => def(init),
-      (Some(Constexpr), Some(init)) => def(init),
-      // definition w/ warnings.
-      (Some(Extern), Some(init)) => {
-        self.add_warning(ExternVariableWithInitializer(name.to_string()), span);
-        def(init)
-      },
-      // definition w/ errors.
-      (Some(Register), Some(init)) => {
-        self.add_error(GlobalRegVar, span);
-        def(init)
-      },
-      (Some(Automatic), Some(init)) => {
-        self.add_error(GlobalAutoVar, span);
-        def(init)
-      },
-      // todos.
-      (Some(Typedef), Some(init)) => {
-        self.add_error(Custom("typedef with an initializer".to_string()), span);
-        def(init)
-      },
-      (Some(ThreadLocal), _) =>
-        unreachable!("{ThreadLocal} should not be handled here"),
-    }
-  }
-
-  #[allow(clippy::too_many_arguments)]
-  fn local_vardef(
-    &self,
-    original_storage: StorageSpecifier,
-    merged_storage: StorageSpecifier,
-    qualified_type: QualifiedType<'c>,
-    name: StrRef<'c>,
-    initializer: Option<sd::Initializer<'c>>,
-    previous_decl: Option<sd::DeclRef<'c>>,
-    span: SourceSpan,
-  ) -> sd::DeclRef<'c> {
-    use StorageSpecifier::*;
-    match original_storage {
-      Automatic | Register | Typedef => (),
-      Extern if initializer.is_some() =>
-        self.add_error(LocalExternVarWithInitializer(name), span),
-      Extern | Static | Constexpr => todo!(),
-      ThreadLocal => unreachable!("{ThreadLocal} should not be handled here"),
-    }
-    if (qualified_type
-      .as_array()
-      .is_some_and(|array| !array.is_complete(self)))
-      && initializer.is_none()
-    {
-      self.add_error(
-        IncompleteArrayDefNoInit(name, qualified_type.to_string()),
-        span,
-      );
-    }
-    sd::ExternalDeclaration::new(
-      self.arena(),
-      previous_decl,
-      name,
-      qualified_type,
-      merged_storage,
-      VarDeclKind::Definition,
-      sd::VarDef::new(initializer).into(),
-      span,
-    )
   }
 }
 
@@ -1240,9 +1336,13 @@ impl<'c> Sema<'c> {
       UndefinedVariable(variable.name) + Severity::Error + variable.span,
     )?;
     if declaration.is_typedef() {
-      contract_violation!(
-        "variable cannot be a typedef; this should be handled in parser"
-      );
+      Err(
+        Custom(format!(
+          "Unexpected type name {}, expect a variable.",
+          variable.name
+        )) + Severity::Error
+          + variable.span,
+      )
     } else {
       Ok(se::Expression::new_lvalue(
         self,
@@ -1499,7 +1599,7 @@ impl<'c> Sema<'c> {
 
   /// i didnt came up with a better name...
   ///
-  /// 6.5.4.1.2: The expression `++E` is equivalent to `(E+=1)`,
+  /// 6.5.4.1p2: The expression `++E` is equivalent to `(E+=1)`,
   /// where the value `1` IS OF THE APPRORIATE TYPE??!! WTF
   ///
   /// ...which means:
@@ -1607,7 +1707,7 @@ impl<'c> Sema<'c> {
       Err(
         AddressofOperandNotLvalue(operand.to_string()) + Severity::Error + span,
       )
-    } else if matches!(&**operand, se::RawExpr::Variable(variable) if variable.storage_class.is_register())
+    } else if matches!(&**operand, se::RawExpr::Variable(variable) if variable.as_variable().is_some_and(|v|v.storage == Storage::Register))
     {
       Err(AddressofOperandRegVar(operand.to_string()) + Severity::Error + span)
     } else {

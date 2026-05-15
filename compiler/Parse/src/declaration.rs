@@ -128,7 +128,7 @@ pub enum TypeSpecifier<'c> {
 }
 
 impl<'c> TypeSpecifier<'c> {
-  pub fn sort_key(&self) -> u8 {
+  pub const fn sort_key(&self) -> u8 {
     use TypeSpecifier::*;
     match self {
       Void => 0,
@@ -169,7 +169,7 @@ impl<'c> TypeSpecifier<'c> {
 #[derive(Debug)]
 pub struct DeclSpecs<'c> {
   pub function_specifiers: FunctionSpecifier,
-  pub storage_class: Option<StorageSpecifier>,
+  pub storage_specifiers: StorageSpecifier,
   pub qualifiers: Qualifiers,
   pub type_specifiers: Vec<TypeSpecifier<'c>>,
   pub span: SourceSpan,
@@ -395,14 +395,14 @@ impl<'c> Program<'c> {
 }
 impl<'c> DeclSpecs<'c> {
   pub fn new(
-    storage_class: Option<StorageSpecifier>,
+    storage_specifiers: StorageSpecifier,
     qualifiers: Qualifiers,
     type_specifiers: Vec<TypeSpecifier<'c>>,
     function_specifiers: FunctionSpecifier,
     span: SourceSpan,
   ) -> Self {
     Self {
-      storage_class,
+      storage_specifiers,
       qualifiers,
       type_specifiers,
       function_specifiers,
@@ -647,8 +647,8 @@ mod fmt {
       if !self.function_specifiers.is_empty() {
         write!(f, "{} ", self.function_specifiers)?;
       }
-      if let Some(storage) = &self.storage_class {
-        write!(f, "{} ", storage)?;
+      if !self.storage_specifiers.is_empty() {
+        write!(f, "{} ", self.storage_specifiers)?;
       }
       write!(
         f,

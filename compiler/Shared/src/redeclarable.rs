@@ -333,6 +333,7 @@ macro_rules! make_intrusive_redeclarable_node {
 
       #[must_use]
       #[inline]
+      #[allow(clippy::too_many_arguments)]
       pub fn new_canonical<'a>(bump: &'a impl $crate::Bumper, $($extra_field: $extra_ty),*) -> &'a Self {
         let this = bump.alloc(::std::mem::MaybeUninit::<Self>::uninit()).as_mut_ptr();
         unsafe {

@@ -4,7 +4,7 @@ use ::rcc_ast::{
   types::{FunctionSpecifier, QualifiedType, Type},
 };
 use ::rcc_shared::{
-  ArenaVec, CollectIn, IntrusiveRedeclarableLink, SourceSpan, StorageSpecifier,
+  ArenaVec, CollectIn, IntrusiveRedeclarableLink, Linkage, SourceSpan, Storage,
   make_intrusive_redeclarable_node,
 };
 use ::rcc_utils::{StrRef, ensure_is_pod, interconvert, make_trio_for};
@@ -27,7 +27,7 @@ pub struct ExternalDeclaration<'c> {
   pub name: StrRef<'c>,                                           // 2 ptr
   pub qualified_type: QualifiedType<'c>,                          // 2 ptr
   pub declaration_data: DeclarationData<'c>,                      // 11 ptr
-  pub storage_class: StorageSpecifier,                                     // packed
+  pub linkage: Linkage,                                           // packed
   /// the complex rule of [`Storage`] and [`VarDeclKind`] are managed by [`Linkage`].
   pub declkind: VarDeclKind, // packed
   pub span: SourceSpan,                                           // 1+ ptr
@@ -37,7 +37,7 @@ make_intrusive_redeclarable_node!(
   __intrusive_redeclarable_link => pub ExternalDeclaration[
     name: StrRef<'c>,
     qualified_type: QualifiedType<'c>,
-    storage_class: StorageSpecifier,
+    linkage: Linkage,
     declkind: VarDeclKind,
     declaration_data: DeclarationData<'c>,
     span: SourceSpan
@@ -48,16 +48,13 @@ impl<'c> ExternalDeclaration<'c> {
   pub fn definition(&self) -> Option<&Self> {
     self.iter().find(|decl| decl.is_definition())
   }
-
-  #[inline(always)]
-  pub fn is_typedef(&self) -> bool {
-    self.storage_class.is_typedef()
-  }
 }
 make_trio_for!(Function, DeclarationData, 'c, Function);
 make_trio_for!(VarDef, DeclarationData, 'c, Variable);
+make_trio_for!(Typedef, DeclarationData,'c, Typedef);
 interconvert!(Function, DeclarationData, 'c, Function);
 interconvert!(VarDef, DeclarationData, 'c, Variable);
+interconvert!(Typedef, DeclarationData, 'c, Typedef);
 impl<'c> Deref for ExternalDeclaration<'c> {
   type Target = DeclarationData<'c>;
 
@@ -70,6 +67,7 @@ impl<'c> Deref for ExternalDeclaration<'c> {
 pub enum DeclarationData<'c> {
   Function(Function<'c>),
   Variable(VarDef<'c>),
+  Typedef(Typedef<'c>),
 }
 impl<'c> DeclarationData<'c> {
   #[must_use]
@@ -78,7 +76,7 @@ impl<'c> DeclarationData<'c> {
     ::rcc_utils::static_dispatch!(
       self,
       |variant| variant.is_definition() =>
-      Function Variable
+      Function Variable Typedef
     )
   }
 }
@@ -123,6 +121,8 @@ impl<'c> Function<'c> {
 }
 #[derive(Debug)]
 pub struct VarDef<'c> {
+  pub is_named_constant: bool,
+  pub storage: Storage,
   pub initializer: Option<Initializer<'c>>,
 }
 impl<'c> VarDef<'c> {
@@ -133,20 +133,55 @@ impl<'c> VarDef<'c> {
   }
 
   #[inline]
-  pub fn new(initializer: Option<Initializer<'c>>) -> Self {
-    Self { initializer }
+  pub fn new(
+    initializer: Option<Initializer<'c>>,
+    is_named_constant: bool,
+    storage: Storage,
+  ) -> Self {
+    Self {
+      initializer,
+      is_named_constant,
+      storage,
+    }
   }
 
   #[inline]
-  pub const fn decl() -> Self {
-    Self { initializer: None }
+  pub const fn decl(storage: Storage) -> Self {
+    Self {
+      initializer: None,
+      is_named_constant: false,
+      storage,
+    }
   }
 
   #[inline]
-  pub fn def(initializer: Initializer<'c>) -> Self {
+  pub fn def(
+    initializer: Initializer<'c>,
+    is_named_constant: bool,
+    storage: Storage,
+  ) -> Self {
     Self {
       initializer: Some(initializer),
+      is_named_constant,
+      storage,
     }
+  }
+}
+#[derive(Debug, Default)]
+pub struct Typedef<'c> {
+  _idfk: ::std::marker::PhantomData<&'c str>,
+}
+impl Typedef<'_> {
+  #[inline(always)]
+  pub const fn new() -> Self {
+    Self {
+      _idfk: ::std::marker::PhantomData,
+    }
+  }
+
+  #[inline(always)]
+  pub const fn is_definition(&self) -> bool {
+    false
   }
 }
 #[derive(Debug)]
@@ -291,8 +326,10 @@ mod fmt {
         DeclarationData::Variable(var_def) => write!(
           f,
           "{} {} {} {}",
-          self.storage_class, self.qualified_type, self.name, var_def
+          var_def.storage, self.qualified_type, self.name, var_def
         ),
+        DeclarationData::Typedef(_) =>
+          write!(f, "typedef {} {}", self.qualified_type, self.name),
       }
     }
   }

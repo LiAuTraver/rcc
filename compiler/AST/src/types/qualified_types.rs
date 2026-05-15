@@ -115,20 +115,34 @@ impl<'c> ::std::ops::Deref for QualifiedType<'c> {
 }
 
 impl<'c> QualifiedType<'c> {
+  #[must_use = "this function consumes self and returns a new instance with \
+                updated qualifiers"]
+  #[inline(always)]
   pub fn with_qualifiers(mut self, qualifiers: Qualifiers) -> Self {
     self.qualifiers |= qualifiers;
     self
   }
 
+  #[must_use = "this function consumes self and returns a new instance with \
+                updated qualifiers"]
+  #[inline(always)]
+  pub fn without_qualifiers(mut self) -> Self {
+    self.qualifiers = Qualifiers::empty();
+    self
+  }
+
+  #[inline(always)]
+  pub const fn contains(&self, qualifiers: Qualifiers) -> bool {
+    self.qualifiers.contains(qualifiers)
+  }
+
+  #[inline(always)]
   pub fn is_modifiable(&self, target_info: &TargetInfo) -> bool {
     self.unqualified_type.is_modifiable(target_info)
       && !self.qualifiers.contains(Qualifiers::Const)
   }
 
-  pub fn is_void(&self) -> bool {
-    self.unqualified_type.is_void()
-  }
-
+  #[inline(always)]
   pub fn destructure(self) -> (Qualifiers, TypeRef<'c>) {
     (self.qualifiers, self.unqualified_type)
   }

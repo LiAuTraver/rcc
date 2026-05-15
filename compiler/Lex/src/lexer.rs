@@ -316,10 +316,7 @@ impl<'c> Lexer<'c> {
       '\\' => self.line_escape(start),
 
       ch => {
-        self.add_error(
-          UnexpectedCharacter((ch.to_string(), None).into()),
-          self.span(start),
-        );
+        self.add_error(UnexpectedCharacter(ch.to_string()), self.span(start));
         None
       },
     }

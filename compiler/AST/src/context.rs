@@ -1,5 +1,5 @@
 use ::rcc_shared::{
-  Arena, Bumper, DiagMeta, LangOpts, Severity, StorageSpecifier, Triple,
+  Arena, Bumper, DiagMeta, LangOpts, Linkage, Severity, Triple,
 };
 use ::rcc_utils::StrRef;
 use ::std::{cell::RefCell, collections::HashSet, ops::Deref};
@@ -301,15 +301,15 @@ impl<'c> Context<'c> {
 impl<'c> Context<'c> {
   pub fn main_proto_validate(
     &self,
-    storage: StorageSpecifier,
+    linkage: Linkage,
     proto: &FunctionProto<'c>,
     function_specifier: FunctionSpecifier,
   ) -> Result<(), DiagMeta<'c>> {
     use ::rcc_shared::DiagData::MainFunctionProtoMismatch;
+    use Linkage::*;
     use Severity::*;
-    use StorageSpecifier::*;
 
-    if matches!(storage, Static) {
+    if matches!(linkage, Internal) {
       Err(
         MainFunctionProtoMismatch(
           "main function cannot be declared with static storage",

@@ -567,30 +567,24 @@ impl<'c> Fold<'c, CompoundLiteral> for Folder<'_, 'c> {
 impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
   fn fold(&self, variable: &Variable<'c>) -> FR<'c> {
     use ::rcc_ast::types::Qualifiers;
-    use ::rcc_shared::StorageSpecifier::*;
-    match variable.storage_class {
+    let v = variable.as_variable()?; // unimplemented fror function
+    match v.storage {
       _ if self.expression.is_modifiable_lvalue(self)
-        || variable
-          .qualified_type
-          .qualifiers
-          .contains(Qualifiers::Volatile) =>
+        || variable.qualified_type.contains(Qualifiers::Volatile) =>
         None,
-      Static | Extern | Automatic | Register | Constexpr => {
-        if !(matches!(variable.storage_class, Constexpr)
-          || (variable
-            .qualified_type
-            .qualifiers
-            .contains(Qualifiers::Const)
-            && self.relaxed_static_const_var))
-        {
-          None?
-        }
-
-        let vardef = self.environment.find(variable.name)?;
-        debug_assert!(::std::ptr::eq(vardef.canonical(), variable.canonical()));
-        let initializer = vardef
+      _ if !v.is_named_constant
+        && !(variable.qualified_type.contains(Qualifiers::Const)
+          && self.relaxed_static_const_var) =>
+        None,
+      _ => {
+        let initializer = self
+          .environment
+          .find(variable.name)?
           .as_variable()
-          .expect("unimplemented for function")
+          .expect(
+            "v is variable, semaa ensures the redeclarable chain of v is also \
+             variable",
+          )
           .initializer
           .as_ref()?; //< covers the case of var either is extern and referencing other TU or has no initializer)
         match initializer {
@@ -601,9 +595,6 @@ impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
           Initializer::List(_) => None,
         }
       },
-      // can we reach here?
-      Typedef => None,
-      ThreadLocal => unreachable!(),
     }
   }
 }

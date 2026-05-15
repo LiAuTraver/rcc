@@ -5,7 +5,7 @@ use ::rcc_ast::types::{
 use ::rcc_sema::{
   declaration::{
     DeclarationData, Designator, ExternalDeclaration, Function, Initializer,
-    InitializerList, InitializerListEntry, TranslationUnit, VarDef,
+    InitializerList, InitializerListEntry, TranslationUnit, Typedef, VarDef,
   },
   expression::{Empty, Expression},
   statement::{
@@ -651,15 +651,9 @@ impl<'c> Dumpable<'c> for ExternalDeclaration<'_> {
   ) {
     dumper.print_indent(prefix, is_last);
     match &self.declaration_data {
-      DeclarationData::Function(_) => {
-        dumper.write("Function", &palette.node);
-      },
-      DeclarationData::Variable(_) =>
-        if self.is_typedef() {
-          dumper.write("Typedef", &palette.node);
-        } else {
-          dumper.write("VarDef", &palette.node);
-        },
+      DeclarationData::Function(_) => dumper.write("Function", &palette.node),
+      DeclarationData::Variable(_) => dumper.write("VarDef", &palette.node),
+      DeclarationData::Typedef(_) => dumper.write("Typedef", &palette.node),
     };
 
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
@@ -697,7 +691,11 @@ impl<'c> Dumpable<'c> for ExternalDeclaration<'_> {
     // // );
     // // dumper.write("]", &palette.skeleton);
     dumper.write(", ", &palette.skeleton);
-    dumper.write(quoted!("'" => self.storage_class), &palette.meta);
+    dumper.write(quoted!("'" => self.linkage), &palette.meta);
+    if let DeclarationData::Variable(vardef) = &**self {
+      dumper.write(", ", &palette.skeleton);
+      dumper.write(quoted!("'" => vardef.storage), &palette.meta);
+    }
     dumper.write("]", &palette.skeleton);
 
     dumper.newline();
@@ -717,7 +715,7 @@ impl<'c> Dumpable<'c> for DeclarationData<'_> {
     ::rcc_utils::static_dispatch!(
       self,
       |variant| variant.dump(dumper, prefix, is_last, palette) =>
-      Function Variable
+      Function Variable Typedef
     )
   }
 }
@@ -750,7 +748,17 @@ impl<'c> Dumpable<'c> for Function<'_> {
     }
   }
 }
-
+impl<'c> Dumpable<'c> for Typedef<'_> {
+  #[inline(always)]
+  fn dump(
+    &self,
+    _dumper: &mut impl Dumper<'c>,
+    _prefix: &str,
+    _is_last: bool,
+    _palette: &Palette,
+  ) {
+  }
+}
 impl<'c> Dumpable<'c> for Initializer<'_> {
   fn dump(
     &self,

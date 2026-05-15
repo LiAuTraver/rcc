@@ -6,7 +6,7 @@ use ::rcc_ast::{
 use ::rcc_sema::{declaration as sd, expression as se, statement as ss};
 use ::rcc_shared::{
   DiagData::*, Diagnosis, OpDiag, Operator, OperatorCategory, SourceSpan,
-  StorageSpecifier,
+  Storage,
 };
 use ::rcc_utils::{RefEq, StrRef, contract_violation};
 use ::std::{collections::HashMap, ops::Deref};
@@ -259,6 +259,7 @@ impl<'c> Builder<'c> {
         (true, function.is_definition()),
       sd::DeclarationData::Variable(variable) =>
         (false, variable.is_definition()),
+      _ => return,
     };
     match (is_function, is_definition) {
       (true, true) => self.global_funcdef(declaration),
@@ -277,7 +278,7 @@ impl<'c> Builder<'c> {
       let value_id = self.emit(
         global::Function::new_empty(
           latest.name,
-          latest.storage_class.into(),
+          latest.linkage,
           Default::default(),
           latest
             .qualified_type
@@ -325,7 +326,7 @@ impl<'c> Builder<'c> {
         let function_id = self.emit(
           global::Function::new_empty(
             function_name,
-            latest.storage_class.into(),
+            latest.linkage,
             Default::default(),
             ast_type.as_functionproto_unchecked().is_variadic,
           ),
@@ -512,7 +513,7 @@ impl<'c> Builder<'c> {
     } else {
       let latest = variable.latest();
       let value_id = self.emit(
-        global::Variable::new(latest.name, latest.storage_class.into(), None),
+        global::Variable::new(latest.name, latest.linkage, None),
         &latest.qualified_type,
       );
       self.globals.insert(variable.canonical(), value_id);
@@ -530,7 +531,14 @@ impl<'c> Builder<'c> {
         if let ast::Type::Array(array) = value.ast_type
           && matches!(array.size, ast::ArraySize::Incomplete)
         {
-          // 6.9.3p2
+          // 6.9.3p2: if no complete definition is found,
+          // the tentative definition is treated as a complete definition with empty initializer.
+          //
+          // - if the composite type as of the end of the translation unit is an array of unknown size,
+          //   then an array of size one with the composite element type;
+          // - otherwise, the composite type \[...].
+          //
+          // if it has internal linkage, the type shall be complete. (FIXME: idk where to handle this)
           self.diag().add_warning(
             TentativeIncompleteArrType(
               variable.name,
@@ -577,11 +585,7 @@ impl<'c> Builder<'c> {
     } else {
       let latest = variable.latest();
       let value_id = self.emit(
-        global::Variable::new(
-          latest.name,
-          latest.storage_class.into(),
-          initializer,
-        ),
+        global::Variable::new(latest.name, latest.linkage, initializer),
         &latest.qualified_type,
       );
       self.globals.insert(variable.canonical(), value_id);
@@ -602,25 +606,20 @@ impl<'c> Builder<'c> {
         unreachable!("function declaration is not allowed in local scope")
       },
       sd::DeclarationData::Variable(_) => self.local_vardef(declaration),
+      _ => (),
     }
-    // match declaration {
-    //   sd::DeclRef::Function(function_decl) =>
-    //     self.funcdecl(function_decl.declref),
-    //   sd::DeclRef::Variable(var_def) =>
-    //     self.local_vardef(var_def),
-    // }
   }
 
   fn local_vardef(&mut self, var_def: sd::DeclRef<'c>) {
-    use StorageSpecifier::*;
-    match var_def.latest().storage_class {
-      Static | Extern | Constexpr => {
-        todo!("local static/extern variable is not implemented yet!")
-      },
+    use Storage::*;
+    if var_def.latest().is_typedef() {
+      return;
+    }
+    match var_def.latest().as_variable_unchecked().storage {
+      Static | ThreadLocal =>
+        todo!("local static/extern variable is not implemented yet!"),
       // we just ignore the register storage classifier.
       Register | Automatic => (),
-      ThreadLocal => unreachable!("not valid"),
-      Typedef => return,
     }
     let declaration = var_def;
     let value_id = self.emit(inst::Alloca::new(), &declaration.qualified_type);

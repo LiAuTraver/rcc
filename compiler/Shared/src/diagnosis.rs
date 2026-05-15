@@ -64,7 +64,8 @@ mod data {
   use ::std::ops::Add;
 
   use crate::{
-    Keyword, Literal, Number, Operator, SourceManager, SourceSpan, StorageSpecifier,
+    Keyword, Literal, Number, Operator, SourceManager, SourceSpan,
+    StorageSpecifier,
   };
   /// Custom message. would be printed as-is.
   type CustomMessage = String;
@@ -79,8 +80,10 @@ mod data {
   /// TODO: reduce the size of this enum.
   #[derive(Debug, ::thiserror::Error)]
   pub enum Data<'c> {
-    #[error("Unexpected character '{}'{expected}", &.0.0, expected = &.0.1.as_ref().map(|s| format!(", expected '{}'", s)).unwrap_or_default())]
-    UnexpectedCharacter(Box<(String, Option<String>)>),
+    #[error("Unexpected character '{}'{expected}", &.0, expected = &.1)]
+    UnexpectedCharacterExpect(String, String),
+    #[error("UnexpectedCharacter '{0}'.")]
+    UnexpectedCharacter(String),
     #[error("Unterminated string literal")]
     UnterminatedString,
     #[error("{0}")]
@@ -202,10 +205,8 @@ mod data {
       "variable '{0}' declared with 'register' cannot be taken address of"
     )]
     AddressofOperandRegVar(Elem),
-    #[error("Global variable cannot be declared with 'register'")]
-    GlobalRegVar,
-    #[error("Global variable cannot be declared with automatic storage")]
-    GlobalAutoVar,
+    #[error("Global variable cannot be declared with storage '{0}'")]
+    GlobalVar(StorageSpecifier),
     #[error(
       "Global variable cannot be declared with variable-length array type"
     )]
@@ -240,8 +241,8 @@ mod data {
     IncompatiblePointerTypes(QualTyStr, QualTyStr),
     #[error("Type '{0}' is incomplete")]
     IncompleteType(QualTyStr),
-    #[error("Cannot combine previous storage class '{0}' with '{1}'")]
-    StorageSpecsUnmergeable(StorageSpecifier, StorageSpecifier),
+    #[error("{0}")]
+    StorageSpecsUnmergeable(StrRef<'static>),
     #[error("{0}")]
     MainFunctionProtoMismatch(CustomMsgFixed),
     #[error("Discarding qualifiers '{0}' during conversion is not allowed")]
@@ -306,8 +307,8 @@ mod data {
     RedundantStorageSpecs(StorageSpecifier),
     #[error("Redundant type qualifiers '{0}'")]
     RedundantQualifier(String),
-    #[error("Extern global variable '{0}' should not have an initializer")]
-    ExternVariableWithInitializer(Elem),
+    #[error("Extern variable '{0}' should not have an initializer")]
+    ExternVariableWithInitializer(StrRef<'c>),
     #[error("{0}")]
     VariableUninitialized(CustomMessage),
     #[error("Left comma has no effect here; consider removing it")]
@@ -370,7 +371,7 @@ mod data {
     #[error("Declaration defines nothing")]
     EmptyDecl,
     #[error("Empty statement")]
-    EmptyStatement,
+    EmptyStmt,
     #[error("non void function does not return a value")]
     MissingReturnValue,
     #[error("unreachable code")]

@@ -201,9 +201,7 @@ impl<'c> Parser<'c> {
   fn recoverable_get<const OP: Operator>(&mut self) {
     if self.peek_lit() != OP {
       self.add_error(
-        UnexpectedCharacter(
-          (self.peek_lit().to_string(), Some(OP.to_string())).into(),
-        ),
+        UnexpectedCharacterExpect(self.peek_lit().to_string(), OP.to_string()),
         *self.peek_loc(),
       );
     } else {
@@ -327,7 +325,7 @@ impl<'c> Parser<'c> {
     let location = *self.peek_loc();
 
     let mut qualifiers = Qualifiers::empty();
-    let mut storage: Option<StorageSpecifier> = None;
+    let mut storage_specifiers = StorageSpecifier::empty();
     let mut type_specifiers = Vec::new();
     let mut function_specifiers = FunctionSpecifier::empty();
 
@@ -343,34 +341,20 @@ impl<'c> Parser<'c> {
         } else {
           qualifiers |= qualifier;
         }
-      } else if let Ok(storage_class) =
-        StorageSpecifier::try_from(self.peek_lit())
-        && (!matches!(storage_class, StorageSpecifier::Automatic)
+      } else if let Literal::Keyword(kw) = self.peek_lit()
+        && let Ok(storage_specifier) = StorageSpecifier::try_from(*kw)
+        && (!matches!(storage_specifier, StorageSpecifier::Auto)
           || (self.langopts().is_c_and(|c| c >= C23)
             && self.parse_type_specifier_with_offset(1).is_some()))
       {
-        match storage {
-          _ if matches!(storage_class, StorageSpecifier::ThreadLocal) => self
-            .add_error(
-              UnsupportedFeature(
-                "Thread local unimplemented. (quick notes: the keyword is \
-                 classified as storage class but it acts more like an \
-                 attribute. so handle it there.)"
-                  .to_string(),
-              ),
-              self.eloc(location),
-            ),
-          Some(ref existing_storage) if existing_storage == storage_class =>
-            self.add_warning(
-              RedundantStorageSpecs(storage_class),
-              self.eloc(location),
-            ),
-          Some(ref existing_storage) => self.add_error(
-            StorageSpecsUnmergeable(*existing_storage, storage_class),
+        if storage_specifiers.contains(storage_specifier) {
+          self.add_warning(
+            RedundantStorageSpecs(storage_specifier),
             self.eloc(location),
-          ),
-          None => storage = Some(storage_class),
-        };
+          );
+        } else {
+          storage_specifiers |= storage_specifier;
+        }
         self.get(); // get the storage class
       // it's a bit tricky to parse type specifiers here
       } else if let Some(specifier) = self.parse_type_specifier() {
@@ -398,7 +382,7 @@ impl<'c> Parser<'c> {
     }
 
     DeclSpecs::new(
-      storage,
+      storage_specifiers,
       qualifiers,
       type_specifiers,
       function_specifiers,
@@ -535,11 +519,16 @@ impl<'c> Parser<'c> {
         let location = *self.peek_loc();
         let mut declspecs = self.parse_declspecs();
         let declarator = self.parse_declarator::<{ Maybe }, false>();
-        if let Some(storage) = declspecs.storage_class
-          && storage != StorageSpecifier::Register
+        if declspecs.storage_specifiers != StorageSpecifier::Register
+          && !declspecs.storage_specifiers.is_empty()
         {
-          self.add_error(ExtraneousStorageSpecs(storage), self.eloc(location));
-          declspecs.storage_class = None;
+          self.add_error(
+            ExtraneousStorageSpecs(
+              declspecs.storage_specifiers - StorageSpecifier::Register,
+            ),
+            self.eloc(location),
+          );
+          declspecs.storage_specifiers.reset();
         }
         parameters.push(Parameter::new(
           declspecs,
@@ -816,7 +805,18 @@ impl<'c> Parser<'c> {
       } else {
         self.parse_declarator::<{ Named }, false>()
       };
-      if matches!(declspecs.storage_class, Some(StorageSpecifier::Typedef)) {
+      if declspecs
+        .storage_specifiers
+        .contains(StorageSpecifier::Typedef)
+      {
+        if declspecs.storage_specifiers != StorageSpecifier::Typedef {
+          self.add_error(
+            ExtraneousStorageSpecs(
+              declspecs.storage_specifiers - StorageSpecifier::Typedef,
+            ),
+            declspecs.span,
+          );
+        }
         if let Some(name) = declarator.name {
           self.typedefs.declare(name);
         } else {
@@ -1188,7 +1188,7 @@ impl<'c> Parser<'c> {
       Nullptr => (CL::Nullptr() + self.eloc(location)).into(),
       _ => {
         self.add_error(
-          UnexpectedCharacter((keyword.to_string(), None).into()),
+          UnexpectedCharacter(keyword.to_string()),
           self.eloc(location),
         );
         (CL::Integral(Integral::default()) + self.eloc(location)).into()
@@ -1215,10 +1215,8 @@ impl<'c> Parser<'c> {
         Paren::new(expr, self.eloc(location)).into()
       },
       op => {
-        self.add_error(
-          UnexpectedCharacter((op.to_string(), None).into()),
-          self.eloc(location),
-        );
+        self
+          .add_error(UnexpectedCharacter(op.to_string()), self.eloc(location));
 
         (CL::Integral(Integral::default()) + self.eloc(location)).into()
       },
