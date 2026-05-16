@@ -373,15 +373,14 @@ impl<'c> Lexer<'c> {
       _ => (10, 0),
     };
 
-    while self.advance_if(|c| c.is_digit(if base > 10 { base } else { 10 })) {}
+    while self.advance_if(|c| c.is_digit(Ord::max(base, 10))) {}
 
     // decimal point for base-10 numbers
     if is_floating {
       // nothing.
     } else if self.advance_if_is('.') {
       is_floating = true;
-      while self.advance_if(|c| c.is_digit(if base > 10 { base } else { 10 })) {
-      }
+      while self.advance_if(|c| c.is_digit(Ord::max(base, 10))) {}
     }
 
     // exponent part for base-10 (e.g., 1.5e-10, 3E+5, 2e10)
@@ -407,9 +406,12 @@ impl<'c> Lexer<'c> {
       }
     }
 
+    let mut has_floating_exp = false;
+
     // hexadecimal floating point exponent (e.g., 0x1.5p-3)
     if base == 16 && matches!(self.peek(), 'p' | 'P') {
       is_floating = true;
+      has_floating_exp = true;
       self.advance(); // consume 'p' or 'P'
 
       // optional sign
@@ -467,8 +469,26 @@ impl<'c> Lexer<'c> {
       None
     };
 
+    // workaround: hexfloat::parse requires leading `0x`.
+    let workaround_offset = if base == 16 && is_floating {
+      offset - 2
+    } else {
+      offset
+    };
+    // yet another ugly workaround.
+    if is_floating && base == 16 && !has_floating_exp {
+      self.add_error(
+        InvalidNumberFormat(
+          "C standard requires hexadecimal floating constant to have an \
+           exponent"
+            .to_string(),
+        ),
+        self.span(start),
+      );
+    }
+
     let (constant, error) =
-      Number::parse(&num[offset..], base, suffix, is_floating);
+      Number::parse(&num[workaround_offset..], base, suffix, is_floating);
     if let Some(e) = error {
       self.diag().add_diag(e + self.span(start));
     }

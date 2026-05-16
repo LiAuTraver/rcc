@@ -1,6 +1,6 @@
 ///
-/// ```
-/// use rcc_utils::interconvert;
+/// ```rust
+/// use ::rcc_utils::interconvert;
 /// struct InnerHasLifetime<'a> {
 ///   a: &'a i32,
 /// }
@@ -63,7 +63,7 @@ macro_rules! interconvert {
 
   (@impl $inner:ident, $outer:ident, $variant:ident, [$($inner_lt:tt)*], [$($outer_lt:tt)*]) => {
     impl$($outer_lt)* From<$inner$($inner_lt)*> for $outer$($outer_lt)* {
-      #[inline]
+      #[inline(always)]
       fn from(value: $inner$($inner_lt)*) -> Self {
         $outer::$variant(value)
       }
@@ -71,7 +71,7 @@ macro_rules! interconvert {
     impl$($outer_lt)* TryFrom<$outer$($outer_lt)*> for $inner$($inner_lt)* {
       type Error = ();
 
-      #[inline]
+      #[inline(always)]
       fn try_from(value: $outer$($outer_lt)*) -> Result<Self, Self::Error> {
         match value {
           $outer::$variant(inner) => Ok(inner),
@@ -82,8 +82,8 @@ macro_rules! interconvert {
   };
 }
 ///
-/// ```
-/// use rcc_utils::make_trio_for;
+/// ```rust
+/// use ::rcc_utils::make_trio_for;
 /// struct InnerHasLifetime<'a> {
 ///   a: &'a i32,
 /// }
@@ -142,12 +142,12 @@ macro_rules! make_trio_for {
   (@impl $inner:ident, $main:ident, $variant:ident, [$($inner_lt:tt)*], [$($main_lt:tt)*]) => {
     $crate::paste! {
       impl$($main_lt)* $main$($main_lt)* {
-        #[inline]
+        #[inline(always)]
         pub fn [<is_ $variant:lower>](&self) -> bool {
           matches!(self, Self::$variant(_))
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<as_ $variant:lower>](&self) -> Option<&$inner$($inner_lt)*> {
           match self {
             Self::$variant(v) => Some(v),
@@ -155,7 +155,7 @@ macro_rules! make_trio_for {
           }
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<as_ $variant:lower _unchecked>](&self) -> &$inner$($inner_lt)* {
           match self {
             Self::$variant(v) => v,
@@ -163,7 +163,7 @@ macro_rules! make_trio_for {
           }
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<into_ $variant:lower>](self) -> Option<$inner$($inner_lt)*> {
           match self {
             Self::$variant(v) => Some(v),
@@ -171,7 +171,7 @@ macro_rules! make_trio_for {
           }
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<into_ $variant:lower _unchecked>](self) -> $inner$($inner_lt)* {
           match self {
             Self::$variant(v) => v,
@@ -179,7 +179,7 @@ macro_rules! make_trio_for {
           }
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<try_into_ $variant:lower>](self) -> Result<$inner$($inner_lt)*, Self> {
           match self {
             Self::$variant(v) => Ok(v),
@@ -187,7 +187,7 @@ macro_rules! make_trio_for {
           }
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<as_ $variant:lower _mut>](&mut self) -> Option<&mut $inner$($inner_lt)*> {
           match self {
             Self::$variant(v) => Some(v),
@@ -195,7 +195,7 @@ macro_rules! make_trio_for {
           }
         }
 
-        #[inline]
+        #[inline(always)]
         pub fn [<as_ $variant:lower _mut_unchecked>](&mut self) -> &mut $inner$($inner_lt)* {
           match self {
             Self::$variant(v) => v,

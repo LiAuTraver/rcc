@@ -630,7 +630,8 @@ mod misc {
     operator: UnaryOp,
     operand: [ValueID; 1],
   }
-  #[derive(Debug)]
+  #[derive(Debug, Clone, Copy, ::strum_macros::Display)]
+  #[strum(serialize_all = "lowercase")]
   pub enum UnaryOp {
     FNeg,
   }
@@ -646,8 +647,8 @@ mod misc {
       self.operand[0]
     }
 
-    pub fn operator(&self) -> &UnaryOp {
-      &self.operator
+    pub fn operator(&self) -> UnaryOp {
+      self.operator
     }
 
     pub fn set_operand(&mut self, operand: ValueID) {

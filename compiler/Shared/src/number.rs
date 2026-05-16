@@ -12,7 +12,7 @@ pub enum Number {
 impl Number {
   pub const FLOATING_SUFFIXES: &'static [&'static str] = &[
     "f", "F", // float
-    "l", "L", // long double
+    "l", "L", // long double -- here treated as double...
     // unsupported
     "df", "DF", // _Decimal32
     "dd", "DD", // _Decimal64
@@ -81,21 +81,29 @@ impl Number {
         }
       };
     }
+    use ::hexfloat2::parse;
+    macro_rules! float_conv_hex {
+      ($t:ty, $format:ident) => {
+        match parse::<$t>(num) {
+          Ok(v) => (Floating::from(v).into(), None),
+          Err(e) => (
+            Floating::new(<$t>::default().to_bits(), FloatFormat::$format)
+              .into(),
+            Some(
+              InvalidNumberFormat(format!("{e} in number '{num}'"))
+                + Severity::Error,
+            ),
+          ),
+        }
+      };
+    }
     match (suffix, is_floating) {
       // default to int
       // FIXME: the size is not determined to be `int`.
       (None, false) => int_conv!(i32, Signed),
-      (_, true) if base != 10 => (
-        Floating::default().into(),
-        Some(
-          InvalidNumberFormat(format!(
-            "currently floating point literals only support decimal format, \
-             got {num}"
-          )) + Severity::Error,
-        ),
-      ),
       // default to double
-      (None, true) => float_conv!(f64, IEEE64),
+      (None, true) if base == 16 => float_conv_hex!(f64, IEEE64),
+      (None, true) if base == 10 => float_conv!(f64, IEEE64),
       // integer with suffix
       (Some(suf), false) => match suf {
         // FIXME: `u`/`U` only indicates unsigned, and provide no information about the size.
@@ -119,6 +127,7 @@ impl Number {
         "ui64" => int_conv!(u64, Unsigned),
         _ => (
           Integral::default().into(),
+          // lexer shall catch it.
           Some(
             InvalidNumberFormat(format!(
               "invalid or unsupported integer literal suffix: {suf}"
@@ -128,10 +137,13 @@ impl Number {
       },
       // floating with suffix
       (Some(suf), true) => match suf {
-        "f" | "F" => float_conv!(f32, IEEE32),
-        "l" | "L" => float_conv!(f64, IEEE64),
+        "f" | "F" if base == 16 => float_conv_hex!(f32, IEEE32),
+        "l" | "L" if base == 16 => float_conv_hex!(f64, IEEE64),
+        "f" | "F" if base == 10 => float_conv!(f32, IEEE32),
+        "l" | "L" if base == 10 => float_conv!(f64, IEEE64),
         _ => (
           Floating::default().into(),
+          // lexer shall catch it.
           Some(
             InvalidNumberFormat(format!(
               "invalid or unsupported floating literal suffix: {suf}"
@@ -139,6 +151,14 @@ impl Number {
           ),
         ),
       },
+      (None, true) => (
+        Integral::default().into(),
+        Some(
+          InvalidNumberFormat(format!(
+            "invalid combination of suffix and floating point literal: {num}"
+          )) + Severity::Error,
+        ),
+      ),
     }
   }
 }

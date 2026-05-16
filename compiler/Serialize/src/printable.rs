@@ -548,7 +548,20 @@ impl<'c> Print<'c, inst::Terminator> for Value<'c> {
     )
   }
 }
-please_print_me!(inst::Unary);
+impl<'c> Print<'c, inst::Unary> for Value<'c> {
+  fn print(
+    &self,
+    printer: &mut impl Printer<'c>,
+    prefix: &str,
+    is_last: bool,
+    palette: &Palette,
+    variant: &inst::Unary,
+  ) {
+    // float neg.
+    printer.write(suff!(" " => variant.operator()), &palette.literal);
+    self::pretty_print_contant_or_id(printer, variant.operand(), palette, true);
+  }
+}
 impl<'c> Print<'c, inst::Binary> for Value<'c> {
   fn print(
     &self,

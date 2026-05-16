@@ -58,7 +58,15 @@ void exponent_test() {
   double b = 42e-10;
   auto c = 42e+10f;
   auto d = 42E-10l;
-  // const auto e = 0x.42p10;
+  const auto e = 0x.42p10;
+  const auto f = 0xe.42p10;
+  const auto g = +0x0.42p10;
+  const auto h = -0xABCDEF.42p+10;
+  const auto i = -0x424242p-10;
+  const auto j = 0x424242p-0;
+  const auto k = 0x.0p+0;
+  const auto l = 0x42E.0p+9l;
+  const auto m = 0x.420p+0f;
 }
 
 // should pass

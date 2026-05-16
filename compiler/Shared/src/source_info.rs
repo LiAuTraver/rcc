@@ -103,7 +103,7 @@ impl Manager {
       .partition_point(|&offset| offset <= span.start as usize)
       - 1;
 
-    //(Current Byte) - (Start of Current Line)
+    // (Current Byte) - (Start of Current Line)
     let line_start = file.line_offsets[line_idx];
     let col_idx = (span.start as usize) - line_start;
 

@@ -30,4 +30,13 @@ void invalid_exponent_test() {
   auto f = 42p+10;
 }
 
-// todo: hex floats
+// hex floats
+void invalid_hex_float_test() {
+  auto a = 0x.42p; // must have an exponent digit.
+  auto b = 0x.42p+;
+  auto c = 0x.42p-;
+
+  auto d = 0x.4210;      // no exp.
+  auto e = 0x.124E2134;  // E cannot be used in a hex float literal.
+  auto f = 0x.4210p01lr; // no exp.
+}

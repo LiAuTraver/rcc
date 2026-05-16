@@ -56,6 +56,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
+name = "hexfloat2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46e9a91c41b4112953fa8309790954e87fe6f69e3b88a059df367eca2deb3db7"
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -168,7 +174,6 @@ dependencies = [
 name = "rcc-sema"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "rcc-adt",
  "rcc-ast",
  "rcc-memory",
@@ -198,6 +203,7 @@ name = "rcc-shared"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "hexfloat2",
  "rcc-adt",
  "rcc-utils",
  "strum",
