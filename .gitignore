@@ -17,3 +17,6 @@
 !Cargo.toml
 !rust-toolchain.toml
 !rustfmt.toml
+!README.md
+!LICENSE.TXT
+!SECURITY.md

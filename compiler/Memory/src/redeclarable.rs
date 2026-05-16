@@ -218,7 +218,7 @@ ensure_is_pod!(RedeclarableIter<'_, usize>);
 
 /// A macro to generate a redeclarable struct with an intrusive link.
 /// ```rust
-/// use ::rcc_shared::{IntrusiveRedeclarableLink, make_intrusive_redeclarable_node};
+/// use ::rcc_memory::{IntrusiveRedeclarableLink, make_intrusive_redeclarable_node};
 ///
 /// #[repr(C)] // this is important.
 /// #[derive(Debug)]

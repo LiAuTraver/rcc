@@ -6,6 +6,5 @@ authors = ["LiAuTraver"]
 
 [dependencies]
 rcc-utils = { path = "../../utils" }
-rcc-adt = { path = "../ADT" }
 
 bumpalo = { version = "3.19.1", features = ["collections"] }
