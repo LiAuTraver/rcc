@@ -1,17 +1,11 @@
 [package]
-name = "rcc-ast"
+name = "rcc-memory"
 version = "0.1.0"
 edition = "2024"
 authors = ["LiAuTraver"]
 
-
 [dependencies]
-
 rcc-utils = { path = "../../utils" }
 rcc-adt = { path = "../ADT" }
-rcc-shared = { path = "../Shared" }
-rcc-memory = { path = "../Memory" }
 
-strum_macros = "0.25.3"
-strum = "0.27.2"
-bitflags = "2.10.0"
+bumpalo = { version = "3.19.1", features = ["collections"] }

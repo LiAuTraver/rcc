@@ -6,7 +6,7 @@ use ::std::{
   ptr::NonNull,
 };
 
-use crate::Bumper;
+use crate::BumpAllocator;
 
 /// A Redeclarable link.
 #[repr(C)]
@@ -91,7 +91,7 @@ impl<T> Redeclarable<T> {
   #[must_use]
   #[inline(always)]
   pub fn new<'a>(
-    bump: &'a impl Bumper,
+    bump: &'a impl BumpAllocator,
     prev: Option<&Self>,
     data: T,
   ) -> &'a Self {
@@ -103,7 +103,11 @@ impl<T> Redeclarable<T> {
   }
 
   #[must_use]
-  pub fn new_node<'a>(bump: &'a impl Bumper, prev: &Self, data: T) -> &'a Self {
+  pub fn new_node<'a>(
+    bump: &'a impl BumpAllocator,
+    prev: &Self,
+    data: T,
+  ) -> &'a Self {
     let canonical = prev.link.canonical;
     let prev = Cell::new(NonNull::from(prev));
     let this = bump.alloc(MaybeUninit::<Self>::uninit()).as_mut_ptr();
@@ -121,7 +125,7 @@ impl<T> Redeclarable<T> {
   }
 
   #[must_use]
-  pub fn new_canonical(bump: &impl Bumper, data: T) -> &Self {
+  pub fn new_canonical(bump: &impl BumpAllocator, data: T) -> &Self {
     let this = bump.alloc(MaybeUninit::<Self>::uninit()).as_mut_ptr();
     unsafe {
       this.write(Redeclarable::_new(
@@ -304,7 +308,7 @@ macro_rules! make_intrusive_redeclarable_node {
       #[must_use]
       #[inline(always)]
       #[allow(clippy::too_many_arguments)]
-      pub fn new<'a>(bump: &'a impl $crate::Bumper, prev: Option<&Self>, $($extra_field: $extra_ty),*) -> &'a Self {
+      pub fn new<'a>(bump: &'a impl $crate::BumpAllocator, prev: Option<&Self>, $($extra_field: $extra_ty),*) -> &'a Self {
         if let Some(prev) = prev {
           Self::new_node(bump, prev, $($extra_field),*)
         } else {
@@ -315,7 +319,7 @@ macro_rules! make_intrusive_redeclarable_node {
       #[must_use]
       #[inline]
       #[allow(clippy::too_many_arguments)]
-      pub fn new_node<'a>(bump: &'a impl $crate::Bumper, prev: &Self, $($extra_field: $extra_ty),*) -> &'a Self {
+      pub fn new_node<'a>(bump: &'a impl $crate::BumpAllocator, prev: &Self, $($extra_field: $extra_ty),*) -> &'a Self {
         let canonical = prev.$link_field.canonical();
         let prev = ::std::cell::Cell::new(::std::ptr::NonNull::from(prev));
         let this = bump.alloc(::std::mem::MaybeUninit::<Self>::uninit()).as_mut_ptr();
@@ -334,7 +338,7 @@ macro_rules! make_intrusive_redeclarable_node {
       #[must_use]
       #[inline]
       #[allow(clippy::too_many_arguments)]
-      pub fn new_canonical<'a>(bump: &'a impl $crate::Bumper, $($extra_field: $extra_ty),*) -> &'a Self {
+      pub fn new_canonical<'a>(bump: &'a impl $crate::BumpAllocator, $($extra_field: $extra_ty),*) -> &'a Self {
         let this = bump.alloc(::std::mem::MaybeUninit::<Self>::uninit()).as_mut_ptr();
         unsafe {
           this.write(Self::_new(

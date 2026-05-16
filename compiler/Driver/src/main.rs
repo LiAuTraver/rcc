@@ -3,11 +3,12 @@ use ::rcc_ir::{
   Builder as IRBuilder, Context as IRContext, Session as IRSession,
 };
 use ::rcc_lex::Lexer;
+use ::rcc_memory::{Arena, BumpAllocator};
 use ::rcc_parse::Parser;
 use ::rcc_sema::Sema;
 use ::rcc_serialize::{ASTDumper, IRPrinter};
 use ::rcc_shared::{
-  Arena, Bumper, C::C23, Diagnosis, LangOpts, OpDiag, SourceManager, Triple,
+  C::C23, Diagnosis, LangOpts, OpDiag, SourceManager, Triple,
 };
 use ::rcc_utils::DisplayWith;
 enum Stage {

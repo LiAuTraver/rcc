@@ -1,6 +1,5 @@
-use ::rcc_shared::{
-  Arena, Bumper, DiagMeta, LangOpts, Linkage, Severity, Triple,
-};
+use ::rcc_memory::{Arena, BumpAllocator};
+use ::rcc_shared::{DiagMeta, LangOpts, Linkage, Severity, Triple};
 use ::rcc_utils::StrRef;
 use ::std::{cell::RefCell, collections::HashSet, ops::Deref};
 
@@ -263,7 +262,7 @@ impl<'c> Context<'c> {
       converted_bool: int_type,
       fake_bool_type: arena.alloc(__IRBit.into()),
 
-      unnamed_str: arena.alloc_str("<unnamed>"),
+      unnamed_str: "<unnamed>",
       langopts,
       target_info: TargetInfo::new(triple),
       __unresolved_auto_type: arena.alloc(__AutoType.into()),

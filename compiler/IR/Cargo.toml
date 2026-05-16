@@ -11,6 +11,7 @@ rcc-shared = { path = "../Shared" }
 rcc-adt = { path = "../ADT" }
 rcc-ast = { path = "../AST" }
 rcc-sema = { path = "../Sema" }
+rcc-memory = { path = "../Memory" }
 
 slotmap = "1.1.1"
 bimap = "0.6.3"

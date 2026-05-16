@@ -7,9 +7,10 @@ use ::rcc_ast::{
     TypeInfo, UnqualExt,
   },
 };
+use ::rcc_memory::{ArenaVec, CollectIn};
 use ::rcc_parse::{declaration as pd, expression as pe, statement as ps};
 use ::rcc_shared::{
-  ArenaVec, CollectIn, Diag,
+  Diag,
   DiagData::{self, *},
   Diagnosis, Linkage, OpDiag, Operator, OperatorCategory, Severity, SourceSpan,
   Storage, StorageSpecifier as SS,

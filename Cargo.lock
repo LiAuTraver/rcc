@@ -92,6 +92,7 @@ dependencies = [
  "rcc-ast",
  "rcc-ir",
  "rcc-lex",
+ "rcc-memory",
  "rcc-parse",
  "rcc-sema",
  "rcc-serialize",
@@ -113,6 +114,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "rcc-adt",
+ "rcc-memory",
  "rcc-shared",
  "rcc-utils",
  "strum",
@@ -126,6 +128,7 @@ dependencies = [
  "bimap",
  "rcc-adt",
  "rcc-ast",
+ "rcc-memory",
  "rcc-sema",
  "rcc-shared",
  "rcc-utils",
@@ -140,6 +143,15 @@ version = "0.1.0"
 dependencies = [
  "rcc-ast",
  "rcc-shared",
+ "rcc-utils",
+]
+
+[[package]]
+name = "rcc-memory"
+version = "0.1.0"
+dependencies = [
+ "bumpalo",
+ "rcc-adt",
  "rcc-utils",
 ]
 
@@ -160,6 +172,7 @@ dependencies = [
  "bitflags",
  "rcc-adt",
  "rcc-ast",
+ "rcc-memory",
  "rcc-parse",
  "rcc-shared",
  "rcc-utils",
@@ -186,7 +199,6 @@ name = "rcc-shared"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "bumpalo",
  "rcc-adt",
  "rcc-utils",
  "strum",

@@ -41,6 +41,12 @@ pub trait TryFromWith<With, From>: Sized {
 pub type StrRef<'c> = &'c str;
 // impl RefEq for StrRef<'_> {}
 
+pub trait IsSame<T> {
+  const VALUE: bool = false;
+}
+impl<T> IsSame<T> for T {
+  const VALUE: bool = true;
+}
 /// Intern helper trait to both use [`::std::ptr::eq`] but also [`debug_assert`]
 /// the actual equality of the two values in debug mode, to catch potential bugs
 /// where two different instances with the same content are compared by pointer address.

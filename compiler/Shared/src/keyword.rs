@@ -113,6 +113,7 @@ pub enum Keyword {
   #[strum(serialize = "__PRETTY_FUNCTION__")]
   PrettyFunction,
 }
+/// kept as reserved keyword.
 #[derive(
   Debug,
   Clone,
@@ -126,7 +127,6 @@ pub enum Keyword {
 )]
 #[must_use]
 #[strum(serialize_all = "snake_case")]
-/// kept as reserved keyword.
 pub enum Reserved {
   #[strum(serialize = "typeof")] // C23
   #[strum(serialize = "__typeof__")]

@@ -13,6 +13,7 @@ use ::rcc_sema::{
     Label, Return, Statement, Switch, While,
   },
 };
+use ::rcc_shared::Linkage;
 
 use crate::{
   DumpSpan, Dumpable, Dumper, Palette, quoted, render::RenderEngineMixin,
@@ -690,8 +691,10 @@ impl<'c> Dumpable<'c> for ExternalDeclaration<'_> {
     // //   &palette.skeleton,
     // // );
     // // dumper.write("]", &palette.skeleton);
-    dumper.write(", ", &palette.skeleton);
-    dumper.write(quoted!("'" => self.linkage), &palette.meta);
+    if !matches!(self.linkage, Linkage::None) {
+      dumper.write(", ", &palette.skeleton);
+      dumper.write(quoted!("'" => self.linkage), &palette.meta);
+    }
     if let DeclarationData::Variable(vardef) = &**self {
       dumper.write(", ", &palette.skeleton);
       dumper.write(quoted!("'" => vardef.storage), &palette.meta);

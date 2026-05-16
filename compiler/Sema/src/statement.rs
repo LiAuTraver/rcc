@@ -1,5 +1,6 @@
 use ::rcc_ast::{Context, blueprints::Placeholder};
-use ::rcc_shared::{ArenaVec, Bumper, CollectIn, SourceSpan};
+use ::rcc_memory::{ArenaVec, BumpAllocator, CollectIn};
+use ::rcc_shared::SourceSpan;
 use ::rcc_utils::{StrRef, interconvert};
 
 use crate::{

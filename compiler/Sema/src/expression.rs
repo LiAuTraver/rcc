@@ -3,9 +3,8 @@ use ::rcc_ast::{
   blueprints::Placeholder,
   types::{CastType, Primitive, QualifiedType, Qualifiers, Type, TypeRef},
 };
-use ::rcc_shared::{
-  ArenaVec, Bumper, CollectIn, Operator, SourceSpan, Storage,
-};
+use ::rcc_memory::{ArenaVec, BumpAllocator, CollectIn};
+use ::rcc_shared::{Operator, SourceSpan, Storage};
 use ::rcc_utils::{PtrEq, StrRef};
 
 use crate::declaration::DeclRef;

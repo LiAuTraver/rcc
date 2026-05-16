@@ -1,6 +1,7 @@
 use ::rcc_adt::{FloatFormat, Floating, Integral, Size, SizeBit};
 use ::rcc_ast::{Context as ASTContext, TargetInfo, types as ast};
-use ::rcc_shared::{Arena, Bumper, Diagnosis, SourceManager, Triple};
+use ::rcc_memory::{Arena, BumpAllocator};
+use ::rcc_shared::{Diagnosis, SourceManager, Triple};
 
 use super::{
   ConstantData, Type, TypeRef, Value, ValueID,
@@ -80,27 +81,27 @@ impl<'c, D: Diagnosis<'c>> Session<'c, D> {
   }
 }
 impl<'c, D: Diagnosis<'c>> Session<'c, D> {
-  #[inline]
+  #[inline(always)]
   pub fn ast(&self) -> &'c ASTContext<'c> {
     self.ast_context
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn diag(&self) -> &'c D {
     self.diagnosis
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn src(&self) -> &'c SourceManager {
     self.manager
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn ir(&self) -> &'c Context<'c> {
     self.ir_context
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn triple(&self) -> Triple {
     self.triple
   }
@@ -108,45 +109,54 @@ impl<'c, D: Diagnosis<'c>> Session<'c, D> {
 impl<'c, D: Diagnosis<'c>> Deref for Session<'c, D> {
   type Target = Context<'c>;
 
-  #[inline]
+  #[inline(always)]
   fn deref(&self) -> &'c Self::Target {
     self.ir_context
   }
 }
 
 impl<'c> Context<'c> {
+  #[inline(always)]
   pub fn void_type(&self) -> TypeRef<'c> {
     self.void_type
   }
 
+  #[inline(always)]
   pub fn label_type(&self) -> TypeRef<'c> {
     self.label_type
   }
 
+  #[inline(always)]
   pub fn float32_type(&self) -> TypeRef<'c> {
     self.float32_type
   }
 
+  #[inline(always)]
   pub fn float64_type(&self) -> TypeRef<'c> {
     self.float64_type
   }
 
+  #[inline(always)]
   pub fn pointer_type(&self) -> TypeRef<'c> {
     self.pointer_type
   }
 
+  #[inline(always)]
   pub fn nullptr(&self) -> ValueID {
     self.nullptr
   }
 
+  #[inline(always)]
   pub fn i1_true(&self) -> ValueID {
     self.common_integer_one[0]
   }
 
+  #[inline(always)]
   pub fn i1_false(&self) -> ValueID {
     self.common_integer_zero[0]
   }
 
+  #[inline(always)]
   pub fn floating_zero(&self, format: FloatFormat) -> ValueID {
     match format {
       IEEE32 => self.common_floating_zero[0],
@@ -154,6 +164,7 @@ impl<'c> Context<'c> {
     }
   }
 
+  #[inline(always)]
   pub fn floating_one(&self, format: FloatFormat) -> ValueID {
     match format {
       IEEE32 => self.common_floating_one[0],
@@ -161,6 +172,7 @@ impl<'c> Context<'c> {
     }
   }
 
+  #[inline(always)]
   pub fn integer_zero(&self, width: SizeBit) -> ValueID {
     match width {
       SizeBit::U1 => self.common_integer_zero[0],
@@ -173,6 +185,7 @@ impl<'c> Context<'c> {
     }
   }
 
+  #[inline(always)]
   pub fn integer_one(&self, width: SizeBit) -> ValueID {
     match width {
       SizeBit::U1 => self.common_integer_one[0],
@@ -196,6 +209,7 @@ impl<'c> Context<'c> {
     }
   }
 
+  #[inline(always)]
   pub fn intern<T: Into<Type<'c>>>(&self, value: T) -> TypeRef<'c> {
     self.do_intern(value.into())
   }
@@ -316,6 +330,7 @@ impl<'c> Context<'c> {
     })
   }
 
+  #[inline(always)]
   pub fn visit<R, F: FnOnce(&Value<'c>) -> R>(
     &self,
     id: ValueID,
@@ -324,6 +339,7 @@ impl<'c> Context<'c> {
     action(&self.get(id))
   }
 
+  #[inline(always)]
   pub fn inspect<R, F: FnOnce(&Value<'c>, &Value<'c>) -> R>(
     &self,
     left: ValueID,
@@ -333,6 +349,7 @@ impl<'c> Context<'c> {
     action(&self.get(left), &self.get(right))
   }
 
+  #[inline(always)]
   pub fn apply<R, F: FnOnce(&mut Value<'c>) -> R>(
     &self,
     id: ValueID,

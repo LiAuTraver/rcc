@@ -16,8 +16,9 @@
 
 use ::rcc_adt::Size;
 use ::rcc_ast::types::{Array, ArraySize, QualifiedType, Type, TypeInfo};
+use ::rcc_memory::{ArenaVec, BumpAllocator, CollectIn};
 use ::rcc_parse::{declaration as pd, expression as pe};
-use ::rcc_shared::{ArenaVec, Bumper, CollectIn, DiagData::*, SourceSpan};
+use ::rcc_shared::{DiagData::*, SourceSpan};
 use ::rcc_utils::RefEq;
 use ::std::{collections::HashMap, ops::Deref};
 use ArraySize::*;

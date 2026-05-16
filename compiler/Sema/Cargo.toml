@@ -11,6 +11,7 @@ rcc-shared = { path = "../Shared" }
 rcc-adt = { path = "../ADT" }
 rcc-ast = { path = "../AST" }
 rcc-parse = { path = "../Parse" }
+rcc-memory = { path = "../Memory" }
 
 strum_macros = "0.25.3"
 strum = "0.27.2"

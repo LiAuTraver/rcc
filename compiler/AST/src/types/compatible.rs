@@ -1,4 +1,4 @@
-use ::rcc_shared::{ArenaVec, CollectIn};
+use ::rcc_memory::{ArenaVec, CollectIn};
 use ::rcc_utils::RefEq;
 
 use super::{

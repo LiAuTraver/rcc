@@ -3,10 +3,11 @@ use ::rcc_ast::{
   Context, VarDeclKind,
   types::{FunctionSpecifier, QualifiedType, Type},
 };
-use ::rcc_shared::{
-  ArenaVec, CollectIn, IntrusiveRedeclarableLink, Linkage, SourceSpan, Storage,
+use ::rcc_memory::{
+  ArenaVec, CollectIn, IntrusiveRedeclarableLink,
   make_intrusive_redeclarable_node,
 };
+use ::rcc_shared::{Linkage, SourceSpan, Storage};
 use ::rcc_utils::{StrRef, ensure_is_pod, interconvert, make_trio_for};
 use ::std::{cell::Cell, ops::Deref};
 
