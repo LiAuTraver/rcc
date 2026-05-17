@@ -43,6 +43,8 @@ void float_test() {
   double b = 42.0;
   auto c = 42.0f;
   auto d = 42.0l;
+  // floating point is ok to have leading zero and does not mean octal.
+  const float PI = 03.1415926;
 }
 
 // 42 or 0.42

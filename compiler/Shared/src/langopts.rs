@@ -61,7 +61,7 @@ mod cvt {
     #[inline(always)]
     pub fn is_c_and(&self, f: impl FnOnce(C) -> bool) -> bool {
       match self {
-        Kind::C(c) => f(*c),
+        Self::C(c) => f(*c),
         _ => false,
       }
     }
@@ -69,8 +69,24 @@ mod cvt {
     #[inline(always)]
     pub fn is_sysy_and(&self, f: impl FnOnce(SysY) -> bool) -> bool {
       match self {
-        Kind::SysY(sysy) => f(*sysy),
+        Self::SysY(sysy) => f(*sysy),
         _ => false,
+      }
+    }
+
+    #[inline(always)]
+    pub fn is_c(&self) -> bool {
+      match self {
+        Self::C(_) => true,
+        Self::SysY(_) => false,
+      }
+    }
+
+    #[inline(always)]
+    pub fn is_sysy(&self) -> bool {
+      match self {
+        Self::C(_) => false,
+        Self::SysY(_) => true,
       }
     }
   }

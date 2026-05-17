@@ -47,14 +47,12 @@ impl<'c> Dumpable<'c> for QualifiedType<'_> {
     dumper.write_fmt(format_args!(" {:p} ", self), &palette.dim);
 
     dumper.write_fmt(
-      format_args!("{} {}\n", self.unqualified_type, self.qualifiers),
+      format_args!("{} {}\n", **self, self.qualifiers()),
       &palette.meta,
     );
 
     let subprefix = dumper.child_prefix(prefix, is_last);
-    self
-      .unqualified_type
-      .dump(dumper, &subprefix, true, palette)
+    (**self).dump(dumper, &subprefix, true, palette)
   }
 }
 

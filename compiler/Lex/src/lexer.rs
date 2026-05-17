@@ -27,7 +27,7 @@ pub struct Lexer<'c> {
   coords: Coordinate,
 
   /// Context.
-  session: SessionRef<'c, OpDiag<'c>>,
+  session: SessionRef<'c>,
 }
 impl<'a> ::std::ops::Deref for Lexer<'a> {
   type Target = Session<'a, OpDiag<'a>>;
@@ -37,7 +37,7 @@ impl<'a> ::std::ops::Deref for Lexer<'a> {
   }
 }
 impl<'c> Lexer<'c> {
-  pub fn new(session: SessionRef<'c, OpDiag<'c>>) -> Self {
+  pub fn new(session: SessionRef<'c>) -> Self {
     let chars = session
       .src()
       .files
@@ -470,13 +470,24 @@ impl<'c> Lexer<'c> {
     };
 
     // workaround: hexfloat::parse requires leading `0x`.
-    let workaround_offset = if base == 16 && is_floating {
-      offset - 2
+    let (workaround_offset, workaround_base) = if base == 16 && is_floating {
+      (0, base)
+    } else if base == 8 && is_floating {
+      // floating point is ok to have leading zero and does not mean octal.
+      match offset {
+        1 => (),
+        2 => self.add_error(
+          InvalidNumberFormat("floating point cannot be octal".to_string()),
+          self.span(start),
+        ),
+        _ => panic!("internal error"),
+      };
+      (0, 10)
     } else {
-      offset
+      (offset, base)
     };
     // yet another ugly workaround.
-    if is_floating && base == 16 && !has_floating_exp {
+    if is_floating && workaround_base == 16 && !has_floating_exp {
       self.add_error(
         InvalidNumberFormat(
           "C standard requires hexadecimal floating constant to have an \
@@ -487,8 +498,12 @@ impl<'c> Lexer<'c> {
       );
     }
 
-    let (constant, error) =
-      Number::parse(&num[workaround_offset..], base, suffix, is_floating);
+    let (constant, error) = Number::parse(
+      &num[workaround_offset..],
+      workaround_base,
+      suffix,
+      is_floating,
+    );
     if let Some(e) = error {
       self.diag().add_diag(e + self.span(start));
     }

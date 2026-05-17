@@ -36,7 +36,7 @@ pub struct Parser<'c> {
   cursor: usize,
   // contest-sensitive part - needed to parse `T * x`.
   typedefs: UnitScope<'c>,
-  session: SessionRef<'c, OpDiag<'c>>,
+  session: SessionRef<'c>,
 }
 impl<'a> ::std::ops::Deref for Parser<'a> {
   type Target = Session<'a, OpDiag<'a>>;
@@ -46,10 +46,7 @@ impl<'a> ::std::ops::Deref for Parser<'a> {
   }
 }
 impl<'c> Parser<'c> {
-  pub fn new(
-    tokens: Vec<Token<'c>>,
-    session: SessionRef<'c, OpDiag<'c>>,
-  ) -> Self {
+  pub fn new(tokens: Vec<Token<'c>>, session: SessionRef<'c>) -> Self {
     assert_eq!(
       tokens.last().map(|t| &t.literal),
       Some(&Literal::Operator(EOF))

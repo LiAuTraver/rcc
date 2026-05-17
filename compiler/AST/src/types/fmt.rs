@@ -19,10 +19,10 @@ impl Display for FunctionSpecifier {
 impl Display for QualifiedType<'_> {
   #[inline]
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.qualifiers.is_empty() {
-      write!(f, "{}", self.unqualified_type)
+    if self.qualifiers().is_empty() {
+      write!(f, "{}", **self)
     } else {
-      write!(f, "{} {}", self.qualifiers, self.unqualified_type)
+      write!(f, "{} {}", self.qualifiers(), **self)
     }
   }
 }
@@ -103,10 +103,9 @@ impl Type<'_> {
   ) -> std::fmt::Result {
     use Type::*;
     match self {
-      Array(arr) => arr.element_type.unqualified_type.print_base_type(f),
-      Pointer(ptr) => ptr.pointee.unqualified_type.print_base_type(f),
-      FunctionProto(func) =>
-        func.return_type.unqualified_type.print_base_type(f),
+      Array(arr) => arr.element_type.print_base_type(f),
+      Pointer(ptr) => ptr.pointee.print_base_type(f),
+      FunctionProto(func) => func.return_type.print_base_type(f),
       Primitive(p) => write!(f, "{}", p),
       Record(r) => write!(f, "<struct {}>", r.name.unwrap_or("<unnamed>")),
       Enum(e) => write!(f, "<enum {}>", e.name.unwrap_or("<unnamed>")),
@@ -129,26 +128,21 @@ impl Type<'_> {
           ArraySize::Variable(_id) => write!(f, "*")?, // ignore for now
         }
         write!(f, "]")?;
-        arr.element_type.unqualified_type.print_declarator(f)
+        arr.element_type.print_declarator(f)
       },
-      Pointer(ptr)
-        if matches!(
-          ptr.pointee.unqualified_type,
-          Array(_) | FunctionProto(_)
-        ) =>
-      {
+      Pointer(ptr) if matches!(*ptr.pointee, Array(_) | FunctionProto(_)) => {
         // if the pointee is an array or function, parentheses is needed, e.g., `(*)[10]`
 
         write!(f, "(*)")?;
 
-        ptr.pointee.qualifiers.fmt(f)?;
-        ptr.pointee.unqualified_type.print_declarator(f)?;
+        ptr.pointee.qualifiers().fmt(f)?;
+        ptr.pointee.print_declarator(f)?;
         Ok(())
       },
       Pointer(ptr) => {
         write!(f, "*")?;
-        ptr.pointee.qualifiers.fmt(f)?;
-        ptr.pointee.unqualified_type.print_declarator(f)?;
+        ptr.pointee.qualifiers().fmt(f)?;
+        ptr.pointee.print_declarator(f)?;
         Ok(())
       },
       FunctionProto(func) => {
@@ -171,7 +165,7 @@ impl Type<'_> {
           }
         }
         write!(f, ")")?;
-        func.return_type.unqualified_type.print_declarator(f)
+        func.return_type.print_declarator(f)
       },
       // the rest of types is considered `base type` here.
       _ => Ok(()),

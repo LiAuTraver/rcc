@@ -302,7 +302,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
   }
 
   fn scalar_leaf_width(&self, target_type: QualifiedType<'c>) -> Size {
-    match target_type.unqualified_type {
+    match &*target_type {
       Type::Array(array) => match array.size {
         Constant(size) =>
           size.saturating_mul(self.scalar_leaf_width(array.element_type)),
@@ -329,7 +329,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     let mut path = Vec::default();
 
     // struct/union unimplemented
-    while let Type::Array(array) = object_type.unqualified_type {
+    while let Type::Array(array) = &*object_type {
       let stride = self.scalar_leaf_width(array.element_type);
       if stride == zero {
         // unknown downstream extent. keep this dimension at zero and let
@@ -356,7 +356,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     state: &mut ArrayTree<'c>,
     kind: Kind,
   ) {
-    match target_type.unqualified_type {
+    match *target_type {
       Type::Array(_) => match initializer {
         pd::Initializer::InitializerList(list) => {
           let pd::InitializerList { entries, span } = list;
@@ -505,8 +505,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     lhs: QualifiedType<'c>,
     rhs: QualifiedType<'c>,
   ) -> QualifiedType<'c> {
-    let (Type::Array(lhs_array), Type::Array(rhs_array)) =
-      (lhs.unqualified_type, rhs.unqualified_type)
+    let (Type::Array(lhs_array), Type::Array(rhs_array)) = (&*lhs, &*rhs)
     else {
       // can we reach here?
       return lhs;
@@ -545,7 +544,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
         pd::Designator::Index(expression) => {
           let index = self.try_fold_to_usize(expression, span);
 
-          match target_type.unqualified_type {
+          match *target_type {
             Type::Array(array) => {
               if let Constant(bound) = array.size
                 && let Some(index) = index
@@ -868,7 +867,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     array_type: QualifiedType<'c>,
     tree: &ArrayTree<'c>,
   ) -> QualifiedType<'c> {
-    let Type::Array(array) = array_type.unqualified_type else {
+    let Type::Array(array) = *array_type else {
       return array_type;
     };
 
@@ -933,7 +932,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     target_type: QualifiedType<'c>,
     expr: se::ExprRef<'c>,
   ) -> QualifiedType<'c> {
-    let Type::Array(array) = target_type.unqualified_type else {
+    let Type::Array(array) = *target_type else {
       return target_type;
     };
 
@@ -960,7 +959,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
     expr: se::ExprRef<'c>,
   ) -> se::ExprRef<'c> {
     // NASTY EXCEPTION: character arrays initialized with strings
-    if let Type::Array(array) = target_type.unqualified_type
+    if let Type::Array(array) = *target_type
       && array.element_type.is_character_type()
       && let Some(string_len) = Self::string_literal_len(expr)
     {
@@ -981,7 +980,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
 
     let expr: se::ExprRef<'c> = expr.lvalue_conversion(self).decay(self);
 
-    if RefEq::ref_eq(target_type.unqualified_type, self.void_type()) {
+    if RefEq::ref_eq(&*target_type, self.void_type()) {
       expr
     } else {
       expr
@@ -1016,7 +1015,7 @@ impl<'i, 'c> Initialization<'i, 'c> {
       .expression(expression)
       .handle_with(self, self.__empty_expr);
 
-    if !analyzed.qualified_type().unqualified_type.is_integer() {
+    if !analyzed.qualified_type().is_integer() {
       self.add_error(
         NonIntegerInArraySubscript(analyzed.to_string()),
         analyzed.span(),

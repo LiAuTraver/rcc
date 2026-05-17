@@ -5,12 +5,12 @@ use ::rcc_shared::{Keyword, Literal};
 use ::rcc_utils::{IntoWith, RefEq, concat_static_str as css, ensure_is_pod};
 
 use super::{Type, TypeRef, TypeRefMut};
-use crate::TargetInfo;
+use crate::{Context, TargetInfo};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct QualifiedType<'c> {
-  pub qualifiers: Qualifiers,
-  pub unqualified_type: TypeRef<'c>,
+  qualifiers: Qualifiers,
+  unqualified_type: TypeRef<'c>,
 }
 
 ensure_is_pod!(QualifiedType);
@@ -109,18 +109,40 @@ impl<'c> QualifiedType<'c> {
 impl<'c> ::std::ops::Deref for QualifiedType<'c> {
   type Target = Type<'c>;
 
-  fn deref(&self) -> &Self::Target {
+  #[inline(always)]
+  fn deref(&self) -> TypeRef<'c> {
     self.unqualified_type
   }
 }
 
 impl<'c> QualifiedType<'c> {
+  /// [`Array`](super::Array) and [`FunctionProto`](super::FunctionProto) cannot have qualifiers, so add qualifiers to them would be ignored.
   #[must_use = "this function consumes self and returns a new instance with \
                 updated qualifiers"]
   #[inline(always)]
-  pub fn with_qualifiers(mut self, qualifiers: Qualifiers) -> Self {
-    self.qualifiers |= qualifiers;
-    self
+  pub fn with_qualifiers(
+    mut self,
+    qualifiers: Qualifiers,
+    context: &Context<'c>,
+  ) -> Self {
+    use Type::*;
+    match &*self {
+      Array(array) => {
+        debug_assert!(self.qualifiers.is_empty());
+        let new_elem_type =
+          array.element_type.with_qualifiers(qualifiers, context);
+        let new_array_type = context.make_array(new_elem_type, array.size);
+        Self::new_unqualified(new_array_type)
+      },
+      FunctionProto(_) => {
+        debug_assert!(self.qualifiers.is_empty());
+        self
+      },
+      Primitive(_) | Pointer(_) | Record(_) | Union(_) | Enum(_) => {
+        self.qualifiers |= qualifiers;
+        self
+      },
+    }
   }
 
   #[must_use = "this function consumes self and returns a new instance with \
@@ -131,20 +153,29 @@ impl<'c> QualifiedType<'c> {
     self
   }
 
+  #[must_use]
   #[inline(always)]
   pub const fn contains(&self, qualifiers: Qualifiers) -> bool {
     self.qualifiers.contains(qualifiers)
   }
 
+  #[must_use]
   #[inline(always)]
   pub fn is_modifiable(&self, target_info: &TargetInfo) -> bool {
     self.unqualified_type.is_modifiable(target_info)
       && !self.qualifiers.contains(Qualifiers::Const)
   }
 
+  #[must_use]
   #[inline(always)]
   pub fn destructure(self) -> (Qualifiers, TypeRef<'c>) {
     (self.qualifiers, self.unqualified_type)
+  }
+
+  #[must_use]
+  #[inline(always)]
+  pub const fn qualifiers(&self) -> Qualifiers {
+    self.qualifiers
   }
 }
 
@@ -184,10 +215,10 @@ impl<'c> From<&Literal<'c>> for Qualifiers {
   fn from(literal: &Literal) -> Self {
     match literal {
       Literal::Keyword(kw) => match kw {
-        Keyword::Const => Qualifiers::Const,
-        Keyword::Volatile => Qualifiers::Volatile,
-        Keyword::Restrict => Qualifiers::Restrict,
-        Keyword::Atomic => Qualifiers::Atomic,
+        Keyword::Const => Self::Const,
+        Keyword::Volatile => Self::Volatile,
+        Keyword::Restrict => Self::Restrict,
+        Keyword::Atomic => Self::Atomic,
         _ => panic!("cannot convert {:?} to Qualifier", kw),
       },
       _ => panic!("cannot convert {:?} to Qualifier", literal),
@@ -199,8 +230,8 @@ impl TryFrom<&Keyword> for FunctionSpecifier {
 
   fn try_from(kw: &Keyword) -> Result<Self, Self::Error> {
     match kw {
-      Keyword::Inline => Ok(FunctionSpecifier::Inline),
-      Keyword::Noreturn => Ok(FunctionSpecifier::Noreturn),
+      Keyword::Inline => Ok(Self::Inline),
+      Keyword::Noreturn => Ok(Self::Noreturn),
       _ => Err(()),
     }
   }
@@ -211,7 +242,7 @@ impl<'c> TryFrom<&Literal<'c>> for FunctionSpecifier {
 
   fn try_from(literal: &Literal) -> Result<Self, Self::Error> {
     match literal {
-      Literal::Keyword(kw) => FunctionSpecifier::try_from(kw),
+      Literal::Keyword(kw) => Self::try_from(kw),
       _ => Err(()),
     }
   }

@@ -599,9 +599,8 @@ impl<'c> Builder<'c> {
     value: T,
     ast_type: ast::TypeRef<'c>,
   ) -> ValueID {
-    if self.current_block.is_null() {
-      panic!("no block to emit into")
-    }
+    debug_assert!(!self.current_block.is_null(), "no block to emit into");
+
     let value_id = self.ir().insert(Value::new(
       ast_type,
       self.ir().ir_type(ast_type),
@@ -639,9 +638,7 @@ impl<'c> Builder<'c> {
     ast_type: ast::TypeRef<'c>,
     block_id: ValueID,
   ) -> ValueID {
-    if block_id.is_null() {
-      panic!("no block to emit terminator into")
-    }
+    debug_assert!(!block_id.is_null(), "no block to emit terminator into");
 
     let value_id = self.ir().insert(Value::new(
       ast_type,

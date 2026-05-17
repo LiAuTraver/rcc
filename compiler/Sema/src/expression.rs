@@ -308,12 +308,12 @@ impl<'c> Expression<'c> {
     )
   }
 
-  pub fn unqualified_type(&self) -> TypeRef<'c> {
-    self.expr_type.unqualified_type
+  pub fn unqualified_type(&self) -> &Type<'c> {
+    &self.expr_type
   }
 
   pub fn qualifiers(&self) -> Qualifiers {
-    self.expr_type.qualifiers
+    self.expr_type.qualifiers()
   }
 
   pub fn qualified_type(&self) -> &QualifiedType<'c> {
@@ -346,10 +346,8 @@ impl<'c> Expression<'c> {
 impl<'c> ::core::default::Default for Expression<'c> {
   fn default() -> Self {
     const DUMMY_UNQUAL: TypeRef<'static> = &Type::Primitive(Primitive::Void);
-    const DUMMY: QualifiedType<'static> = QualifiedType {
-      qualifiers: Qualifiers::empty(),
-      unqualified_type: DUMMY_UNQUAL,
-    };
+    const DUMMY: QualifiedType<'static> =
+      QualifiedType::new_unqualified(DUMMY_UNQUAL);
     Self {
       raw_expr: RawExpr::Empty(Empty::default()),
       expr_type: DUMMY,

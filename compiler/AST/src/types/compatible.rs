@@ -3,7 +3,7 @@ use ::rcc_utils::RefEq;
 
 use super::{
   super::Context, Array, ArraySize, Enum, FunctionProto, Pointer, Primitive,
-  QualifiedType, Qualifiers, Record, Type, Union,
+  QualifiedType, Record, Type, Union,
 };
 
 /// rules about the `metadata`. used for declaration and definition.
@@ -197,10 +197,7 @@ impl<'c> Compatibility<'c> for FunctionProto<'c> {
     }
     // 6.7.7.4.13: For two function types to be compatible, both shall specify compatible return types.
     // we also choose to ignore top-level cv qualifier. HOWEVER, pointer to them are not compatible with each other.
-    if !Compatibility::compatible(
-      lhs.return_type.unqualified_type,
-      rhs.return_type.unqualified_type,
-    ) {
+    if !Compatibility::compatible(&*lhs.return_type, &*rhs.return_type) {
       return false;
     }
     if lhs.parameter_types.len() != rhs.parameter_types.len() {
@@ -214,10 +211,7 @@ impl<'c> Compatibility<'c> for FunctionProto<'c> {
     for (lparam, rparam) in
       lhs.parameter_types.iter().zip(rhs.parameter_types.iter())
     {
-      if !Compatibility::compatible(
-        lparam.unqualified_type,
-        rparam.unqualified_type,
-      ) {
+      if !Compatibility::compatible(&**lparam, &**rparam) {
         return false;
       }
     }
@@ -254,11 +248,9 @@ impl<'c> Compatibility<'c> for FunctionProto<'c> {
         QualifiedType::new(
           // this is actually not strictly correct -
           // e.g., const decl + non-const def -> var is const, non-const decl + const def -> var is non-const
-          lparam.qualifiers | rparam.qualifiers,
+          lparam.qualifiers() | rparam.qualifiers(),
           context.intern(Compatibility::composite_unchecked(
-            lparam.unqualified_type,
-            rparam.unqualified_type,
-            context,
+            &**lparam, &**rparam, context,
           )),
         )
       })
@@ -328,15 +320,15 @@ impl<'c> Compatibility<'c> for Type<'c> {
 impl<'c> Compatibility<'c> for QualifiedType<'c> {
   fn compatible(lhs: &QualifiedType, rhs: &QualifiedType) -> bool {
     // 6.7.4.1.11: For two qualified types to be compatible, both shall have the identically qualified version of a compatible type.
-    if lhs.qualifiers != rhs.qualifiers {
+    if lhs.qualifiers() != rhs.qualifiers() {
       return false;
     }
 
     // 6.2.7.1: Two types are compatible types if they are the same.
-    if RefEq::ref_eq(lhs.unqualified_type, rhs.unqualified_type) {
+    if RefEq::ref_eq(&**lhs, &**rhs) {
       return true;
     }
-    Compatibility::compatible(lhs.unqualified_type, rhs.unqualified_type)
+    Compatibility::compatible(&**lhs, &**rhs)
   }
 
   #[inline]
@@ -353,18 +345,15 @@ impl<'c> Compatibility<'c> for QualifiedType<'c> {
     Self: Sized,
   {
     debug_assert!(
-      lhs.qualifiers == rhs.qualifiers
-        && lhs.qualifiers | rhs.qualifiers == lhs.qualifiers,
+      lhs.qualifiers() == rhs.qualifiers()
+        && lhs.qualifiers() | rhs.qualifiers() == lhs.qualifiers(),
       "idk, but they should be equal"
     );
 
     // function and array types cannot have qualifiers
-    if lhs.unqualified_type.is_array()
-      || lhs.unqualified_type.is_functionproto()
-    {
+    if lhs.is_array() || lhs.is_functionproto() {
       debug_assert!(
-        lhs.qualifiers == Qualifiers::empty()
-          && rhs.qualifiers == Qualifiers::empty(),
+        lhs.qualifiers().is_empty() && rhs.qualifiers().is_empty(),
         "array and function types cannot have qualifiers"
       );
     }
@@ -373,13 +362,9 @@ impl<'c> Compatibility<'c> for QualifiedType<'c> {
     // alignment specifier -- won't care
 
     QualifiedType::new(
-      lhs.qualifiers | rhs.qualifiers,
-      Compatibility::composite_unchecked(
-        lhs.unqualified_type,
-        rhs.unqualified_type,
-        context,
-      )
-      .lookup(context),
+      lhs.qualifiers() | rhs.qualifiers(),
+      Compatibility::composite_unchecked(&**lhs, &**rhs, context)
+        .lookup(context),
     )
   }
 }
@@ -450,7 +435,7 @@ impl<'c> QualifiedType<'c> {
   /// ### 6.7.7.4p6
   /// A declaration of a parameter as *array of type* shall be adjusted to *qualified pointer to type*, where
   /// the type qualifiers (if any) are those specified within the `[` and `]` of the array type derivation. If the
-  /// keyword static also appears within the `[` and `]` of the array type derivation, then for each call to
+  /// keyword `static` also appears within the `[` and `]` of the array type derivation, then for each call to
   /// the function, the value of the corresponding actual argument shall provide access to the first element
   /// of an array with at least as many elements as specified by the size expression.
   ///
@@ -464,7 +449,7 @@ impl<'c> QualifiedType<'c> {
   /// A declaration of a parameter as *function returning type*
   /// shall be adjusted to *pointer to function returning type*.
   ///
-  /// ### Implementation Status:
+  /// ### Implementation Status
   ///
   /// **ALL** of those nasty parts, like
   ///
@@ -475,10 +460,10 @@ impl<'c> QualifiedType<'c> {
   ///
   /// are currently ignored.
   pub fn parameter_adjustment(self, context: &Context<'c>) -> Self {
-    match self.unqualified_type {
+    match *self {
       Type::Array(Array { element_type, .. }) => Self::new(
-        element_type.qualifiers,
-        Type::Pointer(Pointer::new(*element_type)).lookup(context),
+        element_type.qualifiers(),
+        Type::Pointer(Pointer::new(element_type)).lookup(context),
       ),
       Type::FunctionProto(_) =>
         Self::new_unqualified(Type::Pointer(Pointer::new(self)).lookup(context)),

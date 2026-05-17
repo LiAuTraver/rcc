@@ -53,22 +53,22 @@ impl ValueID {
     if self.is_null() { f() } else { self }
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn handle(&self) -> u64 {
     self.0.as_ffi()
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn to_option(self) -> Option<Self> {
     if self.is_null() { None } else { Some(self) }
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn null() -> Self {
     <Self as Key>::null()
   }
 
-  #[inline]
+  #[inline(always)]
   pub fn is_null(&self) -> bool {
     <Self as Key>::is_null(self)
   }

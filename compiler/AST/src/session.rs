@@ -1,17 +1,17 @@
-use ::rcc_shared::{Diagnosis, SourceManager, Triple};
+use ::rcc_shared::{Diagnosis, OpDiag, SourceManager, Triple};
 use ::std::ops::Deref;
 
 use super::Context;
 
 #[derive(Debug)]
-pub struct Session<'c, D: Diagnosis<'c>> {
+pub struct Session<'c, D: Diagnosis<'c> = OpDiag<'c>> {
   diagnosis: &'c D,
   manager: &'c SourceManager,
   ast_context: &'c Context<'c>,
   triple: Triple,
 }
 
-pub type SessionRef<'c, D> = &'c Session<'c, D>;
+pub type SessionRef<'c> = &'c Session<'c, OpDiag<'c>>;
 
 impl<'c, D: Diagnosis<'c>> Session<'c, D> {
   pub fn new(

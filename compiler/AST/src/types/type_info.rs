@@ -36,32 +36,32 @@ pub const trait TypeInfo<'c> {
 impl<'c> TypeInfo<'c> for QualifiedType<'c> {
   #[inline(always)]
   fn size(&self, target_info: &TargetInfo) -> Size {
-    self.unqualified_type.size(target_info)
+    (**self).size(target_info)
   }
 
   #[inline(always)]
   fn size_bits(&self, target_info: &TargetInfo) -> SizeBit {
-    self.unqualified_type.size_bits(target_info)
+    (**self).size_bits(target_info)
   }
 
   #[inline(always)]
   fn default_value(&self, target_info: &TargetInfo) -> Constant<'c> {
-    self.unqualified_type.default_value(target_info)
+    (**self).default_value(target_info)
   }
 
   #[inline(always)]
   fn extent(&self) -> usize {
-    self.unqualified_type.extent()
+    (**self).extent()
   }
 
   #[inline(always)]
   fn alignment(&self, target_info: &TargetInfo) -> Alignment {
-    self.unqualified_type.alignment(target_info)
+    (**self).alignment(target_info)
   }
 
   #[inline(always)]
   fn signedness(&self, target_info: &TargetInfo) -> Option<Signedness> {
-    self.unqualified_type.signedness(target_info)
+    (**self).signedness(target_info)
   }
 }
 impl<'c> TypeInfo<'c> for Type<'c> {
@@ -219,8 +219,7 @@ impl<'c> const TypeInfo<'c> for Primitive {
 impl<'c> TypeInfo<'c> for Array<'c> {
   fn size(&self, target_info: &TargetInfo) -> Size {
     match self.size {
-      ArraySize::Constant(sz) =>
-        self.element_type.unqualified_type.size(target_info) * sz,
+      ArraySize::Constant(sz) => self.element_type.size(target_info) * sz,
       ArraySize::Incomplete => Size::U0,
       ArraySize::Variable(_id) => Size::U0, // ignore for now
     }
@@ -244,6 +243,7 @@ impl<'c> TypeInfo<'c> for Array<'c> {
     self.element_type.alignment(target_info)
   }
 
+  #[inline(always)]
   fn signedness(&self, _target_info: &TargetInfo) -> Option<Signedness> {
     None
   }
@@ -264,6 +264,7 @@ impl<'c> TypeInfo<'c> for Record<'c> {
     panic!("default value for non-scalar type should not be requested");
   }
 
+  #[inline(always)]
   fn extent(&self) -> usize {
     1
   }

@@ -7,9 +7,7 @@ use ::rcc_memory::{Arena, BumpAllocator};
 use ::rcc_parse::Parser;
 use ::rcc_sema::Sema;
 use ::rcc_serialize::{ASTDumper, IRPrinter};
-use ::rcc_shared::{
-  C::C23, Diagnosis, LangOpts, OpDiag, SourceManager, Triple,
-};
+use ::rcc_shared::{Diagnosis, LangOpts, OpDiag, SourceManager, Triple};
 use ::rcc_utils::DisplayWith;
 enum Stage {
   Lex,
@@ -69,9 +67,18 @@ fn main() {
 }
 
 fn pipeline(manager: SourceManager, stage: Stage, pretty_print: bool) -> i32 {
+  use ::rcc_shared::{C::C23, SysY::SysY2026};
   let arena = Arena::default();
   let triple = Triple::HOST;
-  let langopts = LangOpts::new(C23);
+  let langopts = if manager.files[0]
+    .path
+    .extension()
+    .is_some_and(|ext| ext == "sy")
+  {
+    LangOpts::new(SysY2026)
+  } else {
+    LangOpts::new(C23)
+  };
   let ast_context = arena.alloc(ASTContext::new(&arena, triple, langopts));
   let diagnosis = OpDiag::default();
   let ast_session = ASTSession::new(&diagnosis, &manager, ast_context, triple);

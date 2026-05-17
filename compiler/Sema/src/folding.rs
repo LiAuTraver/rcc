@@ -4,7 +4,7 @@ use ::rcc_adt::{Floating, Integral, Size};
 use ::rcc_ast::types::{CastType, Compatibility, QualifiedType, TypeInfo};
 use ::rcc_shared::{
   DiagData::{self, *},
-  Operator, OperatorCategory, SourceSpan,
+  Operator, OperatorCategory, SourceSpan, Storage,
 };
 use ::rcc_utils::{RefEq, contract_assert, contract_violation};
 use ::std::ops::Deref;
@@ -51,11 +51,6 @@ where
   /// Caveat: should still accept address constant
   /// ```c
   /// const auto p = &len; // Ok.
-  /// ```
-  /// and probably keep to reject
-  /// ```c
-  /// static constexpr auto len2 = 10;
-  /// static const auto p = &len2; // Error.
   /// ```
   /// This differs in C and C++, not sure fr.
   relaxed_static_const_var: bool,
@@ -358,6 +353,7 @@ impl<'c> Fold<'c, Empty> for Folder<'_, 'c> {
   }
 }
 impl<'c> Fold<'c, Constant<'c>> for Folder<'_, 'c> {
+  #[inline(always)]
   fn fold(&self, _constant: &Constant<'c>) -> FR<'c> {
     Some(self.expression)
   }
@@ -436,7 +432,7 @@ impl<'c> Fold<'c, Binary<'c>> for Folder<'_, 'c> {
       folded_lhs.is_constant() && folded_rhs.is_constant(),
       "only implemented for constant var of constant eval"
     );
-    assert!(
+    debug_assert!(
       RefEq::ref_eq(
         folded_lhs.unqualified_type(),
         folded_rhs.unqualified_type()
@@ -452,12 +448,12 @@ impl<'c> Fold<'c, Binary<'c>> for Folder<'_, 'c> {
     let lhs_value_category = folded_lhs.value_category();
     let rhs_value_category = folded_rhs.value_category();
 
-    assert!(
-      RefEq::ref_eq(lhs_type.unqualified_type, rhs_type.unqualified_type),
+    debug_assert!(
+      RefEq::ref_eq(&**lhs_type, &**rhs_type),
       "type checker ensures both sides have the same types!"
     );
 
-    assert!(
+    debug_assert!(
       lhs_value_category == ValueCategory::RValue
         && rhs_value_category == ValueCategory::RValue,
       "type checker ensures both sides are rvalues! 
@@ -568,33 +564,36 @@ impl<'c> Fold<'c, Variable<'c>> for Folder<'_, 'c> {
   fn fold(&self, variable: &Variable<'c>) -> FR<'c> {
     use ::rcc_ast::types::Qualifiers;
     let v = variable.as_variable()?; // unimplemented fror function
-    match v.storage {
-      _ if self.expression.is_modifiable_lvalue(self)
-        || variable.qualified_type.contains(Qualifiers::Volatile) =>
-        None,
-      _ if !v.is_named_constant
-        && !(variable.qualified_type.contains(Qualifiers::Const)
-          && self.relaxed_static_const_var) =>
-        None,
-      _ => {
-        let initializer = self
-          .environment
-          .find(variable.name)?
-          .as_variable()
-          .expect(
-            "v is variable, semaa ensures the redeclarable chain of v is also \
-             variable",
-          )
-          .initializer
-          .as_ref()?; //< covers the case of var either is extern and referencing other TU or has no initializer)
-        match initializer {
-          Initializer::Scalar(expression) => expression
-            .as_constant()
-            .map(|constant| self.new_constant(constant.clone())),
-          // unimplemented vvv
-          Initializer::List(_) => None,
-        }
-      },
+
+    if self.expression.is_modifiable_lvalue(self)
+      || variable.qualified_type.contains(Qualifiers::Volatile)
+    {
+      None?
+    }
+    if !v.is_named_constant
+      && !(self.relaxed_static_const_var
+        && variable.qualified_type.contains(Qualifiers::Const)
+        && matches!(v.storage, Storage::Static))
+    {
+      None?
+    }
+
+    let initializer = self
+      .environment
+      .find(variable.name)?
+      .as_variable()
+      .expect(
+        "v is variable, semaa ensures the redeclarable chain of v is also \
+         variable",
+      )
+      .initializer
+      .as_ref()?; //< covers the case of var either is extern and referencing other TU or has no initializer)
+    match initializer {
+      Initializer::Scalar(expression) => expression
+        .as_constant()
+        .map(|constant| self.new_constant(constant.clone())),
+      // unimplemented vvv
+      Initializer::List(_) => None,
     }
   }
 }

@@ -32,7 +32,7 @@ Appearently conventions below are C++-ish and probably considered _bad practice_
 
 - spam `#[must_use]`.
 - make function as `constexpr` as possible.
-- `inline` getter and setter as much as possible, I prefer `[[gnu::forceinline]]`.
+- `inline` getter and setter as much as possible, I prefer `[[gnu::always_inline]]`.
 - create stray function sparingly. it's hard to conjure up from memory. This does not mean it's forbidden; we are not writting java. static member function is perferred if the function serves the suitable purpose.
 - prefer closure than static member function if the relavent operation is only used in current scope. sometimes borrowck conplains, use local function instead.
 - prefer trait-based function overloading, like `trait DoThing` than mangling function name manually by typing `fn do_thing_for_...` if the target is algeberic data type, aka, discriminated union, and has many variants.

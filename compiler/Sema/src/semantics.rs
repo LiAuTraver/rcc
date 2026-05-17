@@ -99,7 +99,7 @@ pub struct Sema<'c> {
   current_labels: HashSet<StrRef<'c>>,
   current_gotos: HashSet<StrRef<'c>>,
   scope_context: Vec<ScopeContext>,
-  pub(crate) session: SessionRef<'c, OpDiag<'c>>,
+  pub(crate) session: SessionRef<'c>,
 
   pub(crate) __empty_expr: se::ExprRef<'c>,
   pub(crate) __empty_stmt: ss::StmtRef<'c>,
@@ -112,7 +112,7 @@ impl<'a> ::std::ops::Deref for Sema<'a> {
   }
 }
 impl<'c> Sema<'c> {
-  pub fn new(session: SessionRef<'c, OpDiag<'c>>) -> Self {
+  pub fn new(session: SessionRef<'c>) -> Self {
     Self {
       session,
       environment: Default::default(),
@@ -431,7 +431,7 @@ impl<'c> Sema<'c> {
     let qualified_type = self
       .get_type(declspecs.type_specifiers)
       .handle_with(self, self.int_type().into())
-      .with_qualifiers(declspecs.qualifiers);
+      .with_qualifiers(declspecs.qualifiers, self);
     let storage_class = declspecs.storage_specifiers;
     let function_specifier = declspecs.function_specifiers;
 
@@ -856,7 +856,9 @@ impl<'c> Sema<'c> {
     }
 
     let name = name.unwrap_or("<unnamed>");
-    let is_constexpr = storage_specifier.contains(SS::Constexpr);
+    let is_named_constant = storage_specifier.contains(SS::Constexpr)
+      || (self.langopts().is_sysy()
+        && raw_qualified_type.contains(Qualifiers::Const));
 
     let (qualified_type, initializer) = {
       let requires_folding = self.environment.is_global()
@@ -894,7 +896,7 @@ impl<'c> Sema<'c> {
             (qualified_type, None)
           }
         };
-      if is_constexpr && init.is_none() {
+      if is_named_constant && init.is_none() {
         self.add_warning(
           Custom(format!(
             "constexpr variable '{name}' shall have initializer"
@@ -903,23 +905,23 @@ impl<'c> Sema<'c> {
         );
       }
       let constexpr_check = |qtype: QualifiedType<'c>| {
-        if is_constexpr {
+        if is_named_constant {
           if qtype
-            .qualifiers
+            .qualifiers()
             .intersects(Qualifiers::Atomic | Qualifiers::Volatile)
           {
             self.add_error(
               Custom(format!(
                 "constexpr variable '{name}' shall not have qualifier '{}'",
-                qtype.qualifiers
+                qtype.qualifiers()
               )),
               span,
             );
             qtype
               .without_qualifiers()
-              .with_qualifiers(Qualifiers::Const)
+              .with_qualifiers(Qualifiers::Const, self)
           } else {
-            qtype.with_qualifiers(Qualifiers::Const)
+            qtype.with_qualifiers(Qualifiers::Const, self)
           }
         } else {
           qtype
@@ -1006,7 +1008,7 @@ impl<'c> Sema<'c> {
             qualified_type,
             merge(incoming),
             VarDeclKind::Tentative,
-            sd::VarDef::new(None, is_constexpr, storage).into(),
+            sd::VarDef::new(None, is_named_constant, storage).into(),
             span,
           )
         };
@@ -1032,7 +1034,7 @@ impl<'c> Sema<'c> {
             qualified_type,
             merge(incoming),
             VarDeclKind::Definition,
-            sd::VarDef::def(initializer, is_constexpr, storage).into(),
+            sd::VarDef::def(initializer, is_named_constant, storage).into(),
             span,
           )
         };
@@ -1124,7 +1126,7 @@ impl<'c> Sema<'c> {
             } else {
               VarDeclKind::Definition
             },
-            sd::VarDef::new(initializer, is_constexpr, storage).into(),
+            sd::VarDef::new(initializer, is_named_constant, storage).into(),
             span,
           )
         };
@@ -1271,7 +1273,7 @@ impl<'c> Sema<'c> {
 
     let function_proto = match analyzed_callee.unqualified_type() {
       Type::FunctionProto(proto) => proto,
-      Type::Pointer(ptr) => match ptr.pointee.unqualified_type {
+      Type::Pointer(ptr) => match &*ptr.pointee {
         Type::FunctionProto(proto) => proto,
         _ =>
           Err(InvalidCallee(ptr.pointee.to_string()) + Severity::Error + span)?,
@@ -1742,7 +1744,7 @@ impl<'c> Sema<'c> {
 
     let pointee_type =
       &operand.unqualified_type().as_pointer_unchecked().pointee;
-    if RefEq::ref_eq(pointee_type.unqualified_type, self.void_type()) {
+    if RefEq::ref_eq(&**pointee_type, self.void_type()) {
       Err(DerefVoidPtr(operand.to_string()) + Severity::Error + span)
     } else {
       // If the operand points to a function, the result is a function designator; -- which means the we don't need to perform decay here
@@ -2360,7 +2362,7 @@ impl<'c> Sema<'c> {
       .as_functionproto_unchecked()
       .return_type;
 
-    match (analyzed_expr, return_type.unqualified_type) {
+    match (analyzed_expr, &*return_type) {
       (None, Type::Primitive(Primitive::Void)) =>
         Ok(ss::Return::new(None, span)),
       (None, _) => Err(

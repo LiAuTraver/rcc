@@ -347,10 +347,7 @@ impl<'c> Builder<'c> {
       entry.instructions.reserve((parameters.len() + 1) * 2 + 1);
     });
 
-    let return_type = ast_type
-      .as_functionproto_unchecked()
-      .return_type
-      .unqualified_type;
+    let return_type = &*ast_type.as_functionproto_unchecked().return_type;
 
     if !return_type.is_void() {
       // return value storage
@@ -1226,7 +1223,8 @@ impl<'c> Builder<'c> {
   // gush. this is the most fluffing part of the whole codegen.
   fn compound_assign(
     &mut self,
-    compound_assign: &se::CompoundAssign<'c>,
+    compound_assign: &'c se::CompoundAssign<'c>,
+    // workaround; ^^^  if lifetime issues, need to stop use deref to get the unqualified_type, but direct access instead.
     ast_type: ast::TypeRef<'c>,
     span: SourceSpan,
   ) -> ValueID {
@@ -1239,8 +1237,8 @@ impl<'c> Builder<'c> {
     } = compound_assign;
     let left_ty = left.unqualified_type();
     // `Deref` is WEIRD. would result &Type<'c> rather than &'c Type<'c>.
-    let intermediate_left_type = intermediate_left_type.unqualified_type;
-    let intermediate_result_type = intermediate_result_type.unqualified_type;
+    let intermediate_left_type = &**intermediate_left_type;
+    let intermediate_result_type = &**intermediate_result_type;
 
     debug_assert!(
       RefEq::ref_eq(left_ty, ast_type),
@@ -1796,8 +1794,8 @@ impl<'c> Builder<'c> {
       self.ast().ptrdiff_type(),
     );
     debug_assert!(RefEq::ref_eq(
-      lhs_ty.as_pointer_unchecked().pointee.unqualified_type,
-      rhs_ty.as_pointer_unchecked().pointee.unqualified_type
+      &*lhs_ty.as_pointer_unchecked().pointee,
+      &*rhs_ty.as_pointer_unchecked().pointee
     ));
     debug_assert!(RefEq::ref_eq(ast_type, self.ast().ptrdiff_type()));
     let size = self.emit(
@@ -1805,7 +1803,6 @@ impl<'c> Builder<'c> {
         lhs_ty
           .as_pointer_unchecked()
           .pointee
-          .unqualified_type
           .size(self.ast())
           .to_builtin::<usize>(),
         self.ast().pointer.size_bits(),

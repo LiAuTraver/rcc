@@ -1,13 +1,15 @@
 #![allow(clippy::double_must_use)]
 
 use ::rcc_ast::{
-  Context,
+  Context, Session,
   types::{
     CastType, Compatibility, Pointer, Primitive, Promotion, QualifiedType,
     Type, TypeInfo,
   },
 };
-use ::rcc_shared::{Diag, DiagData::*, DiagMeta, Severity, SourceSpan};
+use ::rcc_shared::{
+  Diag, DiagData::*, DiagMeta, Diagnosis, Severity, SourceSpan,
+};
 use ::rcc_utils::RefEq;
 
 use super::expression::{ExprRef, Expression, ImplicitCast};
@@ -139,7 +141,7 @@ impl<'c> Expression<'c> {
   #[inline]
   pub fn assignment_conversion(
     self: ExprRef<'c>,
-    context: &Context<'c>,
+    context: &Session<'c>,
     target_type: &QualifiedType<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     debug_assert!(
@@ -312,19 +314,17 @@ impl<'c> Expression<'c> {
   fn assignment_conversion_unchecked(
     self: ExprRef<'c>,
     target_type: &QualifiedType<'c>,
-    context: &Context<'c>,
+    context: &Session<'c>,
   ) -> Result<ExprRef<'c>, Diag<'c>> {
     let span = self.span();
 
-    match (target_type.unqualified_type, self.unqualified_type()) {
+    match (&**target_type, self.unqualified_type()) {
       //  the left operand has [...] arithmetic type, and the right operand has arithmetic type;
       (Type::Primitive(left), Type::Primitive(right))
         if left.is_arithmetic() && right.is_arithmetic() =>
       {
-        let cast_type = Self::get_cast_type(
-          self.unqualified_type(),
-          target_type.unqualified_type,
-        );
+        let cast_type =
+          Self::get_cast_type(self.unqualified_type(), target_type);
         Ok(Self::maybe_cast(self, cast_type, target_type, context))
       },
       // the left operand has [...] of a structure or union type compatible with the type of the right operand;
@@ -338,21 +338,18 @@ impl<'c> Expression<'c> {
       (Type::Pointer(lhs), Type::Pointer(rhs)) => {
         // can add qualifiers, but cannot remove them
         // error if removing qualifiers (const, volatile, etc.)
-        if !lhs.pointee.qualifiers.contains(rhs.pointee.qualifiers) {
+        if !lhs.pointee.qualifiers().contains(rhs.pointee.qualifiers()) {
           Err(
             DiscardingQualifiers(
-              (rhs.pointee.qualifiers - lhs.pointee.qualifiers).to_string(),
+              (rhs.pointee.qualifiers() - lhs.pointee.qualifiers()).to_string(),
             ) + Severity::Error
               + span,
           )?
         }
 
-        if lhs
-          .pointee
-          .unqualified_type
-          .compatible_with(rhs.pointee.unqualified_type)
-          || lhs.pointee.unqualified_type.is_void()
-          || rhs.pointee.unqualified_type.is_void()
+        if (*lhs.pointee).compatible_with(&*rhs.pointee)
+          || lhs.pointee.is_void()
+          || rhs.pointee.is_void()
         {
           // no need to create composite type -- pointer types are the same except for qualifiers
           // Ok(Self::new_rvalue(
@@ -361,13 +358,19 @@ impl<'c> Expression<'c> {
           // ))
           Ok(self) // Noop? not sure
         } else {
-          Err(
+          context.diag().add_warning(
             IncompatiblePointerTypes(
               target_type.to_string(),
               self.qualified_type().to_string(),
-            ) + Severity::Error
-              + span,
-          )
+            ),
+            span,
+          );
+          Ok(Self::new_rvalue(
+            context,
+            ImplicitCast::new(self, CastType::BitCast),
+            *target_type,
+            span,
+          ))
         }
       },
       // the left operand has an atomic, qualified, or unqualified version of the nullptr_t type and the right operand is a null pointer constant or its type is nullptr_t;
@@ -405,7 +408,7 @@ impl<'c> Expression<'c> {
         InvalidConversion(format!(
           "cannot convert from '{}' to '{}'",
           self.unqualified_type(),
-          target_type.unqualified_type
+          **target_type
         )) + Severity::Error
           + self.span(),
       ),
@@ -620,10 +623,7 @@ impl<'c> Expression<'c> {
     target_type: &QualifiedType<'c>,
     context: &Context<'c>,
   ) -> ExprRef<'c> {
-    let cast_type = Self::get_cast_type(
-      self.unqualified_type(),
-      target_type.unqualified_type,
-    );
+    let cast_type = Self::get_cast_type(self.unqualified_type(), target_type);
     self.maybe_cast(cast_type, target_type, context)
   }
 
